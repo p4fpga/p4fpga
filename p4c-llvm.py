@@ -7,6 +7,7 @@ import sys
 from p4_hlir.main import HLIR
 from compilationException import *
 import llvmProgram
+import llvmlite.ir as llvmIR
 
 def get_parser():
     parser = argparse.ArgumentParser(description='p4c-llvm arguments')
@@ -50,7 +51,7 @@ class CompileResult(object):
             return "Compilation failed with error: " + self.error
 
 
-def compileP4(inputFile, emit_llvm, preprocessor_args):
+def compileP4(inputFile, gen_file, preprocessor_args):
     h = HLIR(inputFile)
 
     for parg in preprocessor_args:
@@ -63,6 +64,9 @@ def compileP4(inputFile, emit_llvm, preprocessor_args):
         basename = os.path.splitext(basename)[0]
 
         e = llvmProgram.LLVMProgram(basename, h)
+        e.tollvm()
+        f = open(basename+'.ll', 'w')
+        f.write(str(e.module))
 
         return CompileResult("OK", "")
     except CompilationException, e:

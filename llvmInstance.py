@@ -35,7 +35,6 @@ class LLVMHeader(SimpleInstance):
         if hlirHeaderInstance.index is not None:
             self.name += "_" + str(hlirHeaderInstance.index)
 
-
 class LLVMMetadata(SimpleInstance):
     """Represents a metadata instance from a P4 program"""
     def __init__(self, hlirMetadataInstance, factory):
@@ -60,7 +59,6 @@ class LLVMMetadata(SimpleInstance):
             for key in self.initializer.keys():
                 serializer.appendFormat(
                     ".{0} = {1},", key, self.initializer[key])
-
 
 class LLVMHeaderStack(LLVMInstanceBase):
     """Represents a header stack instance; there is one instance of

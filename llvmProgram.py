@@ -4,13 +4,14 @@
 from p4_hlir.hlir import p4_header_instance, p4_table, \
      p4_conditional_node, p4_action, p4_parse_state
 from p4_hlir.main import HLIR
+import llvmlite.ir as ll
+import llvmlite.binding as llvmBinding
 import llvmInstance
 import llvmParser
 import llvmDeparser
 import typeFactory
 import programSerializer
 from compilationException import *
-
 
 class LLVMProgram(object):
     def __init__(self, name, hlir):
@@ -63,6 +64,10 @@ class LLVMProgram(object):
         self.metadataStructTypeName = self.reservedPrefix + "metadata_t"
         self.metadataStructName = self.reservedPrefix + "metadata"
 
+        self.context = ll.Context()
+        self.module = ll.Module(context=self.context) # each P4 program is a compilation unit
+        self.builder = ll.IRBuilder()
+
     def construct(self):
         if len(self.hlir.p4_field_list_calculations) > 0:
             raise NotSupportedException(
@@ -70,6 +75,7 @@ class LLVMProgram(object):
                 self.hlir.p4_field_list_calculations.values()[0].name)
 
         for h in self.hlir.p4_header_instances.values():
+            print 'header instances', h, h.max_index, h.metadata
             if h.max_index is not None:
                 assert isinstance(h, p4_header_instance)
                 if h.index == 0:
@@ -113,10 +119,18 @@ class LLVMProgram(object):
         assert isinstance(formatString, str)
         print("WARNING: ", formatString.format(*message))
 
+    def tollvm(self):
+        self.generateTypes()
+        self.generateTables()
+        self.generateHeaderInstance()
+        self.generateMetadataInstance()
+        self.generatePipeline()
+
     # noinspection PyMethodMayBeStatic
     def generateIncludes(self, serializer):
         assert isinstance(serializer, programSerializer.ProgramSerializer)
         serializer.append(self.config.getIncludes())
+        print 'generate includes'
 
     def getLabel(self, p4node):
         # C label that corresponds to this point in the control-flow
@@ -135,25 +149,38 @@ class LLVMProgram(object):
         # TODO: this should be made "safer"
         assert isinstance(base, str)
 
+        print 'generate new name'
         base += "_" + str(self.uniqueNameCounter)
         self.uniqueNameCounter += 1
         return base
 
-    def generateTables(self, serializer):
-        assert isinstance(serializer, programSerializer.ProgramSerializer)
+    def generateTypes(self):
+        for t in self.typeFactory.type_map.values():
+            print t
+        print self.headersStructTypeName
+        for h in self.headers:
+            print h
 
+        for h in self.stacks:
+            print h
+
+        # metadata
+        for h in self.metadata:
+            print h
+
+
+    def generateTables(self):
         for t in self.tables:
-            t.serialize(serializer, self)
+            print t
 
         for c in self.counters:
-            c.serialize(serializer, self)
+            print c
 
-    def generateHeaderInstance(self, serializer):
-        assert isinstance(serializer, programSerializer.ProgramSerializer)
+    def generateHeaderInstance(self):
+        print self.headersStructTypeName, self.headerStructName
 
-        serializer.emitIndent()
-        serializer.appendFormat(
-            "struct {0} {1}", self.headersStructTypeName, self.headerStructName)
+        mytype = self.context.get_identified_type("header_t")
+        mytype.set_body(ll.IntType(32), ll.IntType(32))
 
     def generateInitializeHeaders(self, serializer):
         assert isinstance(serializer, programSerializer.ProgramSerializer)
@@ -166,14 +193,10 @@ class LLVMProgram(object):
             serializer.appendLine(",")
         serializer.blockEnd(False)
 
-    def generateMetadataInstance(self, serializer):
-        assert isinstance(serializer, programSerializer.ProgramSerializer)
-
-        serializer.emitIndent()
-        serializer.appendFormat(
-            "struct {0} {1}",
-            self.metadataStructTypeName,
-            self.metadataStructName)
+    def generateMetadataInstance(self):
+        print (self.metadataStructTypeName, self.metadataStructName)
+        for m in self.metadata:
+            print m
 
     def generateDeparser(self, serializer):
         self.deparser.serialize(serializer, self)
@@ -246,12 +269,11 @@ class LLVMProgram(object):
         assert isinstance(serializer, programSerializer.ProgramSerializer)
         # Generate Tables
 
-    def generateControlFlowNode(self, serializer, node, nextEntryPoint):
-        pass
+    def generateControlFlowNode(self, node, nextEntryPoint):
+        print node
         # generate control flow
 
-    def generatePipelineInternal(self, serializer, nodestoadd, nextEntryPoint):
-        assert isinstance(serializer, programSerializer.ProgramSerializer)
+    def generatePipelineInternal(self, nodestoadd, nextEntryPoint):
         assert isinstance(nodestoadd, set)
 
         done = set()
@@ -265,16 +287,16 @@ class LLVMProgram(object):
             print("Generating ", todo.name)
 
             done.add(todo)
-            self.generateControlFlowNode(serializer, todo, nextEntryPoint)
+            self.generateControlFlowNode(todo, nextEntryPoint)
 
             for n in todo.next_.values():
                 nodestoadd.add(n)
 
-    def generatePipeline(self, serializer):
+    def generatePipeline(self):
         todo = set()
         for e in self.entryPoints:
             todo.add(e)
-        self.generatePipelineInternal(serializer, todo, self.egressEntry)
+        self.generatePipelineInternal(todo, self.egressEntry)
         todo = set()
         todo.add(self.egressEntry)
-        self.generatePipelineInternal(serializer, todo, None)
+        self.generatePipelineInternal(todo, None)
