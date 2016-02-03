@@ -6,7 +6,9 @@ from p4_hlir.hlir import p4_header_instance, p4_table, \
 from p4_hlir.main import HLIR
 import llvmlite.ir as ll
 import llvmlite.binding as llvmBinding
+import llvmCounter
 import llvmInstance
+import llvmTable
 import llvmParser
 import llvmDeparser
 import typeFactory
@@ -68,12 +70,14 @@ class LLVMProgram(object):
         self.module = ll.Module(context=self.context) # each P4 program is a compilation unit
         self.builder = ll.IRBuilder()
 
+    # 
     def construct(self):
         if len(self.hlir.p4_field_list_calculations) > 0:
             raise NotSupportedException(
                 "{0} calculated field",
                 self.hlir.p4_field_list_calculations.values()[0].name)
 
+        # header_instance sort to (stack, header, metadata)
         for h in self.hlir.p4_header_instances.values():
             print 'header instances', h, h.max_index, h.metadata
             if h.max_index is not None:
@@ -91,24 +95,30 @@ class LLVMProgram(object):
                 header = llvmInstance.LLVMHeader(h, self.typeFactory)
                 self.headers.append(header)
 
+        # parse_state -> parser objects
         for p in self.hlir.p4_parse_states.values():
             parser = llvmParser.LLVMParser(p)
             self.parsers.append(parser)
+            print 'llp: ', parser
 
+        for t in self.hlir.p4_tables.values():
+            table = llvmTable.LLVMTable(t, self)
+            self.tables.append(table)
+
+        # ingress pipeline -> entry point
         for n in self.hlir.p4_ingress_ptr.keys():
             self.entryPoints.append(n)
 
+        # conditional -> conditional object
         for n in self.hlir.p4_conditional_nodes.values():
             conditional = llvmConditional.LLVMConditional(n, self)
             self.conditionals.append(conditional)
 
+        # egress -> entry point
         self.egressEntry = self.hlir.p4_egress_ptr
-        self.deparser = llvmDeparser.LLVMDeparser(self.hlir)
 
-    def isInternalAction(self, action):
-        # This is a heuristic really to guess which actions are built-in
-        # Unfortunately there seems to be no other way to do this
-        return action.lineno < 0
+        # deparser object
+        self.deparser = llvmDeparser.LLVMDeparser(self.hlir)
 
     @staticmethod
     def isArrayElementInstance(headerInstance):
@@ -119,18 +129,14 @@ class LLVMProgram(object):
         assert isinstance(formatString, str)
         print("WARNING: ", formatString.format(*message))
 
-    def tollvm(self):
+    def tollvm(self, serializer):
         self.generateTypes()
         self.generateTables()
         self.generateHeaderInstance()
         self.generateMetadataInstance()
-        self.generatePipeline()
 
-    # noinspection PyMethodMayBeStatic
-    def generateIncludes(self, serializer):
-        assert isinstance(serializer, programSerializer.ProgramSerializer)
-        serializer.append(self.config.getIncludes())
-        print 'generate includes'
+        self.generateParser(serializer)
+        self.generatePipeline()
 
     def getLabel(self, p4node):
         # C label that corresponds to this point in the control-flow
@@ -148,8 +154,6 @@ class LLVMProgram(object):
         """Generates a fresh name based on the specified base name"""
         # TODO: this should be made "safer"
         assert isinstance(base, str)
-
-        print 'generate new name'
         base += "_" + str(self.uniqueNameCounter)
         self.uniqueNameCounter += 1
         return base
@@ -157,24 +161,24 @@ class LLVMProgram(object):
     def generateTypes(self):
         for t in self.typeFactory.type_map.values():
             print t
-        print self.headersStructTypeName
+        print 'headerStruct', self.headersStructTypeName
         for h in self.headers:
-            print h
+            print 'headers', h
 
         for h in self.stacks:
-            print h
+            print 'stacks', h
 
         # metadata
         for h in self.metadata:
-            print h
+            print 'metadata', h
 
 
     def generateTables(self):
         for t in self.tables:
-            print t
+            print 'gt generateTable', t
 
         for c in self.counters:
-            print c
+            print 'gc generate counters', c
 
     def generateHeaderInstance(self):
         print self.headersStructTypeName, self.headerStructName
@@ -262,15 +266,18 @@ class LLVMProgram(object):
 
     def generateParser(self, serializer):
         assert isinstance(serializer, programSerializer.ProgramSerializer)
+        states = map(lambda x: x.name, self.parsers)
+        llvmParser.LLVMParser.serialize_parse_states(serializer, states)
         for p in self.parsers:
             p.serialize(serializer, self)
 
     def generateIngressPipeline(self, serializer):
         assert isinstance(serializer, programSerializer.ProgramSerializer)
+        print "mm generateIngressPipeline"
         # Generate Tables
 
     def generateControlFlowNode(self, node, nextEntryPoint):
-        print node
+        print "xx generateControlFlowNode"
         # generate control flow
 
     def generatePipelineInternal(self, nodestoadd, nextEntryPoint):
@@ -296,6 +303,7 @@ class LLVMProgram(object):
         todo = set()
         for e in self.entryPoints:
             todo.add(e)
+        print "zz generate Pipeline", todo
         self.generatePipelineInternal(todo, self.egressEntry)
         todo = set()
         todo.add(self.egressEntry)

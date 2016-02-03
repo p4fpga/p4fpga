@@ -1,3 +1,3 @@
 
 all:
-	python p4c-llvm.py tests/do_nothing.p4
+	python p4c-llvm.py tests/simple.p4

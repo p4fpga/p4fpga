@@ -6,6 +6,7 @@ import traceback
 import sys
 from p4_hlir.main import HLIR
 from compilationException import *
+from programSerializer import ProgramSerializer
 import llvmProgram
 import llvmlite.ir as llvmIR
 
@@ -64,10 +65,12 @@ def compileP4(inputFile, gen_file, preprocessor_args):
         basename = os.path.splitext(basename)[0]
 
         e = llvmProgram.LLVMProgram(basename, h)
-        e.tollvm()
+        serializer = ProgramSerializer()
+        e.tollvm(serializer)
         f = open(basename+'.ll', 'w')
         f.write(str(e.module))
-
+        bsv = open(basename+'.bsv', 'w')
+        bsv.write(serializer.toString())
         return CompileResult("OK", "")
     except CompilationException, e:
         prefix = ""

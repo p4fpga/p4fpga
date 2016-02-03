@@ -10,221 +10,240 @@ import llvmStructType
 import llvmInstance
 import programSerializer
 from compilationException import *
-
+from helper import *
 
 class LLVMParser(object):
+    preamble="""typedef enum {{{states}}} ParserState deriving (Bits, Eq)
+instance FShow#(ParserState);
+    function Fmt show (ParserState state);
+        return $format(" State %x", state);
+    endfunction
+endinstance
+    """
+    imports="""
+import DefaultValues::*;
+import FIFO::*;
+import FIFOF::*;
+import FShow::*;
+import GetPut::*;
+import List::*;
+import StmtFSM::*;
+import SpecialFIFOs::*;
+import Vector::*;
+
+import Pipe::*;
+import Ethernet::*;
+import P4Types::*;
+"""
+
     def __init__(self, hlirParser):  # hlirParser is a P4 parser
         self.parser = hlirParser
-        self.name = hlirParser.name
+        self.name = get_camel_case(hlirParser.name.capitalize())
+        self.moduleSignature="""module mk{state}#(Reg#(ParserState) state, FIFO#(EtherData) datain)({interface});"""
+        self.unparsedFifo="""FIFO#({lastType}) unparsed_{lastState}_fifo <- mkSizedFIFO({lastSize});"""
+        self.preamble="""Wire#(Bit#(128)) packet_in_wire <- mkDWire(0);
+    Vector#({numNextState}, Wire#(Maybe#(ParserState))) next_state_wire <- replicateM(mkDWire(tagged Invalid));
+    PulseWire start_wire <- mkPulseWire();
+    PulseWire stop_wire <- mkPulseWire();"""
+        self.postamble="""\
+    rule start_fsm if (start_wire);
+        {fsm}.start;
+    endrule
+    rule stop_fsm if (stop_wire);
+        {fsm}.abort;
+    endrule
+    method Action start();
+        start_wire.send();
+    endmethod
+    method Action stop();
+        stop_wire.send();
+    endmethod"""
+        self.fsm="""\
+    FSM fsm_{fsm} <- mkFSM({fsm})"""
+        self.nextStateArbiter="""\
+    (* fire_when_enabled *)
+    rule arbitrate_outgoing_state if (state={state});
+        Vector#({numNextState}, Bool) next_state_valid = replicate(False);
+        Bool stateSet = False;
+        for (Integer port=0; port<{numNextState}; port=port+1) begin
+            next_state_valid[port] = isValid(next_state_wire[port]);
+            if (!stateSet && next_state_valid[port]) begin
+                stateSet = True;
+                ParserState next_state = fromMaybe(?, next_state_wire[port]);
+                state <= next_state;
+            end
+        end
+    endrule"""
+        self.computeParseStateSelect="""\
+    function ParserState compute_next_state({matchtype} {matchfield});
+        ParserState nextState = {defaultState};
+        case ({matchfield}) matches"""
+        self.loadPacket="""\
+    rule load_packet_{id} if (state == {state});
+        let data_current <- toGet({FIXME}).get
+        packet_in_wire <= data_current.data;
+    endrule"""
+        self.loadDelayedPacket="""\
+    rule load_packet_{id} if (state == {state});
+        let data_delayed <- toGet({FIXME}).get;
+        {unparsed_fifo}.enq(data_delayed);
+    endrule"""
+        self.stmtPreamble="""\
+    Stmt {name} =
+    seq
+    action"""
+        self.stmtGetData="""\
+        let data = packet_in_wire;
+        Vector#(128, Bit#(1)) dataVec = unpack(data);"""
+        self.stmtExtract="""\
+        let {field} = extract_{field}(pack(takeAt({index}, dataVec)));
+        Vector#({unparsed_len}, Bit#(1)) unparsed = takeAt({unparsed_index}, dataVec);"""
+        self.stmtComputeNextState="""\
+        let nextState = compute_next_state({field});"""
+        self.stmtUnparsedData="""\
+        if (nextState={nextState}) begin
+            unparsed_fifo_{nextState}.enq(pack(unparsed));
+        end"""
+        self.stmtAssignNextState="""\
+        next_state_wire[{index}] = tagged Valid nextState;"""
+        self.stmtPostamble="""\
+    endaction
+    endseq"""
+
+    @classmethod
+    def serialize_parse_states(self, serializer, states):
+        serializer.appendLine(LLVMParser.imports)
+        serializer.appendLine(LLVMParser.preamble.format(states=",".join(states)))
 
     def serialize(self, serializer, program):
         assert isinstance(serializer, programSerializer.ProgramSerializer)
         assert isinstance(program, llvmProgram.LLVMProgram)
+        # module
+        serializer.emitIndent()
+        serializer.append(self.moduleSignature.format(state=self.name, interface=self.name))
+        serializer.moduleStart()
+        # input interface
+        serializer.emitIndent()
+        serializer.appendLine(self.unparsedFifo.format(lastType="FIXME", lastState="FIXME", lastSize=1))
+        # preamble
+        serializer.emitIndent()
+        serializer.appendLine(self.preamble.format(numNextState="FIXME"))
+        # fsm
+        serializer.appendLine(self.nextStateArbiter.format(state="FIXME", numNextState="FIXME"))
+        # branches
+        self.serializeBranch(serializer, self.parser.branch_on, self.parser.branch_to, program)
+        # load input data
+        serializer.appendLine(self.loadPacket)
+
+        # Stmt
+        serializer.appendLine(self.stmtPreamble)
+        serializer.appendLine(self.stmtGetData)
+        serializer.appendLine(self.stmtExtract)
+        serializer.appendLine(self.stmtComputeNextState)
+        serializer.appendLine(self.stmtUnparsedData)
+        serializer.appendLine(self.stmtAssignNextState)
+        serializer.appendLine(self.stmtPostamble)
 
         serializer.emitIndent()
-        serializer.appendFormat("{0}: ", self.name)
-        serializer.blockStart()
-        for op in self.parser.call_sequence:
-            self.serializeOperation(serializer, op, program)
+        serializer.appendLine(self.fsm.format(fsm=self.name))
+        # postamble
+        serializer.emitIndent()
+        serializer.appendLine(self.postamble.format(fsm=self.name))
+        # output interface
+        serializer.moduleEnd()
+        #for op in self.parser.call_sequence:
+        #    self.serializeOperation(serializer, op, program)
 
-        self.serializeBranch(serializer, self.parser.branch_on,
-                             self.parser.branch_to, program)
-
-        serializer.blockEnd(True)
-
-    def serializeSelect(self, selectVarName, serializer, branch_on, program):
-        # selectVarName - name of temp variable to use for the select expression
-        assert isinstance(selectVarName, str)
-        assert isinstance(serializer, programSerializer.ProgramSerializer)
-        assert isinstance(program, llvmProgram.LLVMProgram)
-
+    def serializeSelect(self, serializer, branch_on, program):
         totalWidth = 0
-        switchValue = ""
         for e in branch_on:
+            #FIXME: what is the case that has multiple branch_on?
             if isinstance(e, p4_field):
                 instance = e.instance
                 assert isinstance(instance, p4_header_instance)
-                index = ""
 
-                if llvmProgram.LLVMProgram.isArrayElementInstance(instance):
-                    llvmStack = program.getStackInstance(instance.base_name)
-                    assert isinstance(llvmStack, llvmInstance.LLVMHeaderStack)
-
-                    if isinstance(instance.index, int):
-                        index = "[" + str(instance.index) + "]"
-                    elif instance.index is P4_NEXT:
-                        index = "[" + llvmStack.indexVar + "]"
-                    else:
-                        raise CompilationException(True,
-                            "Unexpected index for array {0}", instance.index)
-                    basetype = llvmStack.basetype
-                    name = llvmStack.name
-                else:
-                    llvmHeader = program.getInstance(instance.name)
-                    assert isinstance(llvmHeader, llvmInstance.LLVMHeader)
-                    basetype = llvmHeader.type
-                    name = llvmHeader.name
+                llvmHeader = program.getInstance(instance.name)
+                assert isinstance(llvmHeader, llvmInstance.LLVMHeader)
+                basetype = llvmHeader.type
 
                 llvmField = basetype.getField(e.name)
                 assert isinstance(llvmField, llvmStructType.LLVMField)
-
                 totalWidth += llvmField.widthInBits()
-                fieldReference = (program.headerStructName + "." + name +
-                                  index + "." + llvmField.name)
 
-                if switchValue == "":
-                    switchValue = fieldReference
-                else:
-                    switchValue = ("(" + switchValue + " << " +
-                                   str(llvmField.widthInBits()) + ")")
-                    switchValue = switchValue + " | " + fieldReference
+                serializer.appendLine(self.computeParseStateSelect.format(matchfield=llvmField.name, matchtype="Bit#({})".format(totalWidth), defaultState="FIXME"))
             elif isinstance(e, tuple):
-                switchValue = self.currentReferenceAsString(e, program)
+                raise CompilationException(
+                    True, "Unexpected element in match tuple {0}", e)
             else:
                 raise CompilationException(
                     True, "Unexpected element in match {0}", e)
 
-        if totalWidth > 32:
-            raise NotSupportedException("{0}: Matching on {1}-bit value",
-                                        branch_on, totalWidth)
-        serializer.emitIndent()
-        serializer.appendFormat("{0}32 {1} = {2};",
-                                program.config.uprefix,
-                                selectVarName, switchValue)
-        serializer.newline()
-
-    def generatePacketLoad(self, startBit, width, alignment, program):
-        # Generates an expression that does a load_*, shift and mask
-        # to load 'width' bits starting at startBit from the current
-        # packet offset.
-        # alignment is an integer <= 8 that holds the current alignment
-        # of of the packet offset.
-        assert width > 0
-        assert alignment < 8
-        assert isinstance(startBit, int)
-        assert isinstance(width, int)
-        assert isinstance(alignment, int)
-
-        firstBitIndex = startBit + alignment
-        lastBitIndex = startBit + width + alignment - 1
-        firstWordIndex = firstBitIndex / 8
-        lastWordIndex = lastBitIndex / 8
-
-        wordsToRead = lastWordIndex - firstWordIndex + 1
-        if wordsToRead == 1:
-            load = "load_byte"
-            loadSize = 8
-        elif wordsToRead == 2:
-            load = "load_half"
-            loadSize = 16
-        elif wordsToRead <= 4:
-            load = "load_word"
-            loadSize = 32
-        elif wordsToRead <= 8:
-            load = "load_dword"
-            loadSize = 64
-        else:
-            raise CompilationException(True, "Attempt to load more than 1 word")
-
-        readtype = program.config.uprefix + str(loadSize)
-        loadInstruction = "{0}({1}, ({2} + {3}) / 8)".format(
-            load, program.packetName, program.offsetVariableName, startBit)
-        shift = loadSize - alignment - width
-        load = "(({0}) >> ({1}))".format(loadInstruction, shift)
-        if width != loadSize:
-            mask = " & llvm_MASK({0}, {1})".format(readtype, width)
-        else:
-            mask = ""
-        return load + mask
-
-    def currentReferenceAsString(self, tpl, program):
-        # a string describing an expression of the form current(position, width)
-        # The assumption is that at this point the packet cursor is ALWAYS
-        # byte aligned.  This should be true because headers are supposed
-        # to have sizes an integral number of bytes.
-        assert isinstance(tpl, tuple)
-        if len(tpl) != 2:
-            raise CompilationException(
-                True, "{0} Expected a tuple with 2 elements", tpl)
-
-        minIndex = tpl[0]
-        totalWidth = tpl[1]
-        result = self.generatePacketLoad(
-            minIndex, totalWidth, 0, program) # alignment is 0
-        return result
-
     def serializeCases(self, selectVarName, serializer, branch_to, program):
         assert isinstance(selectVarName, str)
-        assert isinstance(serializer, programSerializer.ProgramSerializer)
         assert isinstance(program, llvmProgram.LLVMProgram)
 
         branches = 0
         seenDefault = False
         for e in branch_to.keys():
-            serializer.emitIndent()
             value = branch_to[e]
-
             if isinstance(e, int):
-                serializer.appendFormat("if ({0} == {1})", selectVarName, e)
+                serializer.append("""
+            'h{field}: begin
+                nextState={state}
+            end""".format(field=format(e,'x'), state="FIXME"))
             elif isinstance(e, tuple):
-                serializer.appendFormat(
-                    "if (({0} & {1}) == {2})", selectVarName, e[0], e[1])
+                raise CompilationException(True, "Not yet implemented")
             elif isinstance(e, p4_parse_value_set):
                 raise NotSupportedException("{0}: Parser value sets", e)
             elif e is P4_DEFAULT:
                 seenDefault = True
-                if branches > 0:
-                    serializer.append("else")
+                serializer.append("""
+            default: begin
+                nextState={defaultState}
+            end""".format(defaultState="FIXME"))
             else:
                 raise CompilationException(
                     True, "Unexpected element in match case {0}", e)
 
             branches += 1
-            serializer.newline()
-            serializer.increaseIndent()
-            serializer.emitIndent()
 
             label = program.getLabel(value)
 
             if isinstance(value, p4_parse_state):
-                serializer.appendFormat("goto {0};", label)
+                print 'sc', value 
             elif isinstance(value, p4_table):
-                serializer.appendFormat("goto {0};", label)
+                print 'sc', value
             elif isinstance(value, p4_conditional_node):
-                serializer.appendFormat("goto {0};", label)
+                raise CompilationException(True, "Conditional node Not yet implemented")
             elif isinstance(value, p4_parser_exception):
-                raise CompilationException(True, "Not yet implemented")
+                raise CompilationException(True, "Exception Not yet implemented")
             else:
                 raise CompilationException(
                     True, "Unexpected element in match case {0}", value)
 
-            serializer.decreaseIndent()
-            serializer.newline()
-
         # Must create default if it is missing
         if not seenDefault:
-            serializer.emitIndent()
-            serializer.appendFormat(
-                "{0} = p4_pe_unhandled_select;", program.errorName)
-            serializer.newline()
-            serializer.emitIndent()
-            serializer.appendFormat("default: goto end;")
-            serializer.newline()
+            serializer.append("""
+        default: begin
+            nextState={defaultState}
+        end""")
+
+        serializer.append("""
+        endcase
+        return nextState;
+    endfunction
+""")
 
     def serializeBranch(self, serializer, branch_on, branch_to, program):
         assert isinstance(serializer, programSerializer.ProgramSerializer)
-        assert isinstance(program, llvmProgram.LLVMProgram)
 
         if branch_on == []:
             dest = branch_to.values()[0]
             serializer.emitIndent()
-            name = program.getLabel(dest)
-            serializer.appendFormat("goto {0};", name)
             serializer.newline()
         elif isinstance(branch_on, list):
-            tmpvar = program.generateNewName("tmp")
-            self.serializeSelect(tmpvar, serializer, branch_on, program)
-            self.serializeCases(tmpvar, serializer, branch_to, program)
+            selectVar = self.serializeSelect(serializer, branch_on, program)
+            self.serializeCases("", serializer, branch_to, program)
         else:
             raise CompilationException(
                 True, "Unexpected branch_on {0}", branch_on)
@@ -261,27 +280,14 @@ class LLVMParser(object):
             serializer.newline()
             return
 
-        serializer.appendFormat("if ({0}->len < BYTES({1} + {2})) ",
-                                program.packetName,
-                                program.offsetVariableName, width)
-        serializer.blockStart()
-        serializer.emitIndent()
-        serializer.appendFormat("{0} = p4_pe_header_too_short;",
-                                program.errorName)
-        serializer.newline()
-        serializer.emitIndent()
-        serializer.appendLine("goto end;")
-        # TODO: jump to correct exception handler
-        serializer.blockEnd(True)
-
         if width <= 32:
             serializer.emitIndent()
-            load = self.generatePacketLoad(0, width, alignment, program)
+            #load = self.generatePacketLoad(0, width, alignment, program)
 
-            serializer.appendFormat("{0}.{1} = {2};",
-                                    program.headerStructName,
-                                    fieldToExtractTo, load)
-            serializer.newline()
+            #serializer.appendFormat("{0}.{1} = {2};",
+            #                        program.headerStructName,
+            #                        fieldToExtractTo, load)
+            #serializer.newline()
         else:
             # Destination is bigger than 4 bytes and
             # represented as a byte array.
@@ -296,25 +302,6 @@ class LLVMParser(object):
             else:
                 method = "load_half"
             b = (width + 7) / 8
-            for i in range(0, b):
-                serializer.emitIndent()
-                serializer.appendFormat("{0}.{1}[{2}] = ({3}8)",
-                                        program.headerStructName,
-                                        fieldToExtractTo, i,
-                                        program.config.uprefix)
-                serializer.appendFormat("(({0}({1}, ({2} / 8) + {3}) >> {4})",
-                                        method, program.packetName,
-                                        program.offsetVariableName, i, shift)
-                if (i == b - 1) and (width % 8 != 0):
-                    serializer.appendFormat(" & llvm_MASK({0}8, {1})",
-                                            program.config.uprefix, width % 8)
-                serializer.append(")")
-                serializer.endOfStatement(True)
-
-        serializer.emitIndent()
-        serializer.appendFormat("{0} += {1};",
-                                program.offsetVariableName, width)
-        serializer.newline()
 
     def serializeExtract(self, serializer, headerInstance, program):
         assert isinstance(serializer, programSerializer.ProgramSerializer)
@@ -324,19 +311,6 @@ class LLVMParser(object):
         if llvmProgram.LLVMProgram.isArrayElementInstance(headerInstance):
             llvmStack = program.getStackInstance(headerInstance.base_name)
             assert isinstance(llvmStack, llvmInstance.LLVMHeaderStack)
-
-            # write bounds check
-            serializer.emitIndent()
-            serializer.appendFormat("if ({0} >= {1}) ",
-                                    llvmStack.indexVar, llvmStack.arraySize)
-            serializer.blockStart()
-            serializer.emitIndent()
-            serializer.appendFormat("{0} = p4_pe_index_out_of_bounds;",
-                                    program.errorName)
-            serializer.newline()
-            serializer.emitIndent()
-            serializer.appendLine("goto end;")
-            serializer.blockEnd(True)
 
             if isinstance(headerInstance.index, int):
                 index = "[" + str(headerInstance.index) + "]"
@@ -366,11 +340,6 @@ class LLVMParser(object):
             # increment stack index
             llvmStack = program.getStackInstance(headerInstance.base_name)
             assert isinstance(llvmStack, llvmInstance.LLVMHeaderStack)
-
-            # write bounds check
-            serializer.emitIndent()
-            serializer.appendFormat("{0}++;", llvmStack.indexVar)
-            serializer.newline()
 
     def serializeMetadataSet(self, serializer, field, value, program):
         assert isinstance(serializer, programSerializer.ProgramSerializer)
@@ -418,10 +387,3 @@ class LLVMParser(object):
             raise CompilationException(
                 True, "Unexpected type for parse_call.set {0}", value)
 
-        if useMemcpy:
-            serializer.appendFormat("memcpy(&{0}, &{1}, {2})",
-                                    destination, source, bytesToCopy)
-        else:
-            serializer.appendFormat("{0} = {1}", destination, source)
-
-        serializer.endOfStatement(True)
