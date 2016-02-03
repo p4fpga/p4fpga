@@ -13,15 +13,17 @@ from compilationException import *
 from helper import *
 
 class LLVMParser(object):
-    preamble="""typedef enum {{{states}}} ParserState deriving (Bits, Eq)
+    preamble="""typedef enum {{{states}}} ParserState deriving (Bits, Eq);
 instance FShow#(ParserState);
     function Fmt show (ParserState state);
         return $format(" State %x", state);
     endfunction
 endinstance
     """
+
+    # FIXME to list
     imports="""
-import DefaultValues::*;
+import DefaultValue::*;
 import FIFO::*;
 import FIFOF::*;
 import FShow::*;
@@ -33,24 +35,61 @@ import Vector::*;
 
 import Pipe::*;
 import Ethernet::*;
-import P4Types::*;
-"""
+import P4Types::*;"""
+
+    moduleTopSignature="""(* synthesize *)
+module mkParser(Parser);"""
+
+    moduleTopPreamble="""\
+    Reg#(ParserState) curr_state <- mkReg({initState});
+    Reg#(Bool) started <- mkReg(False);
+    FIFOF#(EtherData) data_in_fifo <- mkFIFOF;
+    Wire#(Bool) start_fsm <- mkDWire(False);
+
+    Empty init_state <- mk{initState}(curr_state, data_in_fifo, start_fsm);"""
+
+    moduleTopInstantiateState="""\
+    {interface} {name} <- mk{state}(curr_state, data_in_fifo);"""
+
+    moduleTopMkConnection="""\
+    mkConnection({out}, {in});"""
+
+    moduleTopStartStatePre="""\
+    rule start if (start_fsm);
+        if (!started) begin"""
+
+    moduleTopStartStatePost="""\
+            started <= True;
+        end
+    endrule"""
+
+    moduleTopStopStatePre="""\
+    rule stop if (!start_fsm && curr_state == {initState});
+        if (started) begin"""
+
+    moduleTopStopStatePost="""\
+            started <= False;
+        end
+    endrule"""
 
     def __init__(self, hlirParser):  # hlirParser is a P4 parser
         self.parser = hlirParser
         self.name = get_camel_case(hlirParser.name.capitalize())
-        self.moduleSignature="""module mk{state}#(Reg#(ParserState) state, FIFO#(EtherData) datain)({interface});"""
+        self.moduleSignature="""module mk{state}#(Reg#(ParserState) state, FIFO#(EtherData) datain{extraParam})({interface});"""
+
         self.unparsedFifo="""FIFO#({lastType}) unparsed_{lastState}_fifo <- mkSizedFIFO({lastSize});"""
+
         self.preamble="""Wire#(Bit#(128)) packet_in_wire <- mkDWire(0);
     Vector#({numNextState}, Wire#(Maybe#(ParserState))) next_state_wire <- replicateM(mkDWire(tagged Invalid));
     PulseWire start_wire <- mkPulseWire();
     PulseWire stop_wire <- mkPulseWire();"""
+
         self.postamble="""\
     rule start_fsm if (start_wire);
-        {fsm}.start;
+        fsm_{fsm}.start;
     endrule
     rule stop_fsm if (stop_wire);
-        {fsm}.abort;
+        fsm_{fsm}.abort;
     endrule
     method Action start();
         start_wire.send();
@@ -58,11 +97,13 @@ import P4Types::*;
     method Action stop();
         stop_wire.send();
     endmethod"""
+
         self.fsm="""\
-    FSM fsm_{fsm} <- mkFSM({fsm})"""
+    FSM fsm_{fsm} <- mkFSM({fsm});"""
+
         self.nextStateArbiter="""\
     (* fire_when_enabled *)
-    rule arbitrate_outgoing_state if (state={state});
+    rule arbitrate_outgoing_state if (state == {state});
         Vector#({numNextState}, Bool) next_state_valid = replicate(False);
         Bool stateSet = False;
         for (Integer port=0; port<{numNextState}; port=port+1) begin
@@ -74,53 +115,128 @@ import P4Types::*;
             end
         end
     endrule"""
+
         self.computeParseStateSelect="""\
     function ParserState compute_next_state({matchtype} {matchfield});
         ParserState nextState = {defaultState};
         case ({matchfield}) matches"""
+
         self.loadPacket="""\
     rule load_packet_{id} if (state == {state});
-        let data_current <- toGet({FIXME}).get
+        let data_current <- toGet({fifo}).get;
         packet_in_wire <= data_current.data;
     endrule"""
+
         self.loadDelayedPacket="""\
-    rule load_packet_{id} if (state == {state});
-        let data_delayed <- toGet({FIXME}).get;
+    rule load_packet_delayed_{id} if (state == {state});
+        let data_delayed <- toGet({fifo}).get;
         {unparsed_fifo}.enq(data_delayed);
     endrule"""
+
+        self.alignByteStream="""\
+    rule load_packet if (state=={state});
+        let v = datain.first;
+        if (v.sop) begin
+            state <= {nextState};
+            start_fsm <= True;
+        end
+        else begin
+            datain.deq;
+            start_fsm <= False;
+        end
+    endrule"""
+
         self.stmtPreamble="""\
     Stmt {name} =
     seq
     action"""
+
         self.stmtGetData="""\
         let data = packet_in_wire;
         Vector#(128, Bit#(1)) dataVec = unpack(data);"""
+
         self.stmtExtract="""\
         let {field} = extract_{field}(pack(takeAt({index}, dataVec)));
         Vector#({unparsed_len}, Bit#(1)) unparsed = takeAt({unparsed_index}, dataVec);"""
+
         self.stmtComputeNextState="""\
         let nextState = compute_next_state({field});"""
+
         self.stmtUnparsedData="""\
-        if (nextState={nextState}) begin
+        if (nextState == {nextState}) begin
             unparsed_fifo_{nextState}.enq(pack(unparsed));
         end"""
+
         self.stmtAssignNextState="""\
-        next_state_wire[{index}] = tagged Valid nextState;"""
+        next_state_wire[{index}] <= tagged Valid nextState;"""
+
         self.stmtPostamble="""\
     endaction
-    endseq"""
+    endseq;"""
 
     @classmethod
-    def serialize_parse_states(self, serializer, states):
+    def serialize_preamble(self, serializer, states):
         serializer.appendLine(LLVMParser.imports)
         serializer.appendLine(LLVMParser.preamble.format(states=",".join(states)))
+
+    @classmethod
+    def serialize_parse_interfaces(self):
+        pass
+
+    @staticmethod
+    def convert(name):
+        s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+        return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+
+    @classmethod
+    def serialize_parser_top(self, serializer, states):
+        serializer.emitIndent()
+        serializer.appendLine(LLVMParser.moduleTopSignature)
+        serializer.moduleStart()
+        serializer.appendLine(self.moduleTopPreamble.format(initState=states[0]));
+        for state in states:
+            if (state == states[0]):
+                continue
+            serializer.appendLine(self.moduleTopInstantiateState.format(interface=state, name=LLVMParser.convert(state), state=state))
+
+        # FIXME
+        serializer.appendLine(self.moduleTopMkConnection)
+
+        serializer.appendLine(self.moduleTopStartStatePre)
+        for state in states:
+            if (state == states[0]):
+                continue
+            serializer.emitIndent()
+            serializer.emitIndent()
+            serializer.emitIndent()
+            serializer.appendLine("{}.start;".format(LLVMParser.convert(state)))
+        serializer.appendLine(self.moduleTopStartStatePost)
+
+        serializer.appendLine(self.moduleTopStopStatePre.format(initState=states[0]))
+        for state in states:
+            if (state == states[0]):
+                continue
+            serializer.emitIndent()
+            serializer.emitIndent()
+            serializer.emitIndent()
+            serializer.appendLine("{}.clear;".format(LLVMParser.convert(state)))
+        serializer.appendLine(self.moduleTopStopStatePost)
+
+        serializer.moduleEnd()
+
+    def serialize_start(self, serializer, nextState):
+        serializer.emitIndent()
+        serializer.appendLine(self.moduleSignature.format(state=self.name, interface="Empty", extraParam=", Wire#(Bool) start_fsm"))
+        serializer.moduleStart()
+        serializer.appendLine(self.alignByteStream.format(state=self.name, nextState=nextState.name));
+        serializer.moduleEnd()
 
     def serialize(self, serializer, program):
         assert isinstance(serializer, programSerializer.ProgramSerializer)
         assert isinstance(program, llvmProgram.LLVMProgram)
         # module
         serializer.emitIndent()
-        serializer.append(self.moduleSignature.format(state=self.name, interface=self.name))
+        serializer.append(self.moduleSignature.format(state=self.name, interface=self.name, extraParam=""))
         serializer.moduleStart()
         # input interface
         serializer.emitIndent()
@@ -129,25 +245,26 @@ import P4Types::*;
         serializer.emitIndent()
         serializer.appendLine(self.preamble.format(numNextState="FIXME"))
         # fsm
-        serializer.appendLine(self.nextStateArbiter.format(state="FIXME", numNextState="FIXME"))
+        serializer.appendLine(self.nextStateArbiter.format(state="0", numNextState="FIXME"))
         # branches
         self.serializeBranch(serializer, self.parser.branch_on, self.parser.branch_to, program)
         # load input data
-        serializer.appendLine(self.loadPacket)
+        serializer.appendLine(self.loadPacket.format(id="FIXME", state="FIXME", fifo="input_fifo"))
+
+        # any delayed data?
+        serializer.appendLine(self.loadDelayedPacket.format(state="FIXME", id="FIXME", fifo="FIXME", unparsed_fifo="unparsedFifo"))
 
         # Stmt
-        serializer.appendLine(self.stmtPreamble)
+        serializer.appendLine(self.stmtPreamble.format(name="fixme"))
         serializer.appendLine(self.stmtGetData)
-        serializer.appendLine(self.stmtExtract)
-        serializer.appendLine(self.stmtComputeNextState)
-        serializer.appendLine(self.stmtUnparsedData)
-        serializer.appendLine(self.stmtAssignNextState)
+        serializer.appendLine(self.stmtExtract.format(field="fixme", index="FIXME", unparsed_len="16", unparsed_index="112"))
+        serializer.appendLine(self.stmtComputeNextState.format(field="FIXME"))
+        serializer.appendLine(self.stmtUnparsedData.format(nextState="FIXME"))
+        serializer.appendLine(self.stmtAssignNextState.format(index="FIXME"))
         serializer.appendLine(self.stmtPostamble)
 
-        serializer.emitIndent()
         serializer.appendLine(self.fsm.format(fsm=self.name))
         # postamble
-        serializer.emitIndent()
         serializer.appendLine(self.postamble.format(fsm=self.name))
         # output interface
         serializer.moduleEnd()
@@ -189,7 +306,7 @@ import P4Types::*;
             if isinstance(e, int):
                 serializer.append("""
             'h{field}: begin
-                nextState={state}
+                nextState={state};
             end""".format(field=format(e,'x'), state="FIXME"))
             elif isinstance(e, tuple):
                 raise CompilationException(True, "Not yet implemented")
@@ -199,7 +316,7 @@ import P4Types::*;
                 seenDefault = True
                 serializer.append("""
             default: begin
-                nextState={defaultState}
+                nextState={defaultState};
             end""".format(defaultState="FIXME"))
             else:
                 raise CompilationException(
@@ -247,143 +364,4 @@ import P4Types::*;
         else:
             raise CompilationException(
                 True, "Unexpected branch_on {0}", branch_on)
-
-    def serializeOperation(self, serializer, op, program):
-        assert isinstance(serializer, programSerializer.ProgramSerializer)
-        assert isinstance(program, llvmProgram.LLVMProgram)
-
-        operation = op[0]
-        if operation is parse_call.extract:
-            self.serializeExtract(serializer, op[1], program)
-        elif operation is parse_call.set:
-            self.serializeMetadataSet(serializer, op[1], op[2], program)
-        else:
-            raise CompilationException(
-                True, "Unexpected operation in parser {0}", op)
-
-    def serializeFieldExtract(self, serializer, headerInstanceName,
-                              index, field, alignment, program):
-        assert isinstance(index, str)
-        assert isinstance(headerInstanceName, str)
-        assert isinstance(field, llvmStructType.LLVMField)
-        assert isinstance(serializer, programSerializer.ProgramSerializer)
-        assert isinstance(alignment, int)
-        assert isinstance(program, llvmProgram.LLVMProgram)
-
-        fieldToExtractTo = headerInstanceName + index + "." + field.name
-
-        serializer.emitIndent()
-        width = field.widthInBits()
-        if field.name == "valid":
-            serializer.appendFormat(
-                "{0}.{1} = 1;", program.headerStructName, fieldToExtractTo)
-            serializer.newline()
-            return
-
-        if width <= 32:
-            serializer.emitIndent()
-            #load = self.generatePacketLoad(0, width, alignment, program)
-
-            #serializer.appendFormat("{0}.{1} = {2};",
-            #                        program.headerStructName,
-            #                        fieldToExtractTo, load)
-            #serializer.newline()
-        else:
-            # Destination is bigger than 4 bytes and
-            # represented as a byte array.
-            if alignment == 0:
-                shift = 0
-            else:
-                shift = 8 - alignment
-
-            assert shift >= 0
-            if shift == 0:
-                method = "load_byte"
-            else:
-                method = "load_half"
-            b = (width + 7) / 8
-
-    def serializeExtract(self, serializer, headerInstance, program):
-        assert isinstance(serializer, programSerializer.ProgramSerializer)
-        assert isinstance(headerInstance, p4_header_instance)
-        assert isinstance(program, llvmProgram.LLVMProgram)
-
-        if llvmProgram.LLVMProgram.isArrayElementInstance(headerInstance):
-            llvmStack = program.getStackInstance(headerInstance.base_name)
-            assert isinstance(llvmStack, llvmInstance.LLVMHeaderStack)
-
-            if isinstance(headerInstance.index, int):
-                index = "[" + str(headerInstance.index) + "]"
-            elif headerInstance.index is P4_NEXT:
-                index = "[" + llvmStack.indexVar + "]"
-            else:
-                raise CompilationException(
-                    True, "Unexpected index for array {0}",
-                    headerInstance.index)
-            basetype = llvmStack.basetype
-        else:
-            llvmHeader = program.getHeaderInstance(headerInstance.name)
-            basetype = llvmHeader.type
-            index = ""
-
-        # extract all fields
-        alignment = 0
-        for field in basetype.fields:
-            assert isinstance(field, llvmStructType.LLVMField)
-
-            self.serializeFieldExtract(serializer, headerInstance.base_name,
-                                       index, field, alignment, program)
-            alignment += field.widthInBits()
-            alignment = alignment % 8
-
-        if llvmProgram.LLVMProgram.isArrayElementInstance(headerInstance):
-            # increment stack index
-            llvmStack = program.getStackInstance(headerInstance.base_name)
-            assert isinstance(llvmStack, llvmInstance.LLVMHeaderStack)
-
-    def serializeMetadataSet(self, serializer, field, value, program):
-        assert isinstance(serializer, programSerializer.ProgramSerializer)
-        assert isinstance(program, llvmProgram.LLVMProgram)
-        assert isinstance(field, p4_field)
-
-        dest = program.getInstance(field.instance.name)
-        assert isinstance(dest, llvmInstance.SimpleInstance)
-        destType = dest.type
-        assert isinstance(destType, llvmStructType.LLVMStructType)
-        destField = destType.getField(field.name)
-
-        if destField.widthInBits() > 32:
-            useMemcpy = True
-            bytesToCopy = destField.widthInBits() / 8
-            if destField.widthInBits() % 8 != 0:
-                raise CompilationException(
-                    True,
-                    "{0}: Not implemented: wide field w. sz not multiple of 8",
-                    field)
-        else:
-            useMemcpy = False
-            bytesToCopy = None # not needed, but compiler is confused
-
-        serializer.emitIndent()
-        destination = "{0}.{1}.{2}".format(
-            program.metadataStructName, dest.name, destField.name)
-        if isinstance(value, int):
-            source = str(value)
-            if useMemcpy:
-                raise CompilationException(
-                    True,
-                    "{0}: Not implemented: copying from wide constant",
-                    value)
-        elif isinstance(value, tuple):
-            source = self.currentReferenceAsString(value, program)
-        elif isinstance(value, p4_field):
-            source = program.getInstance(value.instance.name)
-            if isinstance(source, llvmInstance.LLVMMetadata):
-                sourceStruct = program.metadataStructName
-            else:
-                sourceStruct = program.headerStructName
-            source = "{0}.{1}.{2}".format(sourceStruct, source.name, value.name)
-        else:
-            raise CompilationException(
-                True, "Unexpected type for parse_call.set {0}", value)
 

@@ -134,7 +134,6 @@ class LLVMProgram(object):
         self.generateTables()
         self.generateHeaderInstance()
         self.generateMetadataInstance()
-
         self.generateParser(serializer)
         self.generatePipeline()
 
@@ -267,9 +266,13 @@ class LLVMProgram(object):
     def generateParser(self, serializer):
         assert isinstance(serializer, programSerializer.ProgramSerializer)
         states = map(lambda x: x.name, self.parsers)
-        llvmParser.LLVMParser.serialize_parse_states(serializer, states)
+        llvmParser.LLVMParser.serialize_preamble(serializer, states)
         for p in self.parsers:
-            p.serialize(serializer, self)
+            if (p.name == self.parsers[0].name):
+                p.serialize_start(serializer, self.parsers[1])
+            else:
+                p.serialize(serializer, self)
+        llvmParser.LLVMParser.serialize_parser_top(serializer, states)
 
     def generateIngressPipeline(self, serializer):
         assert isinstance(serializer, programSerializer.ProgramSerializer)

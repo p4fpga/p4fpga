@@ -69,7 +69,7 @@ def compileP4(inputFile, gen_file, preprocessor_args):
         e.tollvm(serializer)
         f = open(basename+'.ll', 'w')
         f.write(str(e.module))
-        bsv = open(basename+'.bsv', 'w')
+        bsv = open(basename.capitalize()+'.bsv', 'w')
         bsv.write(serializer.toString())
         return CompileResult("OK", "")
     except CompilationException, e:
