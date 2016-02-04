@@ -219,7 +219,8 @@ module mkParser(Parser);"""
         Vector#({unparsed_len}, Bit#(1)) unparsed = takeAt({unparsed_index}, dataVec);"""
 
         self.stmtComputeNextState="""\
-        let nextState = compute_next_state({field});"""
+        let nextState = compute_next_state({field});
+        $display("Goto state %h", nextState);"""
 
         self.stmtUnparsedData="""\
         if (nextState == {name}) begin
