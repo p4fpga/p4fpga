@@ -4,6 +4,7 @@
 from p4_hlir.hlir import p4_header_instance, p4_table, \
      p4_conditional_node, p4_action, p4_parse_state
 from p4_hlir.main import HLIR
+import p4_hlir.hlir.p4 as p4
 import llvmlite.ir as ll
 import llvmlite.binding as llvmBinding
 import llvmCounter
@@ -14,6 +15,7 @@ import llvmDeparser
 import typeFactory
 import programSerializer
 from compilationException import *
+from pprint import pprint
 
 class LLVMProgram(object):
     def __init__(self, name, hlir):
@@ -70,7 +72,6 @@ class LLVMProgram(object):
         self.module = ll.Module(context=self.context) # each P4 program is a compilation unit
         self.builder = ll.IRBuilder()
 
-    # 
     def construct(self):
         if len(self.hlir.p4_field_list_calculations) > 0:
             raise NotSupportedException(
@@ -95,11 +96,18 @@ class LLVMProgram(object):
                 header = llvmInstance.LLVMHeader(h, self.typeFactory)
                 self.headers.append(header)
 
+        stack = []
         # parse_state -> parser objects
         for p in self.hlir.p4_parse_states.values():
             parser = llvmParser.LLVMParser(p)
+            parser.preprocess_parser(self.hlir)
             self.parsers.append(parser)
-            print 'llp: ', parser
+
+        llvmParser.LLVMParser.process_parser(self.hlir.p4_parse_states["start"], stack)
+
+        for p in self.hlir.p4_parse_states.values():
+            parser = llvmParser.LLVMParser(p)
+            parser.postprocess_parser(self.hlir)
 
         for t in self.hlir.p4_tables.values():
             table = llvmTable.LLVMTable(t, self)
@@ -269,9 +277,12 @@ class LLVMProgram(object):
         llvmParser.LLVMParser.serialize_preamble(serializer, states)
         for p in self.parsers:
             if (p.name == self.parsers[0].name):
+                p.serialize_interfaces(serializer)
                 p.serialize_start(serializer, self.parsers[1])
             else:
-                p.serialize(serializer, self)
+                p.serialize_interfaces(serializer)
+                p.serialize_common(serializer, self)
+
         llvmParser.LLVMParser.serialize_parser_top(serializer, states)
 
     def generateIngressPipeline(self, serializer):
