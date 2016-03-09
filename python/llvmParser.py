@@ -15,21 +15,6 @@ from helper import *
 import collections
 from pprint import pprint
 
-def convert(name):
-    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
-    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
-
-def camelCase(st):
-    output = ''.join(x for x in st.title() if x.isalnum())
-    return output[0].lower() + output[1:]
-
-def CamelCase(st):
-    output = ''.join(x for x in st.title() if x.isalnum())
-    return output
-
-def toState(st):
-    return "State"+CamelCase(st)
-
 class LLVMParser(object):
 
     total_bitcount = 0
@@ -163,7 +148,7 @@ module mkParser(Parser);"""
         self.computeParseStateSelect="""\
     function ParserState compute_next_state({matchtype} {matchfield});
         ParserState nextState = {defaultState};
-        case ({matchfield}) matches"""
+        case (byteSwap({matchfield})) matches"""
 
         self.loadPacket="""\
     rule load_packet if (state == {state});
@@ -213,7 +198,8 @@ module mkParser(Parser);"""
         let {data} <- toGet({fifo}).get;"""
 
         self.stmtExtract="""\
-        let {field} = extract_{field}(pack(takeAt({index}, dataVec)));"""
+        let {field} = extract_{field}(pack(takeAt({index}, dataVec)));
+        $display(fshow({field}));"""
 
         self.stmtUnparsed="""\
         Vector#({unparsed_len}, Bit#(1)) unparsed = takeAt({unparsed_index}, dataVec);"""
@@ -307,6 +293,7 @@ endinterface"""
             if (width == 0):
                 continue
             serializer.appendLine(interfacePut.format(width=width, name=elem))
+        print 'pppp', LLVMParser.unparsedOut[self.name]
         for elem, width in LLVMParser.unparsedOut[self.name].items():
             serializer.appendLine(interfaceGet.format(width=width, name=elem))
         serializer.appendLine(postamble)
@@ -349,6 +336,7 @@ endinterface"""
         # load input data
         serializer.appendLine(self.loadPacket.format(state=toState(self.name), fifo="datain"))
 
+        #FIXME: simplify this part
         # Stmt
         serializer.appendLine(self.stmtPreamble.format(name=self.name))
         serializer.appendLine(self.stmtBeginAction)
@@ -357,12 +345,12 @@ endinterface"""
             serializer.appendLine(self.stmtGetData.format(name="data"))
             serializer.appendLine(self.stmtUnpackData.format(length=128))
             for action, item in self.parser.call_sequence:
-                for target, length in LLVMParser.unparsedOut[self.name].items():
-                    serializer.appendLine(self.stmtExtract.format(field=item, index="0", unparsed_len=length, unparsed_index=128-length))
+                _, length = LLVMParser.unparsedOut[self.name].items()[0]
+                serializer.appendLine(self.stmtExtract.format(field=item.name, index="0", unparsed_len=length, unparsed_index=128-length))
             currWidth = LLVMParser.parseSteps[self.name][0]
             for action, item in self.parser.call_sequence:
-                for target, length in LLVMParser.unparsedOut[self.name].items():
-                    serializer.appendLine(self.stmtUnparsed.format(unparsed_len=length, unparsed_index=currWidth-length))
+                _, length = LLVMParser.unparsedOut[self.name].items()[0]
+                serializer.appendLine(self.stmtUnparsed.format(unparsed_len=length, unparsed_index=currWidth-length))
             for elem in self.parser.branch_on:
                 serializer.appendLine(self.stmtComputeNextState.format(field=elem))
             for target, length in LLVMParser.unparsedOut[self.name].items():
@@ -476,7 +464,8 @@ endinterface"""
             elif isinstance(value, p4_table):
                 print 'sc', value
             elif isinstance(value, p4_conditional_node):
-                raise CompilationException(True, "Conditional node Not yet implemented")
+                print ("Conditional node Not yet implemented")
+                #raise CompilationException(True, "Conditional node Not yet implemented")
             elif isinstance(value, p4_parser_exception):
                 raise CompilationException(True, "Exception Not yet implemented")
             else:
@@ -511,37 +500,36 @@ endinterface"""
                 True, "Unexpected branch_on {0}", branch_on)
 
     @classmethod
-    def process_parser(self, node, stack, visited=None):
+    def process_parser(self, node, stack, prev_bits, visited=None):
         if not visited:
             visited = set()
         visited.add(node.name)
-
         stack.append(node.name)
+        # curr_bits: local_var, sum in current stage
+        # prev_bits: local_var, unparsed from last stage
+        curr_bits = prev_bits
 
         if (node.name != "start"):
-            LLVMParser.total_bitcount += 128
+            curr_bits += 128
 
-        while (LLVMParser.total_bitcount < LLVMParser.field_width[node.name]):
-            LLVMParser.parseSteps[node.name].append(LLVMParser.total_bitcount)
-            LLVMParser.total_bitcount += 128
+        while (curr_bits < LLVMParser.field_width[node.name]):
+            LLVMParser.parseSteps[node.name].append(curr_bits)
+            curr_bits += 128
 
-        #print 'dd', LLVMParser.total_bitcount, LLVMParser.field_width[node.name]
-        unparsed_bitcount = LLVMParser.total_bitcount - LLVMParser.field_width[node.name]
-        LLVMParser.parseSteps[node.name].append(LLVMParser.total_bitcount)
-        LLVMParser.total_bitcount -= LLVMParser.field_width[node.name]
+        LLVMParser.parseSteps[node.name].append(curr_bits)
 
         for case, target in node.branch_to.items():
-            #print 'dd', case, target
+            # next_bits: unparsed bits to next stage
+            next_bits = curr_bits - LLVMParser.field_width[node.name]
             if type(case) is not list:
                 case = [case]
             dst_name = target.name
-            #print 'dd from', stack[-1], 'to', dst_name, 'with', unparsed_bitcount
             if type(target) is not p4.p4_table:
-                LLVMParser.unparsedOut[stack[-1]][dst_name] = unparsed_bitcount
+                LLVMParser.unparsedOut[stack[-1]][dst_name] = next_bits 
 
             for _, target in node.branch_to.items():
                 if type(target) is p4.p4_parse_state and target.name not in visited:
-                    self.process_parser(target, stack, visited)
+                    self.process_parser(target, stack, next_bits, visited)
         stack.pop()
 
     def preprocess_parser(self, hlir):

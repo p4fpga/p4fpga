@@ -7,7 +7,9 @@ from p4_hlir.main import HLIR
 import p4_hlir.hlir.p4 as p4
 import llvmlite.ir as ll
 import llvmlite.binding as llvmBinding
+import llvmAction
 import llvmCounter
+import llvmConditional
 import llvmInstance
 import llvmTable
 import llvmParser
@@ -73,10 +75,10 @@ class LLVMProgram(object):
         self.builder = ll.IRBuilder()
 
     def construct(self):
-        if len(self.hlir.p4_field_list_calculations) > 0:
-            raise NotSupportedException(
-                "{0} calculated field",
-                self.hlir.p4_field_list_calculations.values()[0].name)
+        #if len(self.hlir.p4_field_list_calculations) > 0:
+        #    raise NotSupportedException(
+        #        "{0} calculated field",
+        #        self.hlir.p4_field_list_calculations.values()[0].name)
 
         # header_instance sort to (stack, header, metadata)
         for h in self.hlir.p4_header_instances.values():
@@ -103,22 +105,35 @@ class LLVMProgram(object):
             parser.preprocess_parser(self.hlir)
             self.parsers.append(parser)
 
-        llvmParser.LLVMParser.process_parser(self.hlir.p4_parse_states["start"], stack)
+        llvmParser.LLVMParser.process_parser(self.hlir.p4_parse_states["start"], stack, 0)
 
         for p in self.hlir.p4_parse_states.values():
             parser = llvmParser.LLVMParser(p)
             parser.postprocess_parser(self.hlir)
 
+        for a in self.hlir.p4_actions.values():
+            if self.isInternalAction(a):
+                continue
+            action = llvmAction.LLVMAction(a, self)
+            self.actions.append(action)
+
+        for c in self.hlir.p4_counters.values():
+            counter = llvmCounter.LLVMCounter(c, self)
+            self.counters.append(counter)
+
         for t in self.hlir.p4_tables.values():
             table = llvmTable.LLVMTable(t, self)
+            print 'dd', table
             self.tables.append(table)
 
         # ingress pipeline -> entry point
         for n in self.hlir.p4_ingress_ptr.keys():
+            print 'dd ingress', n
             self.entryPoints.append(n)
 
         # conditional -> conditional object
         for n in self.hlir.p4_conditional_nodes.values():
+            print 'dd conditional', n
             conditional = llvmConditional.LLVMConditional(n, self)
             self.conditionals.append(conditional)
 
@@ -127,6 +142,9 @@ class LLVMProgram(object):
 
         # deparser object
         self.deparser = llvmDeparser.LLVMDeparser(self.hlir)
+
+    def isInternalAction(self, action):
+        return action.lineno < 0
 
     @staticmethod
     def isArrayElementInstance(headerInstance):
@@ -138,12 +156,12 @@ class LLVMProgram(object):
         print("WARNING: ", formatString.format(*message))
 
     def tollvm(self, serializer):
-        self.generateTypes()
-        self.generateTables()
+        self.generateTypes(serializer)
+        self.generateTables(serializer)
         self.generateHeaderInstance()
         self.generateMetadataInstance()
         self.generateParser(serializer)
-        self.generatePipeline()
+        self.generatePipeline(serializer)
 
     def getLabel(self, p4node):
         # C label that corresponds to this point in the control-flow
@@ -165,25 +183,28 @@ class LLVMProgram(object):
         self.uniqueNameCounter += 1
         return base
 
-    def generateTypes(self):
+    def generateTypes(self, serializer):
         for t in self.typeFactory.type_map.values():
-            print t
-        print 'headerStruct', self.headersStructTypeName
+            print 'tt typemap', t.name
+            t.serialize(serializer)
+
         for h in self.headers:
-            print 'headers', h
+            print 'tt headers', h.type.name
 
         for h in self.stacks:
-            print 'stacks', h
+            print 'tt stacks', h.type.name
 
         # metadata
         for h in self.metadata:
-            print 'metadata', h
+            print 'tt metadata', h.type.name
 
 
-    def generateTables(self):
+    def generateTables(self, serializer):
+        serializer.appendLine("/* generate tables */")
         for t in self.tables:
-            print 'gt generateTable', t
+            t.serialize(serializer, self)
 
+        serializer.appendLine("/* generate counters */")
         for c in self.counters:
             print 'gc generate counters', c
 
@@ -207,7 +228,7 @@ class LLVMProgram(object):
     def generateMetadataInstance(self):
         print (self.metadataStructTypeName, self.metadataStructName)
         for m in self.metadata:
-            print m
+            print "mm", m.name
 
     def generateDeparser(self, serializer):
         self.deparser.serialize(serializer, self)
@@ -215,13 +236,8 @@ class LLVMProgram(object):
     def generateInitializeMetadata(self, serializer):
         assert isinstance(serializer, programSerializer.ProgramSerializer)
 
-        serializer.blockStart()
         for h in self.metadata:
-            serializer.emitIndent()
-            serializer.appendFormat(".{0} = ", h.name)
-            h.emitInitializer(serializer)
-            serializer.appendLine(",")
-        serializer.blockEnd(False)
+            print 'tt', h
 
     def getStackInstance(self, name):
         assert isinstance(name, str)
@@ -255,6 +271,16 @@ class LLVMProgram(object):
         raise CompilationException(
             True, "Could not locate instance named {0}", name)
 
+    def getAction(self, p4action):
+        assert isinstance(p4action, p4_action)
+        for a in self.actions:
+            if a.name == p4action.name:
+                return a
+        newAction = llvmAction.BuiltinAction(p4action)
+        self.actions.append(newAction)
+        return newAction
+
+
     def getTable(self, name):
         assert isinstance(name, str)
         for t in self.tables:
@@ -262,6 +288,14 @@ class LLVMProgram(object):
                 return t
         raise CompilationException(
             True, "Could not locate table named {0}", name)
+
+    def getCounter(self, name):
+        assert isinstance(name, str)
+        for t in self.counters:
+            if t.name == name:
+                return t
+        raise CompilationException(
+            True, "Could not locate counters named {0}", name)
 
     def getConditional(self, name):
         assert isinstance(name, str)
@@ -287,16 +321,29 @@ class LLVMProgram(object):
 
     def generateIngressPipeline(self, serializer):
         assert isinstance(serializer, programSerializer.ProgramSerializer)
-        print "mm generateIngressPipeline"
         # Generate Tables
+        for t in self.tables:
+            serializer.appendLine("""MatchTable_{name}""".format(name=t.name))
 
-    def generateControlFlowNode(self, node, nextEntryPoint):
-        print "xx generateControlFlowNode"
-        # generate control flow
+    # generate module for each stage
+    def generateControlFlowNode(self, serializer, node, nextEntryPoint):
+        print "cf generateControlFlowNode", node.name
+        if isinstance(node, p4_table):
+            table = self.getTable(node.name)
+            assert isinstance(table, llvmTable.LLVMTable)
+            print "cf nextEntryPoint", node.name, nextEntryPoint
+            table.serializeCode(serializer, self, nextEntryPoint)
+        elif isinstance(node, p4_conditional_node):
+            conditional = self.getConditional(node.name)
+            assert isinstance(conditional, llvmConditional.LLVMConditional)
+            print "cf conditional nextEntryPoint", node.name, nextEntryPoint
+            conditional.generateCode(serializer, self, nextEntryPoint)
+        else:
+            raise CompilationException(
+                True, "{0} Unexpected control flow node", node)
 
-    def generatePipelineInternal(self, nodestoadd, nextEntryPoint):
+    def generatePipelineInternal(self, serializer, nodestoadd, nextEntryPoint):
         assert isinstance(nodestoadd, set)
-
         done = set()
         while len(nodestoadd) > 0:
             todo = nodestoadd.pop()
@@ -305,20 +352,28 @@ class LLVMProgram(object):
             if todo is None:
                 continue
 
-            print("Generating ", todo.name)
-
             done.add(todo)
-            self.generateControlFlowNode(todo, nextEntryPoint)
-
+            serializer.blockStart()
+            serializer.appendLine("module mkPipelineInternal_{}".format(todo.name))
+            serializer.emitIndent()
+            self.generateControlFlowNode(serializer, todo, nextEntryPoint)
+            serializer.appendLine("endmodule")
+            serializer.blockEnd(False)
             for n in todo.next_.values():
                 nodestoadd.add(n)
 
-    def generatePipeline(self):
+    def generatePipeline(self, serializer):
         todo = set()
         for e in self.entryPoints:
             todo.add(e)
-        print "zz generate Pipeline", todo
-        self.generatePipelineInternal(todo, self.egressEntry)
+        print "pp ingress pipeline", todo
+        self.generatePipelineInternal(serializer, todo, self.egressEntry)
+        serializer.appendLine("module mkIngressPipeline();")
+        #self.generateIngressPipeline(serializer)
+        serializer.appendLine("endmodule")
         todo = set()
         todo.add(self.egressEntry)
-        self.generatePipelineInternal(todo, None)
+        print "pp egress pipeline", todo
+        self.generatePipelineInternal(serializer, todo, None)
+        serializer.appendLine("module mkEgressPipeline();")
+        serializer.appendLine("endmodule")

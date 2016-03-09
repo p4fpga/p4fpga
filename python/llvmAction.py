@@ -1,7 +1,7 @@
 # Copyright (c) Barefoot Networks, Inc.
 # Licensed under the Apache License, Version 2.0 (the "License")
 
-from p4_hlir.hlir import p4_action, p4_field
+from p4_hlir.hlir import p4_action, p4_field, p4_field_list, p4_register
 from p4_hlir.hlir import p4_signature_ref, p4_header_instance
 import llvmProgram
 from programSerializer import ProgramSerializer
@@ -26,14 +26,10 @@ class LLVMActionBase(object):
         self.arguments = []
 
     def serializeArgumentsAsStruct(self, serializer):
-        serializer.emitIndent()
-        serializer.appendFormat("/* no arguments for {0} */", self.name)
-        serializer.newline()
+        print ("gt arg base struct, no arguments", self.name)
 
     def serializeBody(self, serializer, valueName, program):
-        serializer.emitIndent()
-        serializer.appendFormat("/* no body for {0} */", self.name)
-        serializer.newline()
+        print ("gt arg base struct body", self.name, valueName)
 
     def __str__(self):
         return "LLVMAction({0})".format(self.name)
@@ -42,17 +38,14 @@ class LLVMActionBase(object):
 class LLVMAction(LLVMActionBase):
     unsupported = [
         # The following cannot be done in llvm
-        "add_header", "remove_header", "execute_meter",
-        "clone_ingress_pkt_to_egress",
+        "execute_meter",
         "clone_egress_pkt_to_egress", "generate_digest", "resubmit",
         "modify_field_with_hash_based_offset", "truncate", "push", "pop",
         # The following could be done, but are not yet implemented
         # The situation with copy_header is complicated,
         # because we don't do checksums
-        "copy_header", "count",
-        "register_read", "register_write"]
+        "copy_header", "count"]
 
-    # noinspection PyUnresolvedReferences
     def __init__(self, p4action, program):
         super(LLVMAction, self).__init__(p4action)
         assert isinstance(p4action, p4_action)
@@ -68,8 +61,7 @@ class LLVMAction(LLVMActionBase):
             if width is None:
                 self.invalid = True
                 return
-            argtype = llvmScalarType.LLVMScalarType(p4action, width,
-                                                    False, program.config)
+            argtype = llvmScalarType.LLVMScalarType(p4action, width, False)
             actionData = LLVMActionData(param, argtype)
             self.arguments.append(actionData)
 
@@ -80,21 +72,20 @@ class LLVMAction(LLVMActionBase):
                                        self.hliraction)
 
         # Build a struct containing all action arguments.
-        serializer.emitIndent()
-        serializer.append("struct ")
-        serializer.blockStart()
         assert isinstance(serializer, ProgramSerializer)
+        if len(self.arguments) != 0:
+            serializer.appendLine("typedef struct {")
+            serializer.blockStart()
         for arg in self.arguments:
-            assert isinstance(arg, LLVMActionData)
             serializer.emitIndent()
+            assert isinstance(arg, LLVMActionData)
             argtype = arg.argtype
             assert isinstance(argtype, llvmType.LLVMType)
-            argtype.declare(serializer, arg.name, False)
-            serializer.endOfStatement(True)
-        serializer.blockEnd(False)
-        serializer.space()
-        serializer.append(self.name)
-        serializer.endOfStatement(True)
+            argtype.declare(serializer, arg.name)
+        if len(self.arguments) != 0:
+            serializer.appendLine("}} ActionArguments_{table};".format(table=self.name))
+            serializer.blockEnd(False)
+            serializer.newline()
 
     def serializeBody(self, serializer, dataContainer, program):
         if self.invalid:
@@ -110,6 +101,7 @@ class LLVMAction(LLVMActionBase):
         assert isinstance(dataContainer, str)
         callee_list = self.hliraction.flat_call_sequence
         for e in callee_list:
+            print "cf callee:", e
             action = e[0]
             assert isinstance(action, p4_action)
             arguments = e[1]
@@ -188,13 +180,6 @@ class LLVMAction(LLVMActionBase):
         if callee.name in LLVMAction.unsupported:
             raise NotSupportedException("{0}", callee)
 
-        # This is not yet ready
-        #if callee.name == "count":
-        #    self.serializeCount(caller, arguments,
-        #                        serializer, dataContainer, program)
-        #    return
-
-        serializer.emitIndent()
         args = self.transformArguments(arguments, caller,
                                        dataContainer, program)
         if callee.name == "modify_field":
@@ -208,23 +193,8 @@ class LLVMAction(LLVMActionBase):
                 raise CompilationException(
                     True, "Cannot infer width for arguments {0}",
                     callee)
-            elif size <= 32:
-                serializer.appendFormat("{0} = {1};",
-                                        dst.asString,
-                                        src.asString)
-            else:
-                if not dst.isLvalue:
-                    raise NotSupportedException(
-                        "Constants wider than 32-bit: {0}({1})",
-                        dst.caller, dst.asString)
-                if not src.isLvalue:
-                    raise NotSupportedException(
-                        "Constants wider than 32-bit: {0}({1})",
-                        src.caller, src.asString)
-                serializer.appendFormat("memcpy(&{0}, &{1}, {2});",
-                                        dst.asString,
-                                        src.asString,
-                                        size / 8)
+            serializer.appendLine("""/* modify_field */""")
+
         elif (callee.name == "add" or 
              callee.name == "bit_and" or 
              callee.name == "bit_or" or 
@@ -238,43 +208,33 @@ class LLVMAction(LLVMActionBase):
                     True,
                     "Cannot infer width for arguments {0}",
                     callee)
-            if size > 32:
-                raise NotSupportedException("{0}: Arithmetic on {1}-bits",
-                                            callee, size)
+            serializer.appendLine("""arithmetic""")
             op = LLVMAction.translateActionToOperator(callee.name)
-            serializer.appendFormat("{0} = {1} {2} {3};",
-                                    args[0].asString,
-                                    args[1].asString,
-                                    op,
-                                    args[2].asString)
+
         elif (callee.name == "add_to_field" or 
               callee.name == "subtract_from_field"):
-            size = self.checkSize(callee,
-                                  [a.widthInBits() for a in args],
-                                  program)
-            if size is None:
-                raise CompilationException(
-                    True, "Cannot infer width for arguments {0}", callee)
-            if size > 32:
-                raise NotSupportedException(
-                    "{0}: Arithmetic on {1}-bits", callee, size)
-
             op = LLVMAction.translateActionToOperator(callee.name)
-            serializer.appendFormat("{0} = {0} {1} {2};",
-                                    args[0].asString,
-                                    op,
-                                    args[1].asString)
+            serializer.appendLine("""/* add_to_field */""")
         elif callee.name == "no_op":
             serializer.append("/* noop */")
         elif callee.name == "drop":
-            serializer.appendFormat("{0} = 1;", program.dropBit)
+            serializer.appendLine("/* drop */")
         elif callee.name == "push" or callee.name == "pop":
             raise CompilationException(
                 True, "{0} push/pop not yet implemented", callee)
+        elif callee.name == "clone_ingress_pkt_to_egress":
+            serializer.appendLine("/* clone_ingress_pkt_to_egress */")
+        elif callee.name == "register_read":
+            serializer.appendLine("/* register_read */")
+        elif callee.name == "register_write":
+            serializer.appendLine("/* register_write */")
+        elif callee.name == "remove_header":
+            serializer.appendLine("/* remove_header */")
+        elif callee.name == "add_header":
+            serializer.appendLine("/* add_header */")
         else:
             raise CompilationException(
                 True, "Unexpected primitive action {0}", callee)
-        serializer.newline()
 
     def transformArguments(self, arguments, caller, dataContainer, program):
         result = []
@@ -290,16 +250,10 @@ class BuiltinAction(LLVMActionBase):
         self.builtin = True
 
     def serializeBody(self, serializer, valueName, program):
-        # This is ugly; there should be a better way
-        if self.name == "drop":
-            serializer.emitIndent()
-            serializer.appendFormat("{0} = 1;", program.dropBit)
-            serializer.newline()
-        else:
-            serializer.emitIndent()
-            serializer.appendFormat("/* no body for {0} */", self.name)
-            serializer.newline()
-
+        print 'tll body builtin', self.name, type(self), len(self.hliraction.flat_call_sequence)
+        for call in self.hliraction.flat_call_sequence:
+            # see if anything can be parallelized
+            print 'tll actions {0} field={1} {2}'.format(call[0], call[1], call[2])
 
 class ArgInfo(object):
     # noinspection PyUnresolvedReferences
@@ -374,6 +328,10 @@ class ArgInfo(object):
                 self.width = instancetype.widthInBits()
                 self.asString = "{0}.{1}".format(
                     program.headerStructName, argument.name)
+        elif isinstance(argument, p4_field_list):
+            print "tll fieldlist", argument
+        elif isinstance(argument, p4_register):
+            print 'tll register', argument
         else:
             raise CompilationException(
                 True, "Unexpected action argument {0}", argument)

@@ -4,6 +4,7 @@
 from p4_hlir.hlir import p4_match_type, p4_field, p4_table, p4_header_instance
 from programSerializer import ProgramSerializer
 from compilationException import *
+from helper import *
 import llvmProgram
 import llvmInstance
 import llvmCounter
@@ -23,11 +24,9 @@ class LLVMTableKeyField(object):
     def serializeType(self, serializer):
         assert isinstance(serializer, ProgramSerializer)
         ftype = self.field.type
-        serializer.emitIndent()
-        ftype.declare(serializer, self.keyFieldName, False)
-        serializer.endOfStatement(True)
+        ftype.declare(serializer, self.keyFieldName)
 
-    def serializeConstruction(self, keyName, serializer, program):
+    def serializeConstruction(self, serializer, keyName, program):
         assert isinstance(serializer, ProgramSerializer)
         assert isinstance(keyName, str)
         assert isinstance(program, llvmProgram.LLVMProgram)
@@ -43,32 +42,19 @@ class LLVMTableKeyField(object):
             base = program.headerStructName
 
         if isinstance(self.instance, llvmInstance.SimpleInstance):
-            source = "{0}.{1}.{2}".format(
+            print "tll simple instance {0}.{1}.{2}".format(
                 base, self.instance.name, self.field.name)
         else:
             assert isinstance(self.instance, llvmInstance.LLVMHeaderStack)
-            source = "{0}.{1}[{2}].{3}".format(
+            print "tll header stack {0}.{1}[{2}].{3}".format(
                 base, self.instance.name,
                 self.instance.hlirInstance.index, self.field.name)
-        destination = "{0}.{1}".format(keyName, self.keyFieldName)
         size = self.field.widthInBits()
-
         serializer.emitIndent()
-        if size <= 32:
-            serializer.appendFormat("{0} = ({1}){2};",
-                                    destination, source, maskExpression)
-        else:
-            if maskExpression != "":
-                raise NotSupportedException(
-                    "{0} Mask wider than 32 bits", self.field.hlirType)
-            serializer.appendFormat(
-                "memcpy(&{0}, &{1}, {2});", destination, source, size / 8)
-
-        serializer.newline()
-
+        serializer.appendLine("{0}.{1} width={2}".format(keyName, self.keyFieldName, size))
 
 class LLVMTableKey(object):
-    def __init__(self, match_fields, program):
+    def __init__(self, match_fields, table, program):
         assert isinstance(program, llvmProgram.LLVMProgram)
 
         self.expressions = []
@@ -76,6 +62,7 @@ class LLVMTableKey(object):
         self.masks = []
         self.fieldNamePrefix = "key_field_"
         self.program = program
+        self.table = table
 
         fieldNumber = 0
         for f in match_fields:
@@ -125,33 +112,26 @@ class LLVMTableKey(object):
     def fieldRank(field):
         assert isinstance(field, LLVMTableKeyField)
         return field.field.type.alignment()
-            
+
     def serializeType(self, serializer, keyTypeName):
         assert isinstance(serializer, ProgramSerializer)
-        serializer.emitIndent()
-        serializer.appendFormat("struct {0} ", keyTypeName)
-        serializer.blockStart()
 
-        # Sort fields in decreasing size; this will ensure that
-        # there is no padding.
-        # Padding may cause the llvm verification to fail,
-        # since padding fields are not initalized
         fieldOrder = sorted(
             self.fields, key=LLVMTableKey.fieldRank, reverse=True)
+
+        serializer.appendLine("typedef struct {")
+        serializer.blockStart()
         for f in fieldOrder:
             assert isinstance(f, LLVMTableKeyField)
+            serializer.emitIndent()
             f.serializeType(serializer)
-
+        serializer.appendLine("}} MatchField{table} deriving (Bits, Eq, FShow);".format(table=CamelCase(self.table)))
         serializer.blockEnd(False)
-        serializer.endOfStatement(True)
+        serializer.newline()
 
     def serializeConstruction(self, serializer, keyName, program):
-        serializer.emitIndent()
-        serializer.appendLine("/* construct key */")
-
         for f in self.fields:
-            f.serializeConstruction(keyName, serializer, program)
-
+            f.serializeConstruction(serializer, keyName, program)
 
 class LLVMTable(object):
     # noinspection PyUnresolvedReferences
@@ -165,7 +145,7 @@ class LLVMTable(object):
 
         self.defaultActionMapName = (program.reservedPrefix +
                                      self.name + "_miss")
-        self.key = LLVMTableKey(hlirtable.match_fields, program)
+        self.key = LLVMTableKey(hlirtable.match_fields, self.name, program)
         self.size = hlirtable.max_size
         if self.size is None:
             program.emitWarning(
@@ -185,21 +165,23 @@ class LLVMTable(object):
             program.emitWarning("{0}: table timeout {1}; ignoring",
                                 hlirtable, NotSupportedException.archError)
 
-        #self.counters = []
-        #if (hlirtable.attached_counters is not None):
-        #    for c in hlirtable.attached_counters:
-        #        ctr = program.getCounter(c.name)
-        #        assert isinstance(ctr, llvmCounter.LLVMCounter)
-        #        self.counters.append(ctr)
+        self.counters = []
+        print ('gt attached_counters', hlirtable.attached_counters)
+        if (hlirtable.attached_counters is not None):
+            for c in hlirtable.attached_counters:
+                print ('gt counter', c)
+                ctr = program.getCounter(c.name)
+                assert isinstance(ctr, llvmCounter.LLVMCounter)
+                self.counters.append(ctr)
 
         if (len(hlirtable.attached_meters) > 0 or 
             len(hlirtable.attached_registers) > 0):
             program.emitWarning("{0}: meters/registers {1}; ignored",
                                 hlirtable, NotSupportedException.archError)
 
-        #for a in hlirtable.actions:
-        #    action = program.getAction(a)
-        #    self.actions.append(action)
+        for a in hlirtable.actions:
+            action = program.getAction(a)
+            self.actions.append(action)
 
     def serializeKeyType(self, serializer):
         assert isinstance(serializer, ProgramSerializer)
@@ -212,44 +194,25 @@ class LLVMTable(object):
 
     def serializeValueType(self, serializer):
         assert isinstance(serializer, ProgramSerializer)
-        #  create an enum with tags for all actions
-        serializer.emitIndent()
-        serializer.appendFormat("enum {0} ", self.actionEnumName)
-        serializer.blockStart()
 
+        serializer.appendLine("typedef enum {")
+        serializer.blockStart()
         for a in self.actions:
-            name = a.name
             serializer.emitIndent()
-            serializer.appendFormat("{0}_{1},", self.name, name)
-            serializer.newline()
-
+            separator = "," if (a != self.actions[-1]) else ""
+            serializer.appendLine("{name} = {value}{sep}".format(name=CamelCase(a.name), value=self.actions.index(a) + 1, sep=separator))
+        serializer.appendLine("""}} Action{} deriving (Bits, Eq);""".format(CamelCase(self.valueTypeName)))
         serializer.blockEnd(False)
-        serializer.endOfStatement(True)
-
-        # a type-safe union: a struct with a tag and an union
-        serializer.emitIndent()
-        serializer.appendFormat("struct {0} ", self.valueTypeName)
-        serializer.blockStart()
-
-        serializer.emitIndent()
-        #serializer.appendFormat("enum {0} action;", self.actionEnumName)
-        # teporary workaround bcc bug
-        #serializer.appendFormat("{0}32 action;",
-        #                        self.config.uprefix)
         serializer.newline()
-
-        serializer.emitIndent()
-        serializer.append("union ")
-        serializer.blockStart()
 
         for a in self.actions:
             self.serializeActionArguments(serializer, a)
 
-        serializer.blockEnd(False)
-        serializer.space()
-        serializer.appendLine("u;")
-        serializer.blockEnd(False)
-        serializer.endOfStatement(True)
+    def serializeTableDeclaration(self, serializer):
+        assert isinstance(serializer, ProgramSerializer)
+        serializer.emitIndent()
+        serializer.appendLine("MatchTable_{name};".format(name=self.name))
+        pass
 
     def serialize(self, serializer, program):
         assert isinstance(serializer, ProgramSerializer)
@@ -257,14 +220,6 @@ class LLVMTable(object):
 
         self.serializeKeyType(serializer)
         self.serializeValueType(serializer)
-
-        #self.config.serializeTableDeclaration(
-        #    serializer, self.dataMapName, self.isHash,
-        #    "struct " + self.keyTypeName,
-        #    "struct " + self.valueTypeName, self.size)
-        #self.config.serializeTableDeclaration(
-        #    serializer, self.defaultActionMapName, False,
-        #    program.arrayIndexType, "struct " + self.valueTypeName, 1)
 
     def serializeCode(self, serializer, program, nextNode):
         assert isinstance(serializer, ProgramSerializer)
@@ -274,130 +229,51 @@ class LLVMTable(object):
         keyname = "key"
         valueName = "value"
 
-        serializer.emitIndent()
-        serializer.blockStart()
-
-        serializer.emitIndent()
-        serializer.appendFormat("{0}8 {1};", program.config.uprefix, hitVarName)
-        serializer.newline()
-
-        serializer.emitIndent()
-        serializer.appendFormat("struct {0} {1};", self.keyTypeName, keyname)
-        serializer.newline()
-
-        serializer.emitIndent()
-        serializer.appendFormat(
-            "struct {0} *{1};", self.valueTypeName, valueName)
-        serializer.newline()
-
-        serializer.newline()
-        serializer.emitIndent()
-        serializer.appendFormat("{0}:", program.getLabel(self))
-        serializer.newline()
-
+        serializer.appendLine("/* generate control flow */")
+        self.serializeTableDeclaration(serializer)
         self.key.serializeConstruction(serializer, keyname, program)
 
-        serializer.emitIndent()
-        serializer.appendFormat("{0} = 1;", hitVarName)
-        serializer.newline()
-
-        serializer.emitIndent()
-        serializer.appendLine("/* perform lookup */")
-        serializer.emitIndent()
-        program.config.serializeLookup(
-            serializer, self.dataMapName, keyname, valueName)
-        serializer.newline()
-
-        serializer.emitIndent()
-        serializer.appendFormat("if ({0} == NULL) ", valueName)
-        serializer.blockStart()
-
-        serializer.emitIndent()
-        serializer.appendFormat("{0} = 0;", hitVarName)
-        serializer.newline()
-
-        serializer.emitIndent()
-        serializer.appendLine("/* miss; find default action */")
-        serializer.emitIndent()
-        program.config.serializeLookup(
-            serializer, self.defaultActionMapName,
-            program.zeroKeyName, valueName)
-        serializer.newline()
-        serializer.blockEnd(True)
+        print "mm datamap", self.dataMapName
+        print "mm actionmap", self.defaultActionMapName
 
         if len(self.counters) > 0:
-            serializer.emitIndent()
-            serializer.append("else ")
-            serializer.blockStart()
             for c in self.counters:
                 assert isinstance(c, llvmCounter.LLVMCounter)
                 if c.autoIncrement:
-                    serializer.emitIndent()
-                    serializer.blockStart()
                     c.serializeCode(keyname, serializer, program)
-                    serializer.blockEnd(True)
-            serializer.blockEnd(True)
 
-        serializer.emitIndent()
-        serializer.appendFormat("if ({0} != NULL) ", valueName)
-        serializer.blockStart()
-        serializer.emitIndent()
-        serializer.appendLine("/* run action */")
         self.runAction(serializer, self.name, valueName, program, nextNode)
 
+        # Purpose??
         nextNode = self.hlirtable.next_
         if "hit" in nextNode:
+            # check if hit
             node = nextNode["hit"]
             if node is None:
                 node = nextNode
             label = program.getLabel(node)
-            serializer.emitIndent()
-            serializer.appendFormat("if (hit) goto {0};", label)
-            serializer.newline()
 
+            # check if miss
             node = nextNode["miss"]
             if node is None:
                 node = nextNode
             label = program.getLabel(node)
-            serializer.emitIndent()
-            serializer.appendFormat("else goto {0};", label)
-            serializer.newline()
 
-        serializer.blockEnd(True)
         if not "hit" in nextNode:
-            # Catch-all
-            serializer.emitIndent()
-            serializer.appendFormat("goto end;")
-            serializer.newline()
-
-        serializer.blockEnd(True)
+            print 'catch all'
 
     def runAction(self, serializer, tableName, valueName, program, nextNode):
-        serializer.emitIndent()
-        serializer.appendFormat("switch ({0}->action) ", valueName)
-        serializer.blockStart()
-
+        # Loop all actions
         for a in self.actions:
             assert isinstance(a, llvmAction.LLVMActionBase)
-
-            serializer.emitIndent()
-            serializer.appendFormat("case {0}_{1}: ", tableName, a.name)
-            serializer.newline()
-            serializer.emitIndent()
-            serializer.blockStart()
             a.serializeBody(serializer, valueName, program)
-            serializer.blockEnd(True)
-            serializer.emitIndent()
-
             nextNodes = self.hlirtable.next_
             if a.hliraction in nextNodes:
+                # table
                 node = nextNodes[a.hliraction]
                 if node is None:
                     node = nextNode
                 label = program.getLabel(node)
-                serializer.appendFormat("goto {0};", label)
             else:
-                serializer.appendFormat("break;")
-            serializer.newline()
-
-        serializer.blockEnd(True)
+                # default
+                pass

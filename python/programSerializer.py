@@ -39,7 +39,6 @@ class ProgramSerializer(object):
 
     def append(self, string):
         self.program += str(string)
-        print 'ppa: ', string
 
     def appendFormat(self, format, *args):
         string = format.format(*args)
@@ -48,24 +47,18 @@ class ProgramSerializer(object):
     def appendLine(self, string):
         self.append(string)
         self.newline()
-        #print 'ppl: ', string
 
     def emitIndent(self):
         self.program += " " * self.currentIndent
 
     def blockStart(self):
-        self.append("begin")
-        self.newline()
         self.increaseIndent()
-        #print 'ppb: begin'
 
     def blockEnd(self, addNewline):
         self.decreaseIndent()
         self.emitIndent()
-        self.append("end")
         if addNewline:
             self.newline()
-        #print 'ppe: end'
 
     def moduleStart(self):
         self.newline()
