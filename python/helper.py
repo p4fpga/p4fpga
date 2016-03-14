@@ -18,4 +18,3 @@ def CamelCase(st):
 def toState(st):
     return "State"+CamelCase(st)
 
-

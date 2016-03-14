@@ -24,7 +24,6 @@ class LLVMParser(object):
     unparsedOut = collections.OrderedDict()
     parseSteps = collections.OrderedDict()
 
-    # templates
     preamble="""typedef enum {{{states}}} ParserState deriving (Bits, Eq);
 instance FShow#(ParserState);
     function Fmt fshow (ParserState state);
@@ -33,22 +32,8 @@ instance FShow#(ParserState);
 endinstance
     """
 
-    # FIXME to list
-    imports="""
-import Connectable::*;
-import DefaultValue::*;
-import FIFO::*;
-import FIFOF::*;
-import FShow::*;
-import GetPut::*;
-import List::*;
-import StmtFSM::*;
-import SpecialFIFOs::*;
-import Vector::*;
-
-import Pipe::*;
-import Ethernet::*;
-import P4Types::*;"""
+    # templates
+    library=["Connectable", "DefaultValue", "FIFO", "FIFOF", "FShow", "GetPut", "List", "StmtFSM", "SpecialFIFOs", "Vector", "Pipe", "Ethernet", "P4Types"]
 
     moduleTopInterface="""\
 interface Parser;
@@ -230,7 +215,8 @@ module mkParser(Parser);"""
 
     @classmethod
     def serialize_preamble(self, serializer, states):
-        serializer.appendLine(LLVMParser.imports)
+        for l in LLVMParser.library:
+            serializer.appendLine("import {}::*".format(l))
         s = map(lambda x: toState(x), states)
         serializer.appendLine(LLVMParser.preamble.format(states=",".join(s)))
 
@@ -341,6 +327,8 @@ endinterface"""
         serializer.appendLine(self.stmtPreamble.format(name=self.name))
         serializer.appendLine(self.stmtBeginAction)
         #print 'ff', LLVMParser.parseSteps[self.name]
+
+        # first parse cycle
         if (len(LLVMParser.parseSteps[self.name]) == 1):
             serializer.appendLine(self.stmtGetData.format(name="data"))
             serializer.appendLine(self.stmtUnpackData.format(length=128))
@@ -366,7 +354,22 @@ endinterface"""
             serializer.appendLine(self.stmtDelayFifo.format(fifo="internal_fifo"))
             serializer.appendLine(self.stmtEndAction)
 
-        for currWidth in LLVMParser.parseSteps[self.name][1:]:
+            # every cycle but first and last
+            for currWidth in LLVMParser.parseSteps[self.name][1:-1]:
+                serializer.appendLine(self.stmtBeginAction)
+                serializer.appendLine(self.stmtGetData.format(name="data_current"))
+                for state, unparsedWidth in LLVMParser.unparsedIn[self.name].items():
+                    if unparsedWidth== 0:
+                        continue
+                    serializer.appendLine(self.stmtGetFromFifo.format(data='data_delayed', fifo="internal_fifo"))
+
+                serializer.appendLine(self.stmtConcatData.format(length=currWidth, unparsed='data_delayed'))
+                serializer.appendLine(self.stmtUnpackData.format(length=currWidth))
+
+                serializer.appendLine(self.stmtEndAction)
+
+            # last parse cycle
+            currWidth = LLVMParser.parseSteps[self.name][-1]
             serializer.appendLine(self.stmtBeginAction)
             serializer.appendLine(self.stmtGetData.format(name="data_current"))
             for state, unparsedWidth in LLVMParser.unparsedIn[self.name].items():
@@ -379,13 +382,15 @@ endinterface"""
 
             for action, item in self.parser.call_sequence:
                 for target, length in LLVMParser.unparsedOut[self.name].items():
+                    print 'mmmmmtt', self.name, target, length
+                    serializer.appendLine("%%%%%")
                     serializer.appendLine(self.stmtUnparsed.format(unparsed_len=length, unparsed_index=currWidth-length))
             serializer.appendLine(self.stmtExtract.format(field=item, index=0))
             for elem in self.parser.branch_on:
                 serializer.appendLine(self.stmtComputeNextState.format(field=elem))
-            #for target, length in LLVMParser.unparsedOut[self.name].items():
-            #    serializer.appendLine(self.stmtUnparsedData.format(nextState="FIXME"))
-            serializer.appendLine(self.stmtAssignNextState.format(index=0, nextState="StateStart"))
+            for target, length in LLVMParser.unparsedOut[self.name].items():
+                serializer.appendLine(self.stmtUnparsedData.format(name=toState(target), nextState=target))
+            serializer.appendLine(self.stmtAssignNextState.format(index=0, nextState="nextState"))
             serializer.appendLine(self.stmtEndAction)
 
         serializer.appendLine(self.stmtPostamble)
@@ -525,6 +530,7 @@ endinterface"""
                 case = [case]
             dst_name = target.name
             if type(target) is not p4.p4_table:
+                print 'mmmmm', stack[-1], dst_name, next_bits
                 LLVMParser.unparsedOut[stack[-1]][dst_name] = next_bits 
 
             for _, target in node.branch_to.items():
