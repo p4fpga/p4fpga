@@ -1,0 +1,3 @@
+[submodule "pif_ir"]
+	path = pif_ir
+	url = git@github.com:OpenNetworkingFoundation/PIF-Open-Intermediate-Representation.git
