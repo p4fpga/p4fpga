@@ -113,23 +113,27 @@ class Table(object):
     required_attributes = ['match_type', 'depth', 'request',
                            'response', 'operations']
     def __init__(self, table):
+        self.depth = table.size
+        self.request = table.name + '_req_t'
+        self.response = table.name + '_resp_t'
+        self.match_type = None
+        self.build_table(table)
+
+    def build_table(self, table):
+        ''' build table '''
         match_types = {'P4_MATCH_EXACT': 'exact',
                        'P4_MATCH_TERNARY': 'ternary'}
         curr_types = {'P4_MATCH_TERNARY': 0,
                       'P4_MATCH_EXACT': 0}
         for field in table.match_fields:
             curr_types[field[1].value] += 1
-        self.match_type = None
         for key, value in curr_types.items():
             if value != 0:
                 self.match_type = match_types[key]
-        assert self.match_type != None
-        self.depth = table.size
-        self.request = table.name + '_req_t'
-        self.response = table.name + '_resp_t'
 
     def dump(self):
         ''' dump table to yaml '''
+        assert self.match_type != None
         dump = OrderedDict()
         dump['type'] = 'table'
         dump['match_type'] = self.match_type
@@ -139,52 +143,110 @@ class Table(object):
         dump['operations'] = []
         return dump
 
-class OtherModule(object):
-    ''' other_module '''
-    required_attributes = ['operations']
-    def __init__(self):
-        pass
-
 class BasicBlock(object):
     ''' basic_block '''
     required_attributes = ['local_header', 'local_table',
                            'instructions', 'next_control_state']
-    def __init__(self, basicBlock):
+    def __init__(self, basicBlock, **kwargs):
+        self.local_header = None
+        self.local_table = None
+        self.instructions = None
+        self.next_control_state = None
+        self.basic_block = basicBlock
+
         if isinstance(basicBlock, p4_parse_state):
-            self.local_header = basicBlock.latest_extraction
-            self.instructions = None # [] or V meta.type_ type_
-            self.next_control_state = None # $(branch_on) type_ == 0x0800, (branch_to) parse_ipv4
-            print basicBlock.latest_extraction
-            print 'next_control_state', basicBlock.branch_on, basicBlock.branch_to
+            self.name = basicBlock.name
+            if 'prefix' in kwargs:
+                self.name = kwargs['prefix'] + self.name
+            self.build_parser_state(basicBlock)
         elif isinstance(basicBlock, p4_action):
-            self.instructions = None
-            self.next_control_state = None
-            #print vars(basicBlock)
+            self.name = 'bb_' + basicBlock.name
+            self.build_action(basicBlock)
         elif isinstance(basicBlock, p4_table):
-            self.local_table = basicBlock.name
-            self.instructions = None
-            self.next_control_state = None
-            #print vars(basicBlock)
-            #request action
-            #response actions
+            self.name = 'bb_' + basicBlock.name
+            self.build_table(basicBlock)
+
+    def build_parser_state(self, parse_state):
+        ''' build parser basic block '''
+        self.local_header = parse_state.latest_extraction
+        self.instructions = [] # or V meta.type_ type_
+        # $(branch_on) type_ == 0x0800, (branch_to) parse_ipv4
+        self.next_control_state = None
+        print parse_state.latest_extraction
+        print 'next_control_state', parse_state.branch_on, parse_state.branch_to
+
+    def build_deparser_state(self, deparse_state):
+        ''' build deparser basic block '''
+
+    def build_action(self, action):
+        ''' build action basic block '''
+        self.instructions = []
+        self.next_control_state = None
+
+    def build_table(self, table):
+        ''' build table basic block '''
+        self.local_table = table.name
+        self.instructions = []
+        self.next_control_state = None
+
+    def dump(self):
+        ''' dump basic block to yaml '''
+        dump = OrderedDict()
+        if isinstance(self.basic_block, p4_parse_state):
+            dump['type'] = 'basic_block'
+            dump['local_header'] = None #FIXME
+            dump['instructions'] = [] #FIXME
+            dump['next_control_state'] = [] #FIXME
+        elif (isinstance(self.basic_block, p4_action) or
+              isinstance(self.basic_block, p4_table)):
+            dump['type'] = 'basic_block'
+            dump['local_table'] = self.local_table
+            dump['instructions'] = self.instructions
+            dump['next_control_state'] = self.next_control_state
+        return dump
 
 class ControlFlow(object):
     ''' control_flow '''
     required_attributes = ['start_control_state']
-    def __init__(self, controlFlow):
-        # offset
-        # basic_block
+    def __init__(self, controlFlow, **kwargs):
+        self.name = kwargs['name']
+        self.start_control_state = OrderedDict()
+
+    def build(self):
+        ''' build control flow object '''
         pass
+
+    def dump(self):
+        ''' dump control flow to yaml '''
+        dump = OrderedDict()
+        dump['type'] = 'control_flow'
+        dump['start_control_state'] = self.start_control_state
+        return dump
 
 class ProcessorLayout(object):
     ''' processor_layout '''
     required_attributes = ['format', 'implementation']
-    def __init__(self, hlirParser):
-        # format: list
-        # implementation:
-        # - parser
-        # - ingress_control
-        # - deparser
+    def __init__(self, control_flows):
+        self.implementation = []
+        self.build(control_flows)
+
+    def build(self, control_flows):
+        ''' build processor layout '''
+        for ctrl in control_flows:
+            self.implementation.append(ctrl)
+
+    def dump(self):
+        ''' dump processor layout to yaml '''
+        dump = OrderedDict()
+        dump['type'] = 'processor_layout'
+        dump['format'] = 'list'
+        dump['implementation'] = self.implementation
+        return dump
+
+class OtherModule(object):
+    ''' other_module '''
+    required_attributes = ['operations']
+    def __init__(self):
         pass
 
 class OtherProcessor(object):
@@ -209,6 +271,7 @@ class MetaIR(object):
         self.structs = OrderedDict()
         self.basic_blocks = OrderedDict()
         self.metadata = OrderedDict()
+        self.control_flow = OrderedDict()
         self.table_initialization = OrderedDict()
 
         self.construct()
@@ -249,18 +312,31 @@ class MetaIR(object):
     def build_basic_blocks(self):
         ''' create basic blocks '''
         for tbl in self.hlir.p4_tables.values():
-            self.basic_blocks[tbl.name] = BasicBlock(tbl)
-
-        for state in self.hlir.p4_parse_states.values():
-            self.basic_blocks[state.name] = BasicBlock(state)
-
-        for action in self.hlir.p4_actions.values():
-            self.basic_blocks[action.name] = BasicBlock(action)
-            print 'p4action', action
+            basic_block = BasicBlock(tbl)
+            self.basic_blocks[basic_block.name] = basic_block
+        #for action in self.hlir.p4_actions.values():
+        #    self.basic_blocks[action.name] = BasicBlock(action)
+        #    print 'p4action', action
 
     def build_parsers(self):
         ''' create parser and its states '''
-        pass
+        for state in self.hlir.p4_parse_states.values():
+            if state.name == 'start':
+                control_flow = ControlFlow(state, name='parser')
+                self.control_flow[control_flow.name] = control_flow
+            else:
+                basic_block = BasicBlock(state)
+                self.basic_blocks[basic_block.name] = basic_block
+
+    def build_deparsers(self):
+        ''' create parser and its states '''
+        for state in self.hlir.p4_parse_states.values():
+            if state.name == 'start':
+                control_flow = ControlFlow(state, name='deparser')
+                self.control_flow[control_flow.name] = control_flow
+            else:
+                basic_block = BasicBlock(state, prefix='de')
+                self.basic_blocks[basic_block.name] = basic_block
 
     def build_match_actions(self):
         ''' build match & action pipeline stage '''
@@ -268,10 +344,17 @@ class MetaIR(object):
     def build_control_flows(self):
         ''' build control flow '''
         for cond in self.hlir.p4_conditional_nodes.values():
-            print 'conditional', cond
+            print 'cc conditional', cond
 
         for ingress in self.hlir.p4_ingress_ptr.keys():
-            print 'ingress', ingress
+            print 'cc ingress', ingress
+
+        # deparser
+
+    def build_processor_layout(self):
+        ''' build processor layout '''
+        self.processor_layout['a_p4_switch'] = ProcessorLayout(
+            self.control_flow)
 
     def prepare_local_var(self):
         ''' process hlir to setup commonly used variables '''
@@ -289,9 +372,11 @@ class MetaIR(object):
         self.build_metadatas()
         self.build_tables()
         self.build_basic_blocks()
+        self.build_parsers()
         self.build_match_actions()
         self.build_control_flows()
-
+        self.build_deparsers()
+        self.build_processor_layout()
         print self.hlir.p4_egress_ptr
 
         # other module
@@ -307,6 +392,12 @@ class MetaIR(object):
         for name, inst in self.metadata.items():
             self.bir_yaml[name] = inst.dump()
         for name, inst in self.tables.items():
+            self.bir_yaml[name] = inst.dump()
+        for name, inst in self.basic_blocks.items():
+            self.bir_yaml[name] = inst.dump()
+        for name, inst in self.control_flow.items():
+            self.bir_yaml[name] = inst.dump()
+        for name, inst in self.processor_layout.items():
             self.bir_yaml[name] = inst.dump()
         yaml.safe_dump(self.bir_yaml, sys.stdout, default_flow_style=False)
 
