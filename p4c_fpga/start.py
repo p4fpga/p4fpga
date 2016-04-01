@@ -143,7 +143,7 @@ class Table(object):
     required_attributes = ['match_type', 'depth', 'request',
                            'response', 'operations']
     def __init__(self, table):
-        self.depth = table.size
+        self.depth = table.min_size
         self.request = table.name + '_req_t'
         self.response = table.name + '_resp_t'
         self.match_type = None
@@ -156,14 +156,16 @@ class Table(object):
         curr_types = {'P4_MATCH_TERNARY': 0,
                       'P4_MATCH_EXACT': 0}
         for field in table.match_fields:
+            print 'ff', table.name, field
             curr_types[field[1].value] += 1
         for key, value in curr_types.items():
             if value != 0:
+                print 'ff', key, value
                 self.match_type = match_types[key]
 
     def dump(self):
         ''' dump table to yaml '''
-        assert self.match_type != None
+        #assert self.match_type != None
         dump = OrderedDict()
         dump['type'] = 'table'
         dump['match_type'] = self.match_type
@@ -215,7 +217,7 @@ class BasicBlock(object):
         for val, state in branch_to:
             if isinstance(val, p4_parse_state_keywords):
                 continue
-            match_expr = "{} == {}".format(branch_on[0], val)
+            match_expr = "{} == {}".format(branch_on[0], hex(val))
             next_state.insert(0, [match_expr, state.name])
         self.next_control_state = [[next_offset], next_state]
 
@@ -231,7 +233,7 @@ class BasicBlock(object):
         for val, state in branch_to:
             if isinstance(val, p4_parse_state_keywords):
                 continue
-            match_expr = "{} == {}".format(branch_on[0], val)
+            match_expr = "{} == {}".format(branch_on[0], hex(val))
             next_state.insert(0, [match_expr, state.name])
         self.next_control_state = [[next_offset], next_state]
 
