@@ -10,6 +10,7 @@ import yaml
 from collections import OrderedDict
 from p4_hlir.main import HLIR
 from p4_hlir.hlir import p4_parse_state, p4_action, p4_table, p4_header_instance
+from p4_hlir.hlir import p4_parse_state_keywords
 
 # Print OrderedDict() to standard yaml
 # from http://blog.elsdoerfer.name/2012/07/26/make-pyyaml-output-an-ordereddict/
@@ -75,6 +76,8 @@ class Struct(object):
 
     def build_header(self):
         ''' build header struct '''
+        self.name = self.name + '_t'
+        print 'build header', self.name
         for tmp_field in self.hlir.fields:
             self.fields.append({tmp_field.name: tmp_field.width})
 
@@ -106,6 +109,33 @@ class Metadata(object):
         dump = OrderedDict()
         dump['type'] = 'struct'
         dump['fields'] = self.fields
+        return dump
+
+class MetadataInstance(object):
+    ''' metadata instance '''
+    required_attributes = ['type', 'values', 'visibility']
+    def __init__(self, hlir, **kwargs):
+        self.name = None
+        self.values = None
+        self.visibility = 'none'
+        self.kwargs = kwargs
+        self.build(hlir)
+
+    def build(self, hlir):
+        ''' build metadata instance '''
+        if self.kwargs['type'] == 'request':
+            self.name = hlir.name + '_req'
+            self.values = hlir.name + '_req_t'
+        elif self.kwargs['type'] == 'response':
+            self.name = hlir.name + '_resp'
+            self.values = hlir.name + '_resp_t'
+
+    def dump(self):
+        ''' dump metadata instance to yaml '''
+        dump = OrderedDict()
+        dump['type'] = 'metadata'
+        dump['values'] = self.values
+        dump['visibility'] = self.visibility
         return dump
 
 class Table(object):
@@ -156,9 +186,11 @@ class BasicBlock(object):
 
         if isinstance(basicBlock, p4_parse_state):
             self.name = basicBlock.name
-            if 'prefix' in kwargs:
-                self.name = kwargs['prefix'] + self.name
-            self.build_parser_state(basicBlock)
+            if 'deparse' in kwargs and kwargs['deparse']:
+                self.name = 'de' + self.name
+                self.build_deparser_state(basicBlock)
+            else:
+                self.build_parser_state(basicBlock)
         elif isinstance(basicBlock, p4_action):
             self.name = 'bb_' + basicBlock.name
             self.build_action(basicBlock)
@@ -168,35 +200,60 @@ class BasicBlock(object):
 
     def build_parser_state(self, parse_state):
         ''' build parser basic block '''
-        self.local_header = parse_state.latest_extraction
-        self.instructions = [] # or V meta.type_ type_
-        # $(branch_on) type_ == 0x0800, (branch_to) parse_ipv4
-        self.next_control_state = None
-        print parse_state.latest_extraction
-        print 'next_control_state', parse_state.branch_on, parse_state.branch_to
+        self.local_header = parse_state.latest_extraction.header_type.name
+        branch_on = map(lambda v: v.name, parse_state.branch_on)
+        self.instructions = []
+        for branch in parse_state.branch_on:
+            #if type extract/set_metadata
+            dst = 'meta.{}'.format(branch.name)
+            inst = ['V', dst, branch.name]
+            self.instructions.append(inst)
+        branch_to = parse_state.branch_to.items()
+        next_offset = "$offset$ + {}".format(
+            parse_state.latest_extraction.header_type.length * 8)
+        next_state = ['$done']
+        for val, state in branch_to:
+            if isinstance(val, p4_parse_state_keywords):
+                continue
+            match_expr = "{} == {}".format(branch_on[0], val)
+            next_state.insert(0, [match_expr, state.name])
+        self.next_control_state = [[next_offset], next_state]
 
     def build_deparser_state(self, deparse_state):
         ''' build deparser basic block '''
+        self.local_header = deparse_state.latest_extraction.header_type.name
+        branch_on = map(lambda v: v.name, deparse_state.branch_on)
+        self.instructions = []
+        branch_to = deparse_state.branch_to.items()
+        next_offset = "$offset$ + {}".format(
+            deparse_state.latest_extraction.header_type.length * 8)
+        next_state = ['$done']
+        for val, state in branch_to:
+            if isinstance(val, p4_parse_state_keywords):
+                continue
+            match_expr = "{} == {}".format(branch_on[0], val)
+            next_state.insert(0, [match_expr, state.name])
+        self.next_control_state = [[next_offset], next_state]
 
     def build_action(self, action):
         ''' build action basic block '''
         self.instructions = []
-        self.next_control_state = None
+        self.next_control_state = [0, ['$done$']]
 
     def build_table(self, table):
         ''' build table basic block '''
         self.local_table = table.name
         self.instructions = []
-        self.next_control_state = None
+        self.next_control_state = [[0], ['$done$']]
 
     def dump(self):
         ''' dump basic block to yaml '''
         dump = OrderedDict()
         if isinstance(self.basic_block, p4_parse_state):
             dump['type'] = 'basic_block'
-            dump['local_header'] = None #FIXME
-            dump['instructions'] = [] #FIXME
-            dump['next_control_state'] = [] #FIXME
+            dump['local_header'] = self.local_header
+            dump['instructions'] = self.instructions
+            dump['next_control_state'] = self.next_control_state
         elif (isinstance(self.basic_block, p4_action) or
               isinstance(self.basic_block, p4_table)):
             dump['type'] = 'basic_block'
@@ -211,10 +268,24 @@ class ControlFlow(object):
     def __init__(self, controlFlow, **kwargs):
         self.name = kwargs['name']
         self.start_control_state = OrderedDict()
+        if isinstance(controlFlow, p4_parse_state):
+            self.build_parse(controlFlow, kwargs['deparse'])
+        elif isinstance(controlFlow, p4_table):
+            self.build_ingress(controlFlow)
 
-    def build(self):
+    def build_parse(self, control_flow, deparse=False):
         ''' build control flow object '''
-        pass
+        name = control_flow.return_statement[1]
+        if deparse:
+            name = 'de'+name
+        #FIXME
+        self.start_control_state = [[0], [name]]
+
+    def build_ingress(self, ingress):
+        ''' ingress node '''
+        name = 'bb_' + ingress.name
+        #FIXME
+        self.start_control_state = [[0], [name]]
 
     def dump(self):
         ''' dump control flow to yaml '''
@@ -281,13 +352,22 @@ class MetaIR(object):
         for hdr in self.hlir.p4_header_instances.values():
             if hdr.metadata:
                 self.metadata[hdr.name] = Metadata(hdr)
-            print 'metadata instance', hdr, hdr.metadata
+
+        for tbl in self.hlir.p4_tables.values():
+            inst = MetadataInstance(tbl, type='request')
+            self.metadata[inst.name] = inst
+            print 'mm metadata instance', inst.name
+
+        for tbl in self.hlir.p4_tables.values():
+            inst = MetadataInstance(tbl, type='response')
+            self.metadata[inst.name] = inst
 
     def build_structs(self):
         ''' create struct object '''
         for hdr in self.hlir.p4_header_instances.values():
             if not hdr.metadata:
-                self.structs[hdr.name] = Struct(hdr)
+                struct = Struct(hdr)
+                self.structs[struct.name] = struct
             print 'header instances', hdr, hdr.max_index, hdr.metadata
 
         for tbl in self.hlir.p4_tables.values():
@@ -322,7 +402,7 @@ class MetaIR(object):
         ''' create parser and its states '''
         for state in self.hlir.p4_parse_states.values():
             if state.name == 'start':
-                control_flow = ControlFlow(state, name='parser')
+                control_flow = ControlFlow(state, name='parser', deparse=False)
                 self.control_flow[control_flow.name] = control_flow
             else:
                 basic_block = BasicBlock(state)
@@ -332,10 +412,10 @@ class MetaIR(object):
         ''' create parser and its states '''
         for state in self.hlir.p4_parse_states.values():
             if state.name == 'start':
-                control_flow = ControlFlow(state, name='deparser')
+                control_flow = ControlFlow(state, name='deparser', deparse=True)
                 self.control_flow[control_flow.name] = control_flow
             else:
-                basic_block = BasicBlock(state, prefix='de')
+                basic_block = BasicBlock(state, deparse=True)
                 self.basic_blocks[basic_block.name] = basic_block
 
     def build_match_actions(self):
@@ -343,13 +423,10 @@ class MetaIR(object):
 
     def build_control_flows(self):
         ''' build control flow '''
-        for cond in self.hlir.p4_conditional_nodes.values():
-            print 'cc conditional', cond
-
-        for ingress in self.hlir.p4_ingress_ptr.keys():
-            print 'cc ingress', ingress
-
-        # deparser
+        for index, ingress in enumerate(self.hlir.p4_ingress_ptr.keys()):
+            name = 'ingress_control_{}'.format(index)
+            control_flow = ControlFlow(ingress, name=name)
+            self.control_flow[control_flow.name] = control_flow
 
     def build_processor_layout(self):
         ''' build processor layout '''
