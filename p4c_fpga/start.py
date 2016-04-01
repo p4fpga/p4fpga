@@ -6,6 +6,7 @@
 import argparse
 import math
 import sys
+import os
 import yaml
 from collections import OrderedDict
 from p4_hlir.main import HLIR
@@ -464,7 +465,7 @@ class MetaIR(object):
 
         # other processor
 
-    def pprint_yaml(self):
+    def pprint_yaml(self, filename):
         ''' pretty print to yaml '''
         for name, inst in self.structs.items():
             self.bir_yaml[name] = inst.dump()
@@ -478,7 +479,8 @@ class MetaIR(object):
             self.bir_yaml[name] = inst.dump()
         for name, inst in self.processor_layout.items():
             self.bir_yaml[name] = inst.dump()
-        yaml.safe_dump(self.bir_yaml, sys.stdout, default_flow_style=False)
+        with open(filename, 'w') as stream:
+            yaml.safe_dump(self.bir_yaml, stream, default_flow_style=False)
 
 def compile_hlir(hlir):
     ''' translate HLIR to BIR '''
@@ -502,7 +504,7 @@ def main():
     bir = compile_hlir(hlir)
 
     if options.yaml:
-        bir.pprint_yaml()
+        bir.pprint_yaml(os.path.splitext(options.file)[0]+'.yml')
 
 if __name__ == "__main__":
     #hanw: fix pyyaml to print OrderedDict()
