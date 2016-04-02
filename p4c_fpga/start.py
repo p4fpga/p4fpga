@@ -214,7 +214,7 @@ class BasicBlock(object):
         branch_to = parse_state.branch_to.items()
         next_offset = "$offset$ + {}".format(
             parse_state.latest_extraction.header_type.length * 8)
-        next_state = ['$done']
+        next_state = ['$done$']
         for val, state in branch_to:
             if isinstance(val, p4_parse_state_keywords):
                 continue
@@ -230,7 +230,7 @@ class BasicBlock(object):
         branch_to = deparse_state.branch_to.items()
         next_offset = "$offset$ + {}".format(
             deparse_state.latest_extraction.header_type.length * 8)
-        next_state = ['$done']
+        next_state = ['$done$']
         for val, state in branch_to:
             if isinstance(val, p4_parse_state_keywords):
                 continue
