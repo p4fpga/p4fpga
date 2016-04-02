@@ -1,0 +1,59 @@
+################################################################
+#
+# Metalanguage Definitions for BIR
+#
+# This section of YAML idefines the metalanguage
+# of recognized types and their attributes.
+#
+# To document:
+#   meta_ir_types
+#   meta_ir_processors
+#   meta_ir_attributes
+#
+################################################################
+---
+# These are the recognized top level BIR object types
+meta_ir_types :
+  - struct
+  - metadata
+  - table
+  - other_module
+  - basic_block
+  - control_flow
+  - other_processor
+  - processor_layout
+
+# These BIR objects must implement a process method
+meta_ir_processors :
+  - control_flow
+  - other_processor
+
+# These are the attributes each object type supports
+# All objects support the type and doc attributes
+meta_ir_attributes :
+  struct :
+    - fields
+  metadata :
+    - values
+    - visibility
+    - value_inits
+  table :
+    - match_type
+    - depth
+    - request
+    - response
+    - operations
+  other_module :
+    - operations
+  basic_block :
+    - local_header
+    - local_table
+    - instructions
+    - next_control_state
+  control_flow :
+    - start_control_state
+  other_processor :
+    - class
+  processor_layout :
+    - format
+    - implementation
