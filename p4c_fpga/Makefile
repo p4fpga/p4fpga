@@ -1,13 +1,16 @@
 
 ROOT_DIR=..
-P4PAXOS:=~/dev/p4paxos/p4src/
+P4PAXOS:=~/p4paxos/p4src
 PYPATH=PYTHONPATH=${ROOT_DIR}
 
 simple:
 	${PYPATH} python start.py -y -f tests/simple.p4
+	${PYPATH} python bsvgen.py -y tests/simple.yml -o tests/simple.bsv
+
 sonic:
-	${PYPATH} python start.py -f tests/sonic.p4
+	${PYPATH} python start.py -y -f tests/sonic.p4
 p4paxos:
-	${PYPATH} python start.py -f $(P4PAXOS)/paxos.p4
+	${PYPATH} python start.py -y -f $(P4PAXOS)/paxos.p4
+	${PYPATH} python bsvgen.py -y $(P4PAXOS)/paxos.yml -o $(P4PAXOS)/paxos.bsv
 clean:
 	rm *.pyc
