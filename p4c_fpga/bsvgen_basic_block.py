@@ -6,6 +6,7 @@ from pif_ir.bir.objects.basic_block import BasicBlock
 from pif_ir.bir.utils.validate import check_control_state
 
 from bsvgen_control_state import BSVControlState
+from programSerializer import ProgramSerializer
 
 class BSVBasicBlock(BasicBlock):
     ''' TODO '''
@@ -20,8 +21,11 @@ class BSVBasicBlock(BasicBlock):
                                              self.local_header,
                                              bir_parser)
 
-    def bsvgen(self):
+    def bsvgen(self, serializer):
         ''' TODO '''
-        print 'bsvgen'
-        return self.control_state.bsvgen()
+        assert isinstance(serializer, ProgramSerializer)
+
+        if self.control_state:
+            print 'generate', self.control_state
+        return self.control_state.bsvgen(serializer)
 

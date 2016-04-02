@@ -7,12 +7,9 @@ import argparse
 
 from pif_ir.meta_ir.instance import MetaIRInstance
 
-from pif_ir.bir.objects.bir_struct import BIRStruct
 from pif_ir.bir.objects.metadata_instance import MetadataInstance
 from pif_ir.bir.objects.packet_instance import PacketInstance
 from pif_ir.bir.objects.processor import Processor
-from pif_ir.bir.objects.processor import ThreadedProcessor
-from pif_ir.bir.objects.table import Table
 from pif_ir.bir.objects.table_entry import TableEntry
 
 from pif_ir.bir.utils.exceptions import BIRError
@@ -20,6 +17,9 @@ from pif_ir.bir.utils.bir_parser import BIRParser
 
 from bsvgen_control_flow import BSVControlFlow
 from bsvgen_basic_block import BSVBasicBlock
+from bsvgen_bir_struct import BSVBIRStruct
+from bsvgen_table import BSVTable
+from programSerializer import ProgramSerializer
 
 class BirInstance(MetaIRInstance):
     ''' TODO '''
@@ -53,9 +53,9 @@ class BirInstance(MetaIRInstance):
         self.table_init = []
 
         for name, val in self.struct.items():
-            self.bir_structs[name] = BIRStruct(name, val)
+            self.bir_structs[name] = BSVBIRStruct(name, val)
         for name, val in self.table.items():
-            self.bir_tables[name] = Table(name, val)
+            self.bir_tables[name] = BSVTable(name, val)
         for name, val in self.other_module.items():
             for operation in val['operations']:
                 module = "{}.{}".format(name, operation)
@@ -99,14 +99,14 @@ class BirInstance(MetaIRInstance):
         else:
             raise BIRError("unknown processor: {}".format(name))
 
-    def generatebsv(self):
+    def generatebsv(self, serializer):
         ''' TODO '''
+        for item in self.bir_structs.values():
+            item.bsvgen(serializer)
+        for item in self.bir_tables.values():
+            item.bsvgen(serializer)
         for item in self.bir_control_flows.values():
-            item.bsvgen()
-
-def generate_parse_state(self):
-    ''' TODO '''
-    pass
+            item.bsvgen(serializer)
 
 def main():
     ''' entry point '''
@@ -114,11 +114,18 @@ def main():
         description="BIR to Bluespec Translator")
     argparser.add_argument('-y', '--yaml', required=True,
                            help='Input BIR YAML file')
+    argparser.add_argument('-o', '--output', required=True,
+                           help='Output BSV file')
     options = argparser.parse_args()
 
     bir = BirInstance('p4fpga', options.yaml)
+    serializer = ProgramSerializer()
+    bir.generatebsv(serializer)
 
-    bir.generatebsv()
+    if not os.path.exists(os.path.dirname(options.output)):
+        os.makedirs(os.path.dirname(options.output))
+    with open(options.output, 'w') as bsv:
+        bsv.write(serializer.toString())
 
 if __name__ == "__main__":
     main()

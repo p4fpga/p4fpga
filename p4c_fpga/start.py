@@ -480,7 +480,8 @@ class MetaIR(object):
         for name, inst in self.processor_layout.items():
             self.bir_yaml[name] = inst.dump()
         with open(filename, 'w') as stream:
-            yaml.safe_dump(self.bir_yaml, stream, default_flow_style=False)
+            yaml.safe_dump(self.bir_yaml, stream, default_flow_style=False,
+                           indent=4)
 
 def compile_hlir(hlir):
     ''' translate HLIR to BIR '''
