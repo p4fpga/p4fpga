@@ -4,6 +4,7 @@ Table with bsv backend
 
 from pif_ir.bir.objects.table import Table
 from programSerializer import ProgramSerializer
+from bsvgen_common import generate_table
 
 class BSVTable(Table):
     ''' TODO '''
@@ -13,4 +14,5 @@ class BSVTable(Table):
     def bsvgen(self, serializer):
         ''' TODO '''
         assert isinstance(serializer, ProgramSerializer)
-        pass
+        out = generate_table(self)
+        serializer.append(out)

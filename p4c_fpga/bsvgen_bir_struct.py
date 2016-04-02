@@ -4,6 +4,7 @@ Struct with bsv backend
 
 from pif_ir.bir.objects.bir_struct import BIRStruct
 from programSerializer import ProgramSerializer
+from bsvgen_common import generate_typedef
 
 class BSVBIRStruct(BIRStruct):
     '''
@@ -15,5 +16,6 @@ class BSVBIRStruct(BIRStruct):
     def bsvgen(self, serializer):
         ''' TODO '''
         assert isinstance(serializer, ProgramSerializer)
+        out = generate_typedef(self)
+        serializer.append(out)
 
-        print 'struct', self.fields
