@@ -11,7 +11,7 @@ import yaml
 from collections import OrderedDict
 from p4_hlir.main import HLIR
 from p4_hlir.hlir import p4_parse_state, p4_action, p4_table, p4_header_instance
-from p4_hlir.hlir import p4_parse_state_keywords
+from p4_hlir.hlir import p4_parse_state_keywords, p4_conditional_node
 
 # Print OrderedDict() to standard yaml
 # from http://blog.elsdoerfer.name/2012/07/26/make-pyyaml-output-an-ordereddict/
@@ -235,7 +235,7 @@ class BasicBlock(object):
             if isinstance(val, p4_parse_state_keywords):
                 continue
             match_expr = "{} == {}".format(branch_on[0], hex(val))
-            next_state.insert(0, [match_expr, state.name])
+            next_state.insert(0, [match_expr, 'de'+state.name])
         self.next_control_state = [[next_offset], next_state]
 
     def build_action(self, action):
@@ -275,6 +275,8 @@ class ControlFlow(object):
             self.build_parse(controlFlow, kwargs['deparse'])
         elif isinstance(controlFlow, p4_table):
             self.build_ingress(controlFlow)
+        elif isinstance(controlFlow, p4_conditional_node):
+            self.build_conditional(controlFlow)
 
     def build_parse(self, control_flow, deparse=False):
         ''' build control flow object '''
@@ -287,6 +289,12 @@ class ControlFlow(object):
     def build_ingress(self, ingress):
         ''' ingress node '''
         name = 'bb_' + ingress.name
+        #FIXME
+        self.start_control_state = [[0], [name]]
+
+    def build_conditional(self, conditional):
+        ''' conditional node '''
+        name = 'bb_' + conditional.name
         #FIXME
         self.start_control_state = [[0], [name]]
 
@@ -425,6 +433,7 @@ class MetaIR(object):
         ''' build match & action pipeline stage '''
 
     def build_control_flows(self):
+        return #FIXME
         ''' build control flow '''
         for index, ingress in enumerate(self.hlir.p4_ingress_ptr.keys()):
             name = 'ingress_control_{}'.format(index)

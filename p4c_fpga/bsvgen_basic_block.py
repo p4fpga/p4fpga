@@ -25,7 +25,7 @@ class BSVBasicBlock(BasicBlock):
         ''' TODO '''
         assert isinstance(serializer, ProgramSerializer)
 
-        if self.control_state:
-            print 'generate', self.control_state
+        # self.instructions
+        print 'generate', self.control_state, self.local_header.name
         return self.control_state.bsvgen(serializer)
 

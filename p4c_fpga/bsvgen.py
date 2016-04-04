@@ -21,6 +21,11 @@ from bsvgen_bir_struct import BSVBIRStruct
 from bsvgen_table import BSVTable
 from programSerializer import ProgramSerializer
 
+''' Global Variables '''
+serializer = None
+global_struct = None
+global_bb = None
+
 class BirInstance(MetaIRInstance):
     ''' TODO '''
     def __init__(self, name, inputfile):
@@ -69,6 +74,7 @@ class BirInstance(MetaIRInstance):
         for name, val in self.control_flow.items():
             self.bir_control_flows[name] = BSVControlFlow(name, val,
                                                           self.bir_basic_blocks,
+                                                          self.bir_structs,
                                                           bir_parser)
         for name, val in self.other_processor.items():
             self.bir_other_processors[name] = self._load_processor(name,
