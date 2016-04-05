@@ -48,7 +48,8 @@ def dfs(bbmap, structmap, node, stack, prev_bits, visited, getmap, putmap, parse
                 next_bits, visited, getmap, putmap, parse_step)
     stack.pop()
 
-def generate_bsv(bbmap, structmap, serializer, node, stack, getmap, putmap, stepmap, visited=None):
+def generate_bsv(bbmap, structmap, serializer, node, stack, getmap, putmap,
+                 stepmap, visited=None):
     '''
     TODO
     '''
@@ -92,13 +93,10 @@ class BSVControlFlow(ControlFlow):
             basic_block = self.basic_blocks[self.control_state.basic_block[0]]
             dfs(self.basic_blocks, self.structs, basic_block, stack,
                 0, visited, getmap, putmap, stepmap)
-            print stepmap
             serializer.append(generate_parse_prolog())
-            serializer.append(generate_bsv(self.basic_blocks, self.structs,
-                                           serializer,
+            serializer.append(generate_bsv(self.basic_blocks, self.structs, serializer,
                                            basic_block, [], getmap, putmap, stepmap))
-            serializer.append(generate_parse_epilog(visited))
-
+            serializer.append(generate_parse_epilog(visited, putmap))
         elif self.name == 'deparser':
             pass
         else:

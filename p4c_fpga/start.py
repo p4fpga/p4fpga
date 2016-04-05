@@ -39,48 +39,14 @@ def represent_odict(dump, tag, mapping, flow_style=None):
             node.flow_style = best_style
     return node
 
-# Class definition derived from bir_meta.yaml
+# Base Class for struct
 class Struct(object):
     ''' struct '''
     required_attributes = ['fields']
-    def __init__(self, hlir, **kwargs):
-        assert (isinstance(hlir, p4_header_instance)
-                or isinstance(hlir, p4_table))
-
+    def __init__(self, hlir):
         self.hlir = hlir
-        self.name = hlir.name # set default name
-        self.kwargs = kwargs
+        self.name = None
         self.fields = []
-
-        if isinstance(hlir, p4_header_instance):
-            self.build_header()
-        elif isinstance(hlir, p4_table):
-            #print kwargs['field']
-            self.build_table(kwargs['field'])
-
-    def build_table(self, field_width=None):
-        ''' build table request and response struct '''
-        if self.kwargs['type'] == 'request':
-            self.name = self.hlir.name + "_req_t"
-            for field in self.hlir.match_fields:
-                p4_field = field[0]
-                #p4_match_type = field[1]
-                self.fields.append({p4_field.name : field_width[p4_field.name]})
-        elif self.kwargs['type'] == 'response':
-            self.name = self.hlir.name + "_resp_t"
-            self.fields.append({'hit': 1})
-            p4_action_width = int(math.ceil(math.log(len(self.hlir.actions)+1)))
-            self.fields.append({'p4_action': p4_action_width})
-            for index, action in enumerate(self.hlir.actions):
-                action_name = "action_{}_arg{}".format(index, 0)
-                self.fields.append({action_name : sum(action.signature_widths)})
-
-    def build_header(self):
-        ''' build header struct '''
-        self.name = self.name + '_t'
-        #print 'build header', self.name
-        for tmp_field in self.hlir.fields:
-            self.fields.append({tmp_field.name: tmp_field.width})
 
     def dump(self):
         ''' dump struct to yaml '''
@@ -89,47 +55,46 @@ class Struct(object):
         dump['fields'] = self.fields
         return dump
 
-class Metadata(object):
-    ''' metadata '''
-    required_attributes = ['values', 'visibility', 'value_inits']
-    def __init__(self, hlir):
-        assert isinstance(hlir, p4_header_instance)
-        self.hlir = hlir
-        self.name = hlir.name # set default name
-        self.fields = []
-        if isinstance(hlir, p4_header_instance):
-            self.build_metadata()
+class Meta(Struct):
+    ''' struct to represent internal metadata '''
+    def __init__(self, meta):
+        super(Meta, self).__init__(meta)
+        self.name = meta['name'] + '_t'
+        for name, width in meta['fields'].items():
+            self.fields.append({name: width})
 
-    def build_metadata(self):
-        ''' build metadata struct '''
-        for tmp_field in self.hlir.fields:
-            self.fields.append({tmp_field.name: tmp_field.width})
+class Header(Struct):
+    ''' struct to represent packet header '''
+    def __init__(self, hdr):
+        super(Header, self).__init__(hdr)
+        self.name = hdr.name + '_t'
+        for tmp in hdr.fields:
+            self.fields.append({tmp.name: tmp.width})
 
-    def dump(self):
-        ''' dump metadata to yaml '''
-        dump = OrderedDict()
-        dump['type'] = 'struct'
-        dump['fields'] = self.fields
-        return dump
+class TableRequest(Struct):
+    ''' struct to represent table request '''
+    def __init__(self, tbl):
+        super(TableRequest, self).__init__(tbl)
+        self.name = tbl.name + '_req_t'
+        for field, _, _ in tbl.match_fields:
+            self.fields.append({field.name: field.width})
 
-class MetadataInstance(object):
-    ''' metadata instance '''
-    required_attributes = ['type', 'values', 'visibility']
-    def __init__(self, hlir, **kwargs):
+class TableResponse(Struct):
+    ''' struct to represent table response '''
+    def __init__(self, tbl):
+        super(TableResponse, self).__init__(tbl)
+        self.name = tbl.name + '_resp_t'
+        for idx, action in enumerate(tbl.actions):
+            if sum(action.signature_widths) == 0:
+                continue
+            name = 'action_{}_arg{}'.format(idx, 0)
+            self.fields.append({name: sum(action.signature_widths)})
+
+class StructInstance(object):
+    def __init__(self, struct):
         self.name = None
         self.values = None
         self.visibility = 'none'
-        self.kwargs = kwargs
-        self.build(hlir)
-
-    def build(self, hlir):
-        ''' build metadata instance '''
-        if self.kwargs['type'] == 'request':
-            self.name = hlir.name + '_req'
-            self.values = hlir.name + '_req_t'
-        elif self.kwargs['type'] == 'response':
-            self.name = hlir.name + '_resp'
-            self.values = hlir.name + '_resp_t'
 
     def dump(self):
         ''' dump metadata instance to yaml '''
@@ -138,6 +103,25 @@ class MetadataInstance(object):
         dump['values'] = self.values
         dump['visibility'] = self.visibility
         return dump
+
+class TableRequestInstance(StructInstance):
+    ''' TODO '''
+    def __init__(self, hlir):
+        super(TableRequestInstance, self).__init__(hlir)
+        self.name = hlir.name + '_req'
+        self.values = hlir.name + '_req_t'
+
+class TableResponseInstance(StructInstance):
+    def __init__(self, hlir):
+        super(TableResponseInstance, self).__init__(hlir)
+        self.name = hlir.name + '_resp'
+        self.values = hlir.name + '_resp_t'
+
+class MetadataInstance(StructInstance):
+    def __init__(self, meta):
+        super(MetadataInstance, self).__init__(meta)
+        self.name = meta['name']
+        self.values = meta['name']
 
 class Table(object):
     ''' tables '''
@@ -362,38 +346,49 @@ class MetaIR(object):
         ''' create metadata object '''
         for hdr in self.hlir.p4_header_instances.values():
             if hdr.metadata:
-                self.metadata[hdr.name] = Metadata(hdr)
+                self.metadata[hdr.name] = Header(hdr)
 
         for tbl in self.hlir.p4_tables.values():
-            inst = MetadataInstance(tbl, type='request')
+            inst = TableRequestInstance(tbl)
             self.metadata[inst.name] = inst
-            #print 'mm metadata instance', inst.name
 
         for tbl in self.hlir.p4_tables.values():
-            inst = MetadataInstance(tbl, type='response')
+            inst = TableResponseInstance(tbl)
             self.metadata[inst.name] = inst
+
+        inst = OrderedDict()
+        inst['name'] = 'meta'
+        self.metadata[inst['name']] = MetadataInstance(inst)
 
     def build_structs(self):
         ''' create struct object '''
+        # struct from packet header
         for hdr in self.hlir.p4_header_instances.values():
             if not hdr.metadata:
-                struct = Struct(hdr)
+                struct = Header(hdr)
                 self.structs[struct.name] = struct
             #print 'header instances', hdr, hdr.max_index, hdr.metadata
 
         for tbl in self.hlir.p4_tables.values():
-            field_width = OrderedDict()
-            for match_field in tbl.match_fields:
-                field = match_field[0]
-                field_width[field.name] = self.field_width[str(field)]
-            req = Struct(tbl, type="request", field=field_width)
+            req = TableRequest(tbl)
             self.structs[req.name] = req
 
         for tbl in self.hlir.p4_tables.values():
-            field_width = OrderedDict()
-            # table response fields
-            resp = Struct(tbl, type="response", field=field_width)
+            resp = TableResponse(tbl)
             self.structs[resp.name] = resp
+
+        inst = OrderedDict()
+        inst['name'] = 'meta_t'
+        inst['fields'] = OrderedDict()
+        # metadata from match table key
+        for tbl in self.hlir.p4_tables.values():
+            for field, _, _ in tbl.match_fields:
+                inst['fields'][field.name] = field.width
+        # metadata from parser
+        for state in self.hlir.p4_parse_states.values():
+            for branch_on in state.branch_on:
+                inst['fields'][branch_on.name] = branch_on.width
+        self.structs[inst['name']] = Meta(inst)
 
     def build_tables(self):
         ''' create table object '''

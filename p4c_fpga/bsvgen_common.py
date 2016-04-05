@@ -231,7 +231,6 @@ def gen_parse_stmt(node, stepmap, getmap, putmap):
     carry_out = '    Vector#({}, Bit#(1)) unparsed = takeAt({}, dataVec);\n'
     for index, step in enumerate([stepmap[name][0]]):
         smap = reset_smap()
-        print index, step, name
         if name in putmap:
             for cname, clen in putmap[name].items():
                 smap['carry_in'] = carry_in.format('unparsed_'+cname)
@@ -246,14 +245,12 @@ def gen_parse_stmt(node, stepmap, getmap, putmap):
         source.append(STEP_TEMPLATE % smap)
     for index, step in enumerate(stepmap[name][1:-1]):
         smap = reset_smap()
-        print index, step, name
         smap['carry_in'] = carry_in.format('internal_fifo_{}'.format(stepmap[name][index]))
         smap['concat'] = concat.format(step, ', data_last_cycle')
         smap['internal'] = internal.format(step)
         source.append(STEP_TEMPLATE % smap)
     last_step = (x for x in [stepmap[name][-1]] if len(stepmap[name]) > 1)
     for step in last_step:
-        print step, name
         smap = reset_smap()
         smap['carry_in'] = carry_in.format('internal_fifo_{}'.format(stepmap[name][-2]))
         smap['concat'] = concat.format(step, ', data_last_cycle')
@@ -349,8 +346,7 @@ def generate_parse_state(node, structmap, getmap, putmap, stepmap):
 PARSE_EPILOG_TEMPLATE = '''
 interface Parser;
   interface Put#(EtherData) frameIn;
-  interface Get#(Metadata) meta;
-  interface PipeOut#(ParserState) parserState; //FIXME
+  interface Get#(MetadataT) meta;
 endinterface
 typedef 4 PortMax;
 (* synthesize *)
@@ -360,8 +356,9 @@ module mkParser(Parser);
   FIFOF#(EtherData) data_in_fifo <- mkFIFOF;
   Wire#(Bool) start_fsm <- mkDWire(False);
 
-  Vector#(PortMax, FIFOF#(ParserState)) parse_state_in_fifo <- replicateM(mkGFIFOF(False, True));
+  Vector#(PortMax, FIFOF#(ParserState)) parse_state_in_fifo <- replicateM(mkGFIFOF(False, True)); // ungarded deq
   FIFOF#(ParserState) parse_state_out_fifo <- mkFIFOF;
+  FIFOF#(MetadataT) metadata_out_fifo <- mkFIFOF;
 
   (* fire_when_enabled *)
   rule arbitrate_parse_state;
@@ -391,20 +388,25 @@ module mkParser(Parser);
       started <= False;
     end
   endrule
-%(intfs)s
+  interface frameIn = toPut(data_in_fifo);
+  interface meta = toGet(metadata_out_fifo);
 endmodule
 '''
-def generate_parse_epilog(states):
+def generate_parse_epilog(states, putmap):
     ''' TODO '''
     pmap = {}
     tstates = '  {} {} <- mkState{}(curr_state, data_in_fifo);'
     pmap['states'] = "\n".join([tstates.format(CamelCase(x), x, CamelCase(x))
                                 for x in states])
-    pmap['connections'] = ""
+    tconn = '  mkConnection({a}.{b}, {b}.{a});'
+    conn = []
+    for start, endp in putmap.items():
+        for end, _ in endp.items():
+            conn.append(tconn.format(a=start, b=end))
+    pmap['connections'] = "\n".join(conn)
     tstart = '      {}.start;'
     pmap['start_states'] = "\n".join([tstart.format(x) for x in states])
     tstop = '      {}.stop;'
     pmap['stop_states'] = "\n".join([tstop.format(x) for x in states])
-    pmap['intfs'] = "" # meta
     return PARSE_EPILOG_TEMPLATE % (pmap)
 
