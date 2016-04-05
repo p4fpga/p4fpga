@@ -55,7 +55,7 @@ class Struct(object):
         if isinstance(hlir, p4_header_instance):
             self.build_header()
         elif isinstance(hlir, p4_table):
-            print kwargs['field']
+            #print kwargs['field']
             self.build_table(kwargs['field'])
 
     def build_table(self, field_width=None):
@@ -78,7 +78,7 @@ class Struct(object):
     def build_header(self):
         ''' build header struct '''
         self.name = self.name + '_t'
-        print 'build header', self.name
+        #print 'build header', self.name
         for tmp_field in self.hlir.fields:
             self.fields.append({tmp_field.name: tmp_field.width})
 
@@ -157,11 +157,11 @@ class Table(object):
         curr_types = {'P4_MATCH_TERNARY': 0,
                       'P4_MATCH_EXACT': 0}
         for field in table.match_fields:
-            print 'ff', table.name, field
+            #print 'ff', table.name, field
             curr_types[field[1].value] += 1
         for key, value in curr_types.items():
             if value != 0:
-                print 'ff', key, value
+                #print 'ff', key, value
                 self.match_type = match_types[key]
 
     def dump(self):
@@ -367,7 +367,7 @@ class MetaIR(object):
         for tbl in self.hlir.p4_tables.values():
             inst = MetadataInstance(tbl, type='request')
             self.metadata[inst.name] = inst
-            print 'mm metadata instance', inst.name
+            #print 'mm metadata instance', inst.name
 
         for tbl in self.hlir.p4_tables.values():
             inst = MetadataInstance(tbl, type='response')
@@ -379,7 +379,7 @@ class MetaIR(object):
             if not hdr.metadata:
                 struct = Struct(hdr)
                 self.structs[struct.name] = struct
-            print 'header instances', hdr, hdr.max_index, hdr.metadata
+            #print 'header instances', hdr, hdr.max_index, hdr.metadata
 
         for tbl in self.hlir.p4_tables.values():
             field_width = OrderedDict()
@@ -466,7 +466,7 @@ class MetaIR(object):
         self.build_control_flows()
         self.build_deparsers()
         self.build_processor_layout()
-        print self.hlir.p4_egress_ptr
+        #print self.hlir.p4_egress_ptr
 
         # other module
         for cntr in self.hlir.p4_counters.values():

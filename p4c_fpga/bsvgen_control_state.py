@@ -11,7 +11,6 @@ class BSVControlState(ControlState):
     TODO
     '''
     def __init__(self, control_state_attr, header, bir_parser):
-        print 'control_state_attr', control_state_attr
         super(BSVControlState, self).__init__(control_state_attr, header,
                                               bir_parser)
 

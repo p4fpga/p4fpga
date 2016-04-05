@@ -128,7 +128,6 @@ def generate_table(tbl):
 
 PARSE_PROLOG_TEMPLATE = '''
 %(imports)s
-
 '''
 def generate_parse_prolog():
     ''' TODO '''
@@ -139,22 +138,151 @@ def generate_parse_prolog():
     pmap['imports'] = ";\n".join(["import {}::*".format(x) for x in import_modules])
     return PARSE_PROLOG_TEMPLATE % (pmap)
 
+COMPUTE_NEXT_STATE = '''
+  function ParserState compute_next_state(Bit#(%(width)s) v);
+    ParserState nextState = StateStart;
+    case (v) matches
+%(cases)s
+      default: begin
+        nextState = StateStart;
+      end
+    endcase
+    return nextState;
+  endfunction
+'''
+def func_comp_next_state(structmap, node):
+    ''' TODO '''
+    pmap = {}
+    fmap = structmap[node.local_header.name].fields
+    tcase = "      {}: begin\n        nextState = State{};\n      end"
+    bbcase = [x for x in node.control_state.basic_block if type(x) is not str]
+    if len(bbcase) == 0:
+        return ""
+    pmap['cases'] = "\n".join([tcase.format(str.split(x[0], '==')[1].strip(),
+                                            CamelCase(x[1])) for x in bbcase])
+    field = str.split(bbcase[0][0], '==')[0].strip()
+    width = fmap[field]
+    pmap['width'] = width
+    return COMPUTE_NEXT_STATE % pmap
+
+FSM_TEMPLATE = '''
+  Stmt stmt_%(name)s =
+  seq
+%(parse_step)s
+  endseq;
+  FSM fsm_%(name)s <- mkFSM(stmt_%(name)s);
+  rule start_fsm if (start_wire);
+    fsm_%(name)s.start;
+  endrule
+  rule clear_fsm if (clear_wire);
+    fsm_%(name)s.abort;
+  endrule
+'''
+IF_NEXT_STATE_TEMPLATE = '''\
+    if (nextState == State%(next_state)s) begin
+      unparsed_%(parse_state)s_fifo.enq(pack(unparsed));
+    end'''
+NEXT_STATE_TEMPLATE = '''\
+    let nextState = compute_next_state(hdr.%(field)s);
+    if (verbose) $display("Goto state ", nextState);
+%(ifnext)s
+    next_state_wire[0] <= tagged Valid nextState;'''
+def apply_comp_next_state(node, getmap):
+    ''' TODO '''
+    smap = {}
+    name = node.name
+    bbcase = [x for x in node.control_state.basic_block if type(x) is not str]
+    if len(bbcase) == 0:
+        return "    next_state_wire[0] <= tagged Valid StateStart;"
+    field = str.split(bbcase[0][0], '==')[0].strip()
+    smap['field'] = field
+    source = []
+    if name in getmap:
+        for state in getmap[name]:
+            source.append(IF_NEXT_STATE_TEMPLATE % {'next_state': CamelCase(state),
+                                                    'parse_state': state})
+    smap['ifnext'] = "\n".join(source)
+    return NEXT_STATE_TEMPLATE % smap
+STEP_TEMPLATE = '''  action
+    let data_this_cycle = packet_in_wire;
+%(carry_in)s%(concat)s%(internal)s%(unpack)s%(extract)s%(carry_out)s%(next_state)s
+  endaction'''
+def reset_smap():
+    smap = {}
+    smap['carry_in'] = ""
+    smap['concat'] = ""
+    smap['internal'] = ""
+    smap['unpack'] = ""
+    smap['extract'] = ""
+    smap['carry_out'] = ""
+    smap['next_state'] = ""
+    return smap
+def gen_parse_stmt(node, stepmap, getmap, putmap):
+    pmap = {}
+    name = node.name
+    header = node.local_header.name
+    pmap['name'] = name
+    source = []
+    carry_in = '    let data_last_cycle <- toGet({}).get;\n'
+    concat = '    Bit#({}) data = {{data_this_cycle{}}};\n'
+    internal = '    internal_fifo_{}.enq(data);\n'
+    unpack = '    Vector#({}, Bit#(1)) dataVec = unpack(data);\n'
+    extract = '    let hdr = extract_{}(pack(takeAt(0, dataVec)));\n    $display(fshow(hdr));\n'
+    carry_out = '    Vector#({}, Bit#(1)) unparsed = takeAt({}, dataVec);\n'
+    for index, step in enumerate([stepmap[name][0]]):
+        smap = reset_smap()
+        print index, step, name
+        if name in putmap:
+            for cname, clen in putmap[name].items():
+                smap['carry_in'] = carry_in.format('unparsed_'+cname)
+            smap['concat'] = concat.format(step, ", data_last_cycle")
+            smap['internal'] = internal.format(step)
+        if len(stepmap[name]) == 1:
+            smap['unpack'] = unpack.format(step)
+            smap['extract'] = extract.format(CamelCase(header))
+            carry_out_width = getmap[name].items()[0][1]
+            smap['carry_out'] = carry_out.format(carry_out_width, 0)
+            smap['next_state'] = apply_comp_next_state(node, getmap)
+        source.append(STEP_TEMPLATE % smap)
+    for index, step in enumerate(stepmap[name][1:-1]):
+        smap = reset_smap()
+        print index, step, name
+        smap['carry_in'] = carry_in.format('internal_fifo_{}'.format(stepmap[name][index]))
+        smap['concat'] = concat.format(step, ', data_last_cycle')
+        smap['internal'] = internal.format(step)
+        source.append(STEP_TEMPLATE % smap)
+    last_step = (x for x in [stepmap[name][-1]] if len(stepmap[name]) > 1)
+    for step in last_step:
+        print step, name
+        smap = reset_smap()
+        smap['carry_in'] = carry_in.format('internal_fifo_{}'.format(stepmap[name][-2]))
+        smap['concat'] = concat.format(step, ', data_last_cycle')
+        smap['unpack'] = unpack.format(step)
+        smap['extract'] = extract.format(name)
+        smap['carry_out'] = carry_out.format(0, 0)
+        smap['next_state'] = apply_comp_next_state(node, getmap)
+        source.append(STEP_TEMPLATE % smap)
+    pmap['parse_step'] = "\n".join(source)
+    return FSM_TEMPLATE % pmap
 
 PARSE_STATE_TEMPLATE = '''
-interface Parse%(name)s;
-  %(intf_get)s
+interface %(name)s;
+%(intf_put)s
+%(intf_get)s
   method Action start;
   method Action clear;
 endinterface
-module mkStateParse%(name)s#(Reg#(ParserState) state, FIFO#(EtherData) datain)(Parse%(name)s);
-  %(unparsed_fifo)s
-  %(parsed_out_fifo)s
+module mkState%(name)s#(Reg#(ParserState) state, FIFO#(EtherData) datain)(%(name)s);
+%(unparsed_in_fifo)s
+%(unparsed_out_fifo)s
+%(internal_fifo)s
+%(parsed_out_fifo)s
   Wire#(Bit#(128)) packet_in_wire <- mkDWire(0);
   Vector#(%(n)s, Wire#(Maybe#(ParserState))) next_state_wire <- replicateM(mkDWire(tagged Invalid));
   PulseWire start_wire <- mkPulseWire();
-  PulseWire stop_wire <- mkPulseWire();
+  PulseWire clear_wire <- mkPulseWire();
   (* fire_when_enabled *)
-  rule arbitrate_outgoing_state if (state == StateParse%(name)s);
+  rule arbitrate_outgoing_state if (state == State%(name)s);
     Vector#(%(n)s, Bool) next_state_valid = replicate(False);
     Bool stateSet = False;
     for (Integer port=0; port<%(n)s; port=port+1) begin
@@ -166,72 +294,64 @@ module mkStateParse%(name)s#(Reg#(ParserState) state, FIFO#(EtherData) datain)(P
       end
     end
   endrule
-
-  function ParserState compute_next_state(Bit#(%(width)s) v);
-    ParserState nextState = StateStart;
-    case (v) matches
-      %(cases)s
-    endcase
-    return nextState;
-  endfunction
-
-  rule load_packet if (state == StateParse%(name)s);
+%(compute_next_state)s
+  rule load_packet if (state == State%(name)s);
     let data_current <- toGet(datain).get;
     packet_in_wire <= data_current.data;
   endrule
-
-  Stmt parse_%(name)s =
-  seq
-  %(parseStep)s
-  endseq;
-
-  FSM fsm_parse_%(name)s <- mkFSM(parse_%(name)s);
-  rule start_fsm if (start_wire);
-    fsm_parse_%(name)s.start;
-  endrule
-  rule clear_fsm if (clear_wire);
-    fsm_parse_%(name)s.abort;
-  endrule
+%(stmt)s
   method Action start();
     start_wire.send();
   endmethod
   method Action stop();
     clear_wire.send();
   endmethod
-  %(intf_unparsed)s
-  %(intf_parsed_out)s
+%(intf_unparsed)s
+%(intf_parsed_out)s
 endmodule
 '''
-def generate_parse_state(node, width):
+def generate_parse_state(node, structmap, getmap, putmap, stepmap):
     ''' TODO '''
     pmap = {}
+    pmap['name'] = CamelCase(node.name)
 
-    bbnext = [x for x in node.control_state.basic_block]
-    pmap['name'] = node.local_header.name
+    tput = "  interface Put#(Bit#({})) {};"
+    tputmap = putmap[node.name] if node.name in putmap else {}
+    pmap['intf_put'] = "\n".join([tput.format(v, x) for x, v in tputmap.items()])
 
-    tintf = "interface Get#(Bit#({}) parse_{});"
-    pmap['intf_get'] = "\n".join([tintf.format(x, x) for x in bbnext])
+    tget = "  interface Get#(Bit#({})) {};"
+    tgetmap = getmap[node.name] if node.name in getmap else {}
+    pmap['intf_get'] = "\n".join([tget.format(v, x) for x, v in tgetmap.items()])
 
-    tfifo = "FIFOF#(Bit#{}) unparsed_parse_{}_fifo <- mkSizedFIFOF(1);"
-    pmap['unparsed_fifo'] = "\n".join([tfifo.format(x, x) for x in bbnext])
+    tfifo_in = "  FIFOF#(Bit#({})) unparsed_{}_fifo <- mkBypassFIFOF;"
+    tfifo_out = "  FIFOF#(Bit#({})) unparsed_{}_fifo <- mkSizedFIFOF(1);"
+    pmap['unparsed_in_fifo'] = "\n".join([tfifo_in.format(v, x) for x, v in tputmap.items()])
+    pmap['unparsed_out_fifo'] = "\n".join([tfifo_out.format(v, x) for x, v in tgetmap.items()])
+
+    # internal fifos
+    tinternal = '  FIFOF#(Bit#({})) internal_fifo_{} <- mkSizedFIFOF(1);'
+    pmap['internal_fifo'] = "\n".join([tinternal.format(x, x) for x in stepmap[node.name][:-1]])
 
     # only if output is required
-    tout = "FIFOF#(Bit#({})) parsed_{}_fifo <- mkFIFOF;"
+    tout = "  FIFOF#(Bit#({})) parsed_{}_fifo <- mkFIFOF;"
     outfield = []
     pmap['parsed_out_fifo'] = "\n".join([tout.format(x, x) for x in outfield])
 
     # next state
     pmap['n'] = 4
-
-    print 'width', width
-    pmap['width'] = width
-    pmap['cases'] = ""
-    pmap['parseStep'] = ""
-    pmap['intf_unparsed'] = ""
+    pmap['compute_next_state'] = func_comp_next_state(structmap, node)
+    pmap['stmt'] = gen_parse_stmt(node, stepmap, getmap, putmap)
+    tunparse = "  interface {} = toGet(unparsed_{}_fifo);"
+    pmap['intf_unparsed'] = "\n".join([tunparse.format(x, x) for x in tgetmap])
     pmap['intf_parsed_out'] = ""
     return PARSE_STATE_TEMPLATE % (pmap)
 
 PARSE_EPILOG_TEMPLATE = '''
+interface Parser;
+  interface Put#(EtherData) frameIn;
+  interface Get#(Metadata) meta;
+  interface PipeOut#(ParserState) parserState; //FIXME
+endinterface
 typedef 4 PortMax;
 (* synthesize *)
 module mkParser(Parser);
@@ -256,31 +376,35 @@ module mkParser(Parser);
   endrule
 
   Empty init_state <- mkStateStart(curr_state, data_in_fifo, start_fsm);
-  %(parse_states)s
-  %(connections)s
+%(states)s
+%(connections)s
   rule start if (start_fsm);
     if (!started) begin
-      %(start_states)s
+%(start_states)s
       started <= True;
     end
   endrule
 
   rule clear if (!start_fsm && curr_state == StateStart);
     if (started) begin
-      %(stop_states)s
+%(stop_states)s
       started <= False;
     end
   endrule
-  %(intfs)s
+%(intfs)s
 endmodule
 '''
-def generate_parse_epilog():
+def generate_parse_epilog(states):
     ''' TODO '''
     pmap = {}
-    pmap['parse_states'] = ""
+    tstates = '  {} {} <- mkState{}(curr_state, data_in_fifo);'
+    pmap['states'] = "\n".join([tstates.format(CamelCase(x), x, CamelCase(x))
+                                for x in states])
     pmap['connections'] = ""
-    pmap['start_states'] = ""
-    pmap['stop_states'] = ""
-    pmap['intfs'] = ""
+    tstart = '      {}.start;'
+    pmap['start_states'] = "\n".join([tstart.format(x) for x in states])
+    tstop = '      {}.stop;'
+    pmap['stop_states'] = "\n".join([tstop.format(x) for x in states])
+    pmap['intfs'] = "" # meta
     return PARSE_EPILOG_TEMPLATE % (pmap)
 

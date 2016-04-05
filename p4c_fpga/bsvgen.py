@@ -21,11 +21,6 @@ from bsvgen_bir_struct import BSVBIRStruct
 from bsvgen_table import BSVTable
 from programSerializer import ProgramSerializer
 
-''' Global Variables '''
-serializer = None
-global_struct = None
-global_bb = None
-
 class BirInstance(MetaIRInstance):
     ''' TODO '''
     def __init__(self, name, inputfile):
