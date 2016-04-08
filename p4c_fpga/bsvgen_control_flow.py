@@ -68,6 +68,10 @@ def generate_bsv(bbmap, structmap, serializer, node, stack, getmap, putmap,
                          getmap, putmap, stepmap, visited)
     stack.pop()
 
+def generate_control_flow(node):
+    ''' TODO '''
+    print vars(node)
+
 class BSVControlFlow(ControlFlow):
     '''
     TODO
@@ -101,4 +105,6 @@ class BSVControlFlow(ControlFlow):
             pass
         else:
             pass
+            #generate_control_flow()
+
         #self.next_processor.bsvgen()

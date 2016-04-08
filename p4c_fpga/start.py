@@ -12,6 +12,8 @@ from collections import OrderedDict
 from p4_hlir.main import HLIR
 from p4_hlir.hlir import p4_parse_state, p4_action, p4_table, p4_header_instance
 from p4_hlir.hlir import p4_parse_state_keywords, p4_conditional_node
+from p4_hlir.hlir import p4_control_flow, p4_expression
+from compilationException import CompilationException
 
 # Print OrderedDict() to standard yaml
 # from http://blog.elsdoerfer.name/2012/07/26/make-pyyaml-output-an-ordereddict/
@@ -184,6 +186,11 @@ class BasicBlock(object):
         elif isinstance(basicBlock, p4_table):
             self.name = 'bb_' + basicBlock.name
             self.build_table(basicBlock)
+        elif isinstance(basicBlock, p4_conditional_node):
+            self.name = 'bb_' + basicBlock.name
+            self.build_cond(basicBlock)
+        else:
+            raise NotImplementedError
 
     def build_parser_state(self, parse_state):
         ''' build parser basic block '''
@@ -233,6 +240,41 @@ class BasicBlock(object):
         self.instructions = []
         self.next_control_state = [[0], ['$done$']]
 
+    def build_cond(self, cond):
+        ''' TODO '''
+        def meta(field):
+            ''' add field to meta '''
+            if isinstance(field, int):
+                return field
+            return 'meta.{}'.format(str(field).replace(".", "$")) if field else None
+
+        def print_cond(cond):
+            if cond.op == 'valid':
+                return 'meta.{}${}'.format(cond.op, cond.right)
+            else:
+                left = meta(cond.left)
+                right = meta(cond.right)
+                return ("("+(str(left)+" " if left else "")+
+                        cond.op+" "+
+                        str(right)+")")
+
+        self.instructions = []
+        next_control_state = ['$done$']
+        for bool_, next_ in cond.next_.items():
+            if next_ is None:
+                continue
+            if cond.condition.op == 'valid':
+                expr = ("("+"meta.valid${} == 1".format(str(cond.condition.right))+")")
+                if not bool_:
+                    expr = "! {}".format(expr)
+            else:
+                expr = print_cond(cond.condition)
+                if not bool_:
+                    expr = "! {}".format(expr)
+            name = 'bb_' + next_.name
+            next_control_state.insert(0, [expr, name])
+        self.next_control_state = [[0], next_control_state]
+
     def dump(self):
         ''' dump basic block to yaml '''
         dump = OrderedDict()
@@ -247,40 +289,21 @@ class BasicBlock(object):
             dump['local_table'] = self.local_table
             dump['instructions'] = self.instructions
             dump['next_control_state'] = self.next_control_state
+        elif isinstance(self.basic_block, p4_conditional_node):
+            dump['type'] = 'basic_block'
+            dump['instructions'] = self.instructions
+            dump['next_control_state'] = self.next_control_state
+        else:
+            raise NotImplementedError
         return dump
 
-class ControlFlow(object):
+# Base Class for Control Flow
+class ControlFlowBase(object):
     ''' control_flow '''
     required_attributes = ['start_control_state']
-    def __init__(self, controlFlow, **kwargs):
-        self.name = kwargs['name']
+    def __init__(self, controlFlow):
         self.start_control_state = OrderedDict()
-        if isinstance(controlFlow, p4_parse_state):
-            self.build_parse(controlFlow, kwargs['deparse'])
-        elif isinstance(controlFlow, p4_table):
-            self.build_ingress(controlFlow)
-        elif isinstance(controlFlow, p4_conditional_node):
-            self.build_conditional(controlFlow)
-
-    def build_parse(self, control_flow, deparse=False):
-        ''' build control flow object '''
-        name = control_flow.return_statement[1]
-        if deparse:
-            name = 'de'+name
-        #FIXME
-        self.start_control_state = [[0], [name]]
-
-    def build_ingress(self, ingress):
-        ''' ingress node '''
-        name = 'bb_' + ingress.name
-        #FIXME
-        self.start_control_state = [[0], [name]]
-
-    def build_conditional(self, conditional):
-        ''' conditional node '''
-        name = 'bb_' + conditional.name
-        #FIXME
-        self.start_control_state = [[0], [name]]
+        self.name = None
 
     def dump(self):
         ''' dump control flow to yaml '''
@@ -288,6 +311,66 @@ class ControlFlow(object):
         dump['type'] = 'control_flow'
         dump['start_control_state'] = self.start_control_state
         return dump
+
+class ControlFlow(ControlFlowBase):
+    def __init__(self, controlFlow, **kwargs):
+        super(ControlFlow, self).__init__(controlFlow)
+        self.name = 'ingress'
+        if 'index' in kwargs:
+            self.name = "{}_{}".format(self.name, kwargs['index'])
+        if 'start_control_state' in kwargs:
+            self.start_control_state = 'bb_' + kwargs['start_control_state']
+        self.build(controlFlow.call_sequence)
+        self.start_control_state = [[0], [self.start_control_state]]
+
+    def build(self, control_flow):
+        ''' control_flow '''
+        if type(control_flow) == list:
+            for item in control_flow:
+                self.build(item)
+        elif type(control_flow) == tuple:
+            for item in control_flow:
+                self.build(item)
+        elif type(control_flow) == p4_expression:
+            print vars(control_flow)
+            if control_flow.op == 'valid':
+                print "valid", control_flow.right
+            elif control_flow.op == '==':
+                print '==', control_flow.left, control_flow.right
+            elif control_flow.op == '<=':
+                print '<=', control_flow.left, control_flow.right
+            else:
+                raise NotImplementedError
+        elif type(control_flow) == p4_table:
+            print control_flow
+        else:
+            raise NotImplementedError
+
+class Parser(ControlFlowBase):
+    ''' parser '''
+    def __init__(self, parser):
+        super(Parser, self).__init__(parser)
+        self.control_flow = parser
+        self.name = 'parser'
+        self.build()
+
+    def build(self):
+        ''' TODO '''
+        name = self.control_flow.return_statement[1]
+        self.start_control_state = [[0], [name]]
+
+class Deparser(ControlFlowBase):
+    ''' deparser '''
+    def __init__(self, deparser):
+        super(Deparser, self).__init__(deparser)
+        self.control_flow = deparser
+        self.name = 'deparser'
+        self.build()
+
+    def build(self):
+        ''' TODO '''
+        name = 'de' + self.control_flow.return_statement[1]
+        self.start_control_state = [[0], [name]]
 
 class ProcessorLayout(object):
     ''' processor_layout '''
@@ -400,6 +483,9 @@ class MetaIR(object):
         for tbl in self.hlir.p4_tables.values():
             basic_block = BasicBlock(tbl)
             self.basic_blocks[basic_block.name] = basic_block
+        for node in self.hlir.p4_conditional_nodes.values():
+            basic_block = BasicBlock(node)
+            self.basic_blocks[basic_block.name] = basic_block
         #for action in self.hlir.p4_actions.values():
         #    self.basic_blocks[action.name] = BasicBlock(action)
         #    print 'p4action', action
@@ -408,7 +494,7 @@ class MetaIR(object):
         ''' create parser and its states '''
         for state in self.hlir.p4_parse_states.values():
             if state.name == 'start':
-                control_flow = ControlFlow(state, name='parser', deparse=False)
+                control_flow = Parser(state)
                 self.control_flow[control_flow.name] = control_flow
             else:
                 basic_block = BasicBlock(state)
@@ -418,7 +504,7 @@ class MetaIR(object):
         ''' create parser and its states '''
         for state in self.hlir.p4_parse_states.values():
             if state.name == 'start':
-                control_flow = ControlFlow(state, name='deparser', deparse=True)
+                control_flow = Deparser(state)
                 self.control_flow[control_flow.name] = control_flow
             else:
                 basic_block = BasicBlock(state, deparse=True)
@@ -428,11 +514,26 @@ class MetaIR(object):
         ''' build match & action pipeline stage '''
 
     def build_control_flows(self):
-        return #FIXME
         ''' build control flow '''
-        for index, ingress in enumerate(self.hlir.p4_ingress_ptr.keys()):
-            name = 'ingress_control_{}'.format(index)
-            control_flow = ControlFlow(ingress, name=name)
+        def get_start_control_state(control_flow):
+            ''' TODO '''
+            start_state = control_flow.call_sequence[0]
+            print type(start_state), start_state
+            if isinstance(start_state, tuple):
+                for item in self.hlir.p4_ingress_ptr:
+                    if type(item) == p4_conditional_node:
+                        if start_state[0] == item.condition:
+                            print 'condition', item, item.condition
+                            return item.name
+                    else:
+                        raise NotImplementedError
+            else:
+                raise NotImplementedError
+
+        for index, control_flow in enumerate(self.hlir.p4_control_flows.values()):
+            name = get_start_control_state(control_flow)
+            control_flow = ControlFlow(control_flow, index=index,
+                                       start_control_state=name)
             self.control_flow[control_flow.name] = control_flow
 
     def build_processor_layout(self):
@@ -493,6 +594,18 @@ def compile_hlir(hlir):
     bir = MetaIR(hlir)
     return bir
 
+class CompileResult(object):
+    ''' TODO '''
+    def __init__(self, kind, error):
+        self.kind = kind
+        self.error = error
+
+    def __str__(self):
+        if self.kind == "OK":
+            return 'compilation successful.'
+        else:
+            return 'compilation failed with error: ' + self.error
+
 def main():
     ''' entry point '''
     argparser = argparse.ArgumentParser(
@@ -506,10 +619,12 @@ def main():
     hlir = HLIR(options.file)
     hlir.build()
 
-    bir = compile_hlir(hlir)
-
-    if options.yaml:
-        bir.pprint_yaml(os.path.splitext(options.file)[0]+'.yml')
+    try:
+        bir = compile_hlir(hlir)
+        if options.yaml:
+            bir.pprint_yaml(os.path.splitext(options.file)[0]+'.yml')
+    except CompilationException, e:
+        print CompileResult("exception", e.show())
 
 if __name__ == "__main__":
     #hanw: fix pyyaml to print OrderedDict()
