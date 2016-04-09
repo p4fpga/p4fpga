@@ -7,7 +7,8 @@ from pif_ir.bir.utils.validate import check_control_state
 from bsvgen_control_state import BSVControlState
 from programSerializer import ProgramSerializer
 from bsvgen_common import generate_parse_prolog, generate_parse_epilog,\
-                          generate_parse_state
+                          generate_parse_state, generate_control_flow
+import pprint
 
 def dfs(bbmap, structmap, node, stack, prev_bits, visited, getmap, putmap, parse_step):
     '''
@@ -48,8 +49,8 @@ def dfs(bbmap, structmap, node, stack, prev_bits, visited, getmap, putmap, parse
                 next_bits, visited, getmap, putmap, parse_step)
     stack.pop()
 
-def generate_bsv(bbmap, structmap, serializer, node, stack, getmap, putmap,
-                 stepmap, visited=None):
+def generate_parse_body(bbmap, structmap, serializer, node, stack, getmap, putmap,
+                        stepmap, visited=None):
     '''
     TODO
     '''
@@ -64,13 +65,9 @@ def generate_bsv(bbmap, structmap, serializer, node, stack, getmap, putmap,
             continue
         next_header = bbmap[block[1]].name
         if next_header not in visited:
-            generate_bsv(bbmap, structmap, serializer, bbmap[block[1]], stack,
+            generate_parse_body(bbmap, structmap, serializer, bbmap[block[1]], stack,
                          getmap, putmap, stepmap, visited)
     stack.pop()
-
-def generate_control_flow(node):
-    ''' TODO '''
-    print vars(node)
 
 class BSVControlFlow(ControlFlow):
     '''
@@ -98,13 +95,12 @@ class BSVControlFlow(ControlFlow):
             dfs(self.basic_blocks, self.structs, basic_block, stack,
                 0, visited, getmap, putmap, stepmap)
             serializer.append(generate_parse_prolog())
-            serializer.append(generate_bsv(self.basic_blocks, self.structs, serializer,
-                                           basic_block, [], getmap, putmap, stepmap))
+            serializer.append(generate_parse_body(self.basic_blocks, self.structs,
+                                                  serializer, basic_block, [],
+                                                  getmap, putmap, stepmap))
             serializer.append(generate_parse_epilog(visited, putmap))
         elif self.name == 'deparser':
             pass
         else:
-            pass
-            #generate_control_flow()
-
-        #self.next_processor.bsvgen()
+            serializer.append(generate_control_flow(self))
+            #self.next_processor.bsvgen()

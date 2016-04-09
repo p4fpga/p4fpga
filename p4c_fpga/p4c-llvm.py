@@ -8,7 +8,7 @@ from p4_hlir.main import HLIR
 from compilationException import *
 from programSerializer import ProgramSerializer
 import llvmProgram
-import llvmlite.ir as llvmIR
+#import llvmlite.ir as llvmIR
 
 def get_parser():
     parser = argparse.ArgumentParser(description='p4c-llvm arguments')
@@ -67,8 +67,8 @@ def compileP4(inputFile, gen_file, preprocessor_args):
         e = llvmProgram.LLVMProgram(basename, h)
         serializer = ProgramSerializer()
         e.tollvm(serializer)
-        f = open(basename+'.ll', 'w')
-        f.write(str(e.module))
+        #f = open(basename+'.ll', 'w')
+        #f.write(str(e.module))
         bsv = open(basename.capitalize()+'.bsv', 'w')
         bsv.write(serializer.toString())
         return CompileResult("OK", "")

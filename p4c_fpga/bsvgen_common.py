@@ -87,45 +87,6 @@ def generate_typedef(struct):
             'pack': '\n'.join(pack)}
     return TYPEDEF_TEMPLATE % (pmap)
 
-TABLE_TEMPLATE = '''
-interface %(name)s
-  interface Client#(MetadataRequest, MetadataResponse) next;
-endinterface
-
-module mk%(name)s#(Client#(MetadataRequest, MetadataResponse) md)(%(name)s);
-  let verbose = True;
-
-  FIFO#(MetadataRequest) outReqFifo <- mkFIFO;
-  FIFO#(MetadataResponse) inRespFifo <- mkFIFO;
-
-  MatchTable#(%(depth)s, %(req)s, %(resp)s) matchTable <- mkMatchTable;
-
-  rule handleRequest;
-    let v <- md.request.get;
-    case (v) matches
-    endcase
-  endrule
-
-  rule handleResponse;
-
-  endrule
-
-  interface next = (interface Client#(MetadataRequest, MetadataResponse);
-    interface request = toGet(outReqFifo);
-    interface response = toPut(inRespFifo);
-  endinterface);
-endmodule
-'''
-def generate_table(tbl):
-    ''' TODO '''
-    assert isinstance(tbl, Table)
-
-    pmap = {'name': CamelCase(tbl.name),
-            'depth': tbl.depth,
-            'req': CamelCase(tbl.req_attrs['values']),
-            'resp': CamelCase(tbl.resp_attrs['values'])}
-    return  TABLE_TEMPLATE % (pmap)
-
 PARSE_PROLOG_TEMPLATE = '''
 %(imports)s
 '''
@@ -409,4 +370,134 @@ def generate_parse_epilog(states, putmap):
     tstop = '      {}.stop;'
     pmap['stop_states'] = "\n".join([tstop.format(x) for x in states])
     return PARSE_EPILOG_TEMPLATE % (pmap)
+
+TABLE_TEMPLATE = '''
+interface %(name)s
+  interface Client#(MetadataRequest, MetadataResponse) next;
+endinterface
+
+module mk%(name)s#(Client#(MetadataRequest, MetadataResponse) md)(%(name)s);
+  let verbose = True;
+
+  FIFO#(MetadataRequest) outReqFifo <- mkFIFO;
+  FIFO#(MetadataResponse) inRespFifo <- mkFIFO;
+
+  MatchTable#(%(depth)s, %(req)s, %(resp)s) matchTable <- mkMatchTable;
+
+  rule handleRequest;
+    let v <- md.request.get;
+    case (v) matches
+    endcase
+  endrule
+
+  rule handleResponse;
+
+  endrule
+
+  interface next = (interface Client#(MetadataRequest, MetadataResponse);
+    interface request = toGet(outReqFifo);
+    interface response = toPut(inRespFifo);
+  endinterface);
+endmodule
+'''
+def generate_table(tbl):
+    ''' TODO '''
+    assert isinstance(tbl, Table)
+
+    pmap = {'name': CamelCase(tbl.name),
+            'depth': tbl.depth,
+            'req': CamelCase(tbl.req_attrs['values']),
+            'resp': CamelCase(tbl.resp_attrs['values'])}
+    return  TABLE_TEMPLATE % (pmap)
+
+META_FIFO_TEMPLATE = '''\
+  FIFO#(MetadataRequest) %(name)sReqFifo <- mkFIFO;
+  FIFO#(MetadataResponse) %(name)sRespFifo <- mkFIFO;'''
+
+TABLE_INST_TEMPLATE = '''\
+  %(type)s %(name)s <- mk%(type)s(toMetadataClient(%(name)sReqFifo, %(name)sRespFifo));'''
+
+BB_INST_TEMPLATE = '''
+  %(type)s %(name)s <- mk%(type)s()
+'''
+
+CONN_INST_TEMPLATE = '''
+  mkConnection(%(from)s, %(to)s);
+'''
+
+CONTROL_STATE_TEMPLATE = '''
+  rule %(name)s;
+    let v <- toGet(%(name)sFifo).get;
+    case (v) matches
+      tagged %(request_type) { %(field)s } : begin
+%(cond)s
+      end
+    endcase
+  endrule
+'''
+
+CONTROL_FLOW_TEMPLATE = '''
+interface %(name)s
+endinterface
+
+module mk%(name)s#(Vector#(numClients, MetadataClient) mdc)(%(name)s);
+  let verbose = True;
+  FIFOF#(PacketInstance) currPacketFifo <- mkFIFOF;
+  FIFO#(MetadataRequest) inReqFifo <- mkFIFO;
+  FIFO#(MetadataResponse) outRespFifo <- mkFIFO;
+  Vector#(numClients, MetadataServer) mds = newVector;
+  for (Integer i=0; i<valueOf(numClients); i=i+1) begin
+    metadataServers[i] = (interface MetadataServer;
+      interface Put request = toPut(inReqFifo);
+      interface Get response = toGet(outRespFifo);
+    endinterface);
+  end
+  mkConnection(mdc, mds);
+
+%(meta_fifo)s
+
+  function MetadataClient toMetadataClient(FIFO#(MetadataRequest) reqFifo,
+                                           FIFO#(MetadataResponse) respFifo);
+    MetadataClient ret_ifc;
+    ret_ifc = (interface MetadataClient;
+      interface Get request = toGet(reqFifo);
+      interface Put response = toPut(respFifo);
+    endinterface);
+  endfunction
+
+%(table)s
+
+%(basic_block)s
+
+%(connection)s
+
+%(control_state)s
+endmodule
+'''
+def generate_control_flow(control_flow):
+    ''' TODO '''
+    pmap = {}
+    pmap['name'] = CamelCase(control_flow.name)
+
+    fifos = []
+    tables = []
+    for block in control_flow.basic_blocks.values():
+        if block.local_table:
+            typename = CamelCase(block.local_table.name)
+            instname = camelCase(block.local_table.name)
+            inst = TABLE_INST_TEMPLATE % ({'name': instname, 'type': typename})
+            fifo = META_FIFO_TEMPLATE % ({'name': instname})
+            tables.append(inst)
+            fifos.append(fifo)
+    pmap['meta_fifo'] = "\n".join(fifos)
+    pmap['table'] = "\n".join(tables)
+
+    blocks = []
+    pmap['basic_block'] = "\n".join(blocks)
+
+    connections = []
+    pmap['connection'] = "\n".join(connections)
+    states = []
+    pmap['control_state'] = "\n".join(states)
+    return CONTROL_FLOW_TEMPLATE % pmap
 

@@ -86,6 +86,10 @@ class TableResponse(Struct):
     def __init__(self, tbl):
         super(TableResponse, self).__init__(tbl)
         self.name = tbl.name + '_resp_t'
+        self.fields.append({'hit':1})
+        num_action = int(math.ceil(math.log(len(tbl.actions), 2)))
+        if num_action != 0:
+            self.fields.append({'p4_action': num_action})
         for idx, action in enumerate(tbl.actions):
             if sum(action.signature_widths) == 0:
                 continue
@@ -231,14 +235,43 @@ class BasicBlock(object):
 
     def build_action(self, action):
         ''' build action basic block '''
-        self.instructions = []
-        self.next_control_state = [0, ['$done$']]
+        instructions = []
+        for inst in action.flat_call_sequence:
+            if inst[0].name == 'register_read':
+                params = []
+                for param in inst[1]:
+                    if isinstance(param, int):
+                        params.append(param)
+                    else:
+                        params.append(param.__str__())
+                instructions.append(['O', 'register_read', params])
+            elif inst[0].name == 'register_write':
+                params = []
+                for param in inst[1]:
+                    if isinstance(param, int):
+                        params.append(param)
+                    else:
+                        params.append(param.__str__())
+                instructions.append(['O', 'register_write', params])
+        self.instructions = instructions
+        self.next_control_state = [[0], ['$done$']]
 
     def build_table(self, table):
         ''' build table basic block '''
+        print type(table)
         self.local_table = table.name
         self.instructions = []
-        self.next_control_state = [[0], ['$done$']]
+        print table.__str__(), table.actions
+        next_state = []
+        for index, action in enumerate(table.actions):
+            #FIXME
+            pred = table.name + '_resp.hit == 1'
+            action_name = 'bb_' + action.name
+            if len(table.actions) > 1:
+                pred = pred + " && {}_resp.p4_action == {}".format(table.name, index+1)
+            next_state.append([pred, action_name])
+        next_state.append("$done$")
+        self.next_control_state = [[0], next_state]
 
     def build_cond(self, cond):
         ''' TODO '''
@@ -283,8 +316,11 @@ class BasicBlock(object):
             dump['local_header'] = self.local_header
             dump['instructions'] = self.instructions
             dump['next_control_state'] = self.next_control_state
-        elif (isinstance(self.basic_block, p4_action) or
-              isinstance(self.basic_block, p4_table)):
+        elif isinstance(self.basic_block, p4_action):
+            dump['type'] = 'basic_block'
+            dump['instructions'] = self.instructions
+            dump['next_control_state'] = self.next_control_state
+        elif isinstance(self.basic_block, p4_table):
             dump['type'] = 'basic_block'
             dump['local_table'] = self.local_table
             dump['instructions'] = self.instructions
@@ -332,7 +368,7 @@ class ControlFlow(ControlFlowBase):
             for item in control_flow:
                 self.build(item)
         elif type(control_flow) == p4_expression:
-            print vars(control_flow)
+            #print vars(control_flow)
             if control_flow.op == 'valid':
                 print "valid", control_flow.right
             elif control_flow.op == '==':
@@ -486,9 +522,6 @@ class MetaIR(object):
         for node in self.hlir.p4_conditional_nodes.values():
             basic_block = BasicBlock(node)
             self.basic_blocks[basic_block.name] = basic_block
-        #for action in self.hlir.p4_actions.values():
-        #    self.basic_blocks[action.name] = BasicBlock(action)
-        #    print 'p4action', action
 
     def build_parsers(self):
         ''' create parser and its states '''
@@ -512,18 +545,28 @@ class MetaIR(object):
 
     def build_match_actions(self):
         ''' build match & action pipeline stage '''
+        actions = set()
+        for node in self.hlir.p4_nodes.values():
+            if isinstance(node, p4_conditional_node):
+                continue
+            for action in node.actions:
+                if action not in actions:
+                    actions.add(action)
+        for action in actions:
+            basic_block = BasicBlock(action)
+            self.basic_blocks[basic_block.name] = basic_block
 
     def build_control_flows(self):
         ''' build control flow '''
         def get_start_control_state(control_flow):
             ''' TODO '''
             start_state = control_flow.call_sequence[0]
-            print type(start_state), start_state
+            #print type(start_state), start_state
             if isinstance(start_state, tuple):
                 for item in self.hlir.p4_ingress_ptr:
                     if type(item) == p4_conditional_node:
                         if start_state[0] == item.condition:
-                            print 'condition', item, item.condition
+                            #print 'condition', item, item.condition
                             return item.name
                     else:
                         raise NotImplementedError

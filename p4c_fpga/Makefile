@@ -12,7 +12,7 @@ sonic:
 
 p4paxos:
 	${PYPATH} python start.py -y -f $(P4PAXOS)/paxos.p4
-#	${PYPATH} python bsvgen.py -y $(P4PAXOS)/paxos.yml -o $(P4PAXOS)/paxos.bsv
+	${PYPATH} python bsvgen.py -y $(P4PAXOS)/paxos.yml -o $(P4PAXOS)/paxos.bsv
 
 p4:
 	python p4c-llvm.py $(P4PAXOS)/paxos.p4
