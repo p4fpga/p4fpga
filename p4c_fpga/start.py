@@ -147,11 +147,9 @@ class Table(object):
         curr_types = {'P4_MATCH_TERNARY': 0,
                       'P4_MATCH_EXACT': 0}
         for field in table.match_fields:
-            #print 'ff', table.name, field
             curr_types[field[1].value] += 1
         for key, value in curr_types.items():
             if value != 0:
-                #print 'ff', key, value
                 self.match_type = match_types[key]
 
     def dump(self):
@@ -186,13 +184,11 @@ class BasicBlock(object):
                 self.build_parser_state(basicBlock)
         elif isinstance(basicBlock, p4_action):
             self.name = 'bb_' + basicBlock.name
-            self.build_action(basicBlock)
+            next_ = kwargs['cond']
+            self.build_action(basicBlock, next_)
         elif isinstance(basicBlock, p4_table):
             self.name = 'bb_' + basicBlock.name
             self.build_table(basicBlock)
-        elif isinstance(basicBlock, p4_conditional_node):
-            self.name = 'bb_' + basicBlock.name
-            self.build_cond(basicBlock)
         else:
             raise NotImplementedError
 
@@ -233,8 +229,25 @@ class BasicBlock(object):
             next_state.insert(0, [match_expr, 'de'+state.name])
         self.next_control_state = [[next_offset], next_state]
 
-    def build_action(self, action):
+    def build_action(self, action, next_):
         ''' build action basic block '''
+        def meta(field):
+            ''' add field to meta '''
+            if isinstance(field, int):
+                return field
+            return 'meta.{}'.format(str(field).replace(".", "_")) if field else None
+
+        def print_cond(cond):
+            if cond.op == 'valid':
+                return 'meta.{}${}'.format(cond.op, cond.right)
+            else:
+                left = meta(cond.left)
+                right = meta(cond.right)
+                return ("("+(str(left)+" " if left else "")+
+                        cond.op+" "+
+                        str(right)+")")
+
+        # instructions
         instructions = []
         for inst in action.flat_call_sequence:
             if inst[0].name == 'register_read':
@@ -254,13 +267,22 @@ class BasicBlock(object):
                         params.append(param.__str__())
                 instructions.append(['O', 'register_write', params])
         self.instructions = instructions
-        self.next_control_state = [[0], ['$done$']]
+
+        # next_control_state
+        next_control_state = ['$done$']
+        if next_ is not None:
+            if next_.condition.op == 'valid':
+                expr = ("("+"meta.valid_{} == 1".format(str(next_.condition.right))+")")
+            else:
+                expr = print_cond(next_.condition)
+            name = 'bb_' + next_.next_[True].name
+            next_control_state.insert(0, [expr, name])
+        self.next_control_state = [[0], next_control_state]
 
     def build_table(self, table):
         ''' build table basic block '''
         self.local_table = table.name
         self.instructions = []
-        #print table.__str__(), table.actions
         next_state = []
         for index, action in enumerate(table.actions):
             #FIXME
@@ -271,41 +293,6 @@ class BasicBlock(object):
             next_state.append([pred, action_name])
         next_state.append("$done$")
         self.next_control_state = [[0], next_state]
-
-    def build_cond(self, cond):
-        ''' TODO '''
-        def meta(field):
-            ''' add field to meta '''
-            if isinstance(field, int):
-                return field
-            return 'meta.{}'.format(str(field).replace(".", "_")) if field else None
-
-        def print_cond(cond):
-            if cond.op == 'valid':
-                return 'meta.{}${}'.format(cond.op, cond.right)
-            else:
-                left = meta(cond.left)
-                right = meta(cond.right)
-                return ("("+(str(left)+" " if left else "")+
-                        cond.op+" "+
-                        str(right)+")")
-
-        self.instructions = []
-        next_control_state = ['$done$']
-        for bool_, next_ in cond.next_.items():
-            if next_ is None:
-                continue
-            if cond.condition.op == 'valid':
-                expr = ("("+"meta.valid${} == 1".format(str(cond.condition.right))+")")
-                if not bool_:
-                    expr = "! {}".format(expr)
-            else:
-                expr = print_cond(cond.condition)
-                if not bool_:
-                    expr = "! {}".format(expr)
-            name = 'bb_' + next_.name
-            next_control_state.insert(0, [expr, name])
-        self.next_control_state = [[0], next_control_state]
 
     def dump(self):
         ''' dump basic block to yaml '''
@@ -322,10 +309,6 @@ class BasicBlock(object):
         elif isinstance(self.basic_block, p4_table):
             dump['type'] = 'basic_block'
             dump['local_table'] = self.local_table
-            dump['instructions'] = self.instructions
-            dump['next_control_state'] = self.next_control_state
-        elif isinstance(self.basic_block, p4_conditional_node):
-            dump['type'] = 'basic_block'
             dump['instructions'] = self.instructions
             dump['next_control_state'] = self.next_control_state
         else:
@@ -354,31 +337,14 @@ class ControlFlow(ControlFlowBase):
         if 'index' in kwargs:
             self.name = "{}_{}".format(self.name, kwargs['index'])
         if 'start_control_state' in kwargs:
-            self.start_control_state = 'bb_' + kwargs['start_control_state']
-        self.start_control_state = [[0], [self.start_control_state]]
-        self.build(controlFlow.call_sequence)
-
-    def build(self, control_flow):
-        ''' control_flow '''
-        if type(control_flow) == list:
-            for item in control_flow:
-                self.build(item)
-        elif type(control_flow) == tuple:
-            for item in control_flow:
-                self.build(item)
-        elif type(control_flow) == p4_expression:
-            if control_flow.op == 'valid':
-                print "valid", control_flow.right
-            elif control_flow.op == '==':
-                print '==', control_flow.left, control_flow.right
-            elif control_flow.op == '<=':
-                print '<=', control_flow.left, control_flow.right
-            else:
-                raise NotImplementedError
-        elif type(control_flow) == p4_table:
-            print 'table', control_flow
-        else:
-            raise NotImplementedError
+            start_states = kwargs['start_control_state']
+        start_control_state = []
+        for state in start_states:
+            expr = ("("+"meta.valid${} == 1".format(str(state.condition.right))+")")
+            name = 'bb_' + state.next_[True].name
+            start_control_state.append([expr, name])
+        start_control_state.append('$done$')
+        self.start_control_state = [[0], start_control_state]
 
 class Parser(ControlFlowBase):
     ''' parser '''
@@ -517,11 +483,6 @@ class MetaIR(object):
         for tbl in self.hlir.p4_tables.values():
             basic_block = BasicBlock(tbl)
             self.basic_blocks[basic_block.name] = basic_block
-            print 'tbl', vars(basic_block)
-        # no cond
-        #for node in self.hlir.p4_conditional_nodes.values():
-        #    basic_block = BasicBlock(node)
-        #    self.basic_blocks[basic_block.name] = basic_block
 
     def build_parsers(self):
         ''' create parser and its states '''
@@ -546,37 +507,44 @@ class MetaIR(object):
     def build_match_actions(self):
         ''' build match & action pipeline stage '''
         actions = set()
-        for node in self.hlir.p4_nodes.values():
-            if isinstance(node, p4_conditional_node):
-                continue
-            for action in node.actions:
-                if action not in actions:
-                    actions.add(action)
-        for action in actions:
-            basic_block = BasicBlock(action)
-            self.basic_blocks[basic_block.name] = basic_block
+        for table in self.hlir.p4_tables.values():
+            for action, next_ in table.next_.items():
+                basic_block = BasicBlock(action, cond=next_)
+                self.basic_blocks[basic_block.name] = basic_block
 
     def build_control_flows(self):
-        ''' build control flow '''
-        def get_start_control_state(control_flow):
-            ''' TODO '''
-            start_state = control_flow.call_sequence[0]
-            #print type(start_state), start_state
-            if isinstance(start_state, tuple):
-                for item in self.hlir.p4_ingress_ptr:
-                    if type(item) == p4_conditional_node:
-                        if start_state[0] == item.condition:
-                            #print 'condition', item, item.condition
-                            return item.name
-                    else:
-                        raise NotImplementedError
+        ''' TODO '''
+        def get_start_control_state(control_flow, cond_map, out):
+            ''' control_flow '''
+            if type(control_flow) == list:
+                for item in control_flow:
+                    get_start_control_state(item, cond_map, out)
+            elif type(control_flow) == tuple:
+                for item in control_flow:
+                    get_start_control_state(item, cond_map, out)
+            elif type(control_flow) == p4_expression:
+                cond = cond_map[control_flow]
+                for next_ in cond.next_.values():
+                    if type(next_) is p4_conditional_node and cond in out:
+                        out.append(next_)
+            elif type(control_flow) == p4_table:
+                return
             else:
                 raise NotImplementedError
 
+        # map from p4_expression to p4_condition
+        cond_map = {}
+        for cond in self.hlir.p4_conditional_nodes.values():
+            cond_map[cond.condition] = cond
+
         for index, control_flow in enumerate(self.hlir.p4_control_flows.values()):
-            name = get_start_control_state(control_flow)
+            start_control_states = []
+            if isinstance(control_flow.call_sequence[0][0], p4_expression):
+                start_control_states.append(cond_map[control_flow.call_sequence[0][0]])
+            get_start_control_state(control_flow.call_sequence, cond_map,
+                                    start_control_states)
             control_flow = ControlFlow(control_flow, index=index,
-                                       start_control_state=name)
+                                       start_control_state=start_control_states)
             self.control_flow[control_flow.name] = control_flow
 
     def build_processor_layout(self):
