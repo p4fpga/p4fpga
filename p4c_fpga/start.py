@@ -258,10 +258,9 @@ class BasicBlock(object):
 
     def build_table(self, table):
         ''' build table basic block '''
-        print type(table)
         self.local_table = table.name
         self.instructions = []
-        print table.__str__(), table.actions
+        #print table.__str__(), table.actions
         next_state = []
         for index, action in enumerate(table.actions):
             #FIXME
@@ -279,7 +278,7 @@ class BasicBlock(object):
             ''' add field to meta '''
             if isinstance(field, int):
                 return field
-            return 'meta.{}'.format(str(field).replace(".", "$")) if field else None
+            return 'meta.{}'.format(str(field).replace(".", "_")) if field else None
 
         def print_cond(cond):
             if cond.op == 'valid':
@@ -356,8 +355,8 @@ class ControlFlow(ControlFlowBase):
             self.name = "{}_{}".format(self.name, kwargs['index'])
         if 'start_control_state' in kwargs:
             self.start_control_state = 'bb_' + kwargs['start_control_state']
-        self.build(controlFlow.call_sequence)
         self.start_control_state = [[0], [self.start_control_state]]
+        self.build(controlFlow.call_sequence)
 
     def build(self, control_flow):
         ''' control_flow '''
@@ -368,7 +367,6 @@ class ControlFlow(ControlFlowBase):
             for item in control_flow:
                 self.build(item)
         elif type(control_flow) == p4_expression:
-            #print vars(control_flow)
             if control_flow.op == 'valid':
                 print "valid", control_flow.right
             elif control_flow.op == '==':
@@ -378,7 +376,7 @@ class ControlFlow(ControlFlowBase):
             else:
                 raise NotImplementedError
         elif type(control_flow) == p4_table:
-            print control_flow
+            print 'table', control_flow
         else:
             raise NotImplementedError
 
@@ -519,9 +517,11 @@ class MetaIR(object):
         for tbl in self.hlir.p4_tables.values():
             basic_block = BasicBlock(tbl)
             self.basic_blocks[basic_block.name] = basic_block
-        for node in self.hlir.p4_conditional_nodes.values():
-            basic_block = BasicBlock(node)
-            self.basic_blocks[basic_block.name] = basic_block
+            print 'tbl', vars(basic_block)
+        # no cond
+        #for node in self.hlir.p4_conditional_nodes.values():
+        #    basic_block = BasicBlock(node)
+        #    self.basic_blocks[basic_block.name] = basic_block
 
     def build_parsers(self):
         ''' create parser and its states '''

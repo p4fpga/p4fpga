@@ -410,20 +410,18 @@ def generate_table(tbl):
             'resp': CamelCase(tbl.resp_attrs['values'])}
     return  TABLE_TEMPLATE % (pmap)
 
-META_FIFO_TEMPLATE = '''\
+METADATA_FIFO_TEMPLATE = '''\
   FIFO#(MetadataRequest) %(name)sReqFifo <- mkFIFO;
   FIFO#(MetadataResponse) %(name)sRespFifo <- mkFIFO;'''
 
 TABLE_INST_TEMPLATE = '''\
   %(type)s %(name)s <- mk%(type)s(toMetadataClient(%(name)sReqFifo, %(name)sRespFifo));'''
 
-BB_INST_TEMPLATE = '''
-  %(type)s %(name)s <- mk%(type)s()
-'''
+BB_INST_TEMPLATE = '''\
+  %(type)s %(name)s <- mk%(type)s()'''
 
-CONN_INST_TEMPLATE = '''
-  mkConnection(%(from)s, %(to)s);
-'''
+CONN_INST_TEMPLATE = '''\
+  mkConnection(%(from)s, %(to)s);'''
 
 CONTROL_STATE_TEMPLATE = '''
   rule %(name)s;
@@ -453,9 +451,7 @@ module mk%(name)s#(Vector#(numClients, MetadataClient) mdc)(%(name)s);
     endinterface);
   end
   mkConnection(mdc, mds);
-
 %(meta_fifo)s
-
   function MetadataClient toMetadataClient(FIFO#(MetadataRequest) reqFifo,
                                            FIFO#(MetadataResponse) respFifo);
     MetadataClient ret_ifc;
@@ -464,7 +460,6 @@ module mk%(name)s#(Vector#(numClients, MetadataClient) mdc)(%(name)s);
       interface Put response = toPut(respFifo);
     endinterface);
   endfunction
-
 %(table)s
 
 %(basic_block)s
@@ -486,18 +481,49 @@ def generate_control_flow(control_flow):
             typename = CamelCase(block.local_table.name)
             instname = camelCase(block.local_table.name)
             inst = TABLE_INST_TEMPLATE % ({'name': instname, 'type': typename})
-            fifo = META_FIFO_TEMPLATE % ({'name': instname})
+            fifo = METADATA_FIFO_TEMPLATE % ({'name': instname})
             tables.append(inst)
             fifos.append(fifo)
     pmap['meta_fifo'] = "\n".join(fifos)
     pmap['table'] = "\n".join(tables)
 
     blocks = []
+    for block in control_flow.basic_blocks.values():
+        if block.local_table:
+            continue
+        if block.local_header:
+            continue
+        if block.instructions.instructions != []:
+            blocks.append(BB_INST_TEMPLATE%({'type': CamelCase(block.name),
+                                             'name': block.name}))
     pmap['basic_block'] = "\n".join(blocks)
 
     connections = []
+    for table in control_flow.basic_blocks.values():
+        if table.local_table:
+            for idx, block in enumerate(table.control_state.basic_block):
+                if block == '$done$':
+                    continue
+                from_node = "{}.{}_{}".format(camelCase(table.local_table.name),
+                                              'next_control_state', idx)
+                to_node = "{}.{}".format(block[1], 'prev_control_state')
+                connections.append(CONN_INST_TEMPLATE%({'from': from_node,
+                                                        'to': to_node}))
     pmap['connection'] = "\n".join(connections)
-    states = []
-    pmap['control_state'] = "\n".join(states)
+
+    fmap = {} # map (table, [cond])
+    tmap = {} # map (cond, table)
+    conds = []
+    for block in control_flow.basic_blocks.values():
+        if block.local_table:
+            fmap[block.local_table.name] = 'test'
+            print vars(block.control_state)
+        if block.local_header:
+            continue
+        if block.instructions.instructions == [] and \
+           (len(block.control_state.basic_block) > 1):
+            print block.name, block.control_state.basic_block
+    pmap['control_state'] = "\n".join(conds)
+    print fmap
     return CONTROL_FLOW_TEMPLATE % pmap
 
