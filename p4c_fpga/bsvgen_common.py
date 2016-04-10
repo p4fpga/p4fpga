@@ -3,6 +3,7 @@ Common template for bsv generation
 '''
 
 import re
+from collections import OrderedDict
 from pif_ir.bir.objects.bir_struct import BIRStruct
 from pif_ir.bir.objects.table import Table
 
@@ -423,16 +424,21 @@ BB_INST_TEMPLATE = '''\
 CONN_INST_TEMPLATE = '''\
   mkConnection(%(from)s, %(to)s);'''
 
+COND_TEMPLATE = '''\
+        if (%(expr)s) : begin
+          MetadataRequest req = tagged %(Name)sLookupRequest {pkt: pkt, meta: meta};
+          %(name)sReqFifo.enq(req);
+        end'''
+
 CONTROL_STATE_TEMPLATE = '''
-  rule %(name)s;
-    let v <- toGet(%(name)sFifo).get;
+  rule %(name)s_next_control_state:
+    let v <- toGet(%(fifo)s).get;
     case (v) matches
-      tagged %(request_type) { %(field)s } : begin
+      tagged %(type)s {pkt: .pkt, meta: .meta} : begin
 %(cond)s
       end
     endcase
-  endrule
-'''
+  endrule'''
 
 CONTROL_FLOW_TEMPLATE = '''
 interface %(name)s
@@ -441,13 +447,13 @@ endinterface
 module mk%(name)s#(Vector#(numClients, MetadataClient) mdc)(%(name)s);
   let verbose = True;
   FIFOF#(PacketInstance) currPacketFifo <- mkFIFOF;
-  FIFO#(MetadataRequest) inReqFifo <- mkFIFO;
-  FIFO#(MetadataResponse) outRespFifo <- mkFIFO;
+  FIFO#(MetadataRequest) defaultReqFifo <- mkFIFO;
+  FIFO#(MetadataResponse) defaultRespFifo <- mkFIFO;
   Vector#(numClients, MetadataServer) mds = newVector;
   for (Integer i=0; i<valueOf(numClients); i=i+1) begin
     metadataServers[i] = (interface MetadataServer;
-      interface Put request = toPut(inReqFifo);
-      interface Get response = toGet(outRespFifo);
+      interface Put request = toPut(defaultReqFifo);
+      interface Get response = toGet(defaultRespFifo);
     endinterface);
   end
   mkConnection(mdc, mds);
@@ -463,7 +469,6 @@ module mk%(name)s#(Vector#(numClients, MetadataClient) mdc)(%(name)s);
 %(table)s
 
 %(basic_block)s
-
 %(connection)s
 
 %(control_state)s
@@ -471,6 +476,30 @@ endmodule
 '''
 def generate_control_flow(control_flow):
     ''' TODO '''
+    def generate_control_state(cond_list, control_states, defaultName=None, request=False):
+        cond = []
+        for item in cond_list:
+            name = item[1][3:] #remove leading 'bb_'
+            cond.append(COND_TEMPLATE%({'expr': item[0],
+                                        'name': camelCase(name),
+                                        'Name': CamelCase(name)}))
+
+        if defaultName:
+            name = defaultName
+
+        if request:
+            fifo = camelCase(name) + 'ReqFifo'
+            rtype = CamelCase(name) + 'Request'
+        else:
+            fifo = camelCase(name) + 'RespFifo'
+            rtype = CamelCase(name) + 'Response'
+
+        control_states.append(\
+            CONTROL_STATE_TEMPLATE%({'name': name,
+                                     'fifo': fifo,
+                                     'type': rtype,
+                                     'cond': '\n'.join(cond)}))
+
     pmap = {}
     pmap['name'] = CamelCase(control_flow.name)
 
@@ -511,19 +540,33 @@ def generate_control_flow(control_flow):
                                                         'to': to_node}))
     pmap['connection'] = "\n".join(connections)
 
-    fmap = {} # map (table, [cond])
+    fmap = OrderedDict() # map (table, [cond])
     tmap = {} # map (cond, table)
-    conds = []
+    control_states = []
     for block in control_flow.basic_blocks.values():
         if block.local_table:
-            fmap[block.local_table.name] = 'test'
-            print vars(block.control_state)
-        if block.local_header:
+            for item in block.control_state.basic_block[:-1]:
+                if block.local_table.name not in fmap:
+                    fmap[block.local_table.name] = []
+                fmap[block.local_table.name].append(item[1])
             continue
-        if block.instructions.instructions == [] and \
-           (len(block.control_state.basic_block) > 1):
-            print block.name, block.control_state.basic_block
-    pmap['control_state'] = "\n".join(conds)
-    print fmap
+        if block.local_header:
+            # ignore parse state
+            continue
+
+        for item in block.control_state.basic_block[:-1]:
+            if block.name not in tmap:
+                tmap[block.name] = []
+            tmap[block.name].append(item)
+
+    cond_list = control_flow.control_state.basic_block[:-1]
+    generate_control_state(cond_list, control_states,
+                           defaultName='default', request=True)
+
+    for table, conditions in fmap.items():
+        cond_list = [tmap[c] for c in conditions if c in tmap]
+        for cond in cond_list:
+            generate_control_state(cond, control_states)
+    pmap['control_state'] = "\n".join(control_states)
     return CONTROL_FLOW_TEMPLATE % pmap
 

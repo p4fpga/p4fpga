@@ -154,7 +154,6 @@ class Table(object):
 
     def dump(self):
         ''' dump table to yaml '''
-        #assert self.match_type != None
         dump = OrderedDict()
         dump['type'] = 'table'
         dump['match_type'] = self.match_type
@@ -239,7 +238,7 @@ class BasicBlock(object):
 
         def print_cond(cond):
             if cond.op == 'valid':
-                return 'meta.{}${}'.format(cond.op, cond.right)
+                return 'meta.{}_{} == 1'.format(cond.op, cond.right)
             else:
                 left = meta(cond.left)
                 right = meta(cond.right)
@@ -247,36 +246,37 @@ class BasicBlock(object):
                         cond.op+" "+
                         str(right)+")")
 
+        def get_next_control_state(next_, next_control_state):
+            ''' TODO '''
+            print 'next', type(next_)
+            if isinstance(next_, p4_conditional_node):
+                expr = print_cond(next_.condition)
+                name = 'bb_' + next_.next_[True].name
+                next_control_state.append([expr, name])
+                for cond in next_.next_.values():
+                    if isinstance(cond, p4_conditional_node):
+                        get_next_control_state(cond, next_control_state)
+
+        def print_instruction(inst, instructions):
+            if inst[0].name in ['register_read', 'register_write']:
+                params=[]
+                for param in inst[1]:
+                    params.append(str(param))
+                instructions.append(['O', inst[0].name, params])
+            else:
+                print inst[0]
+                #raise NotImplementedError
+
         # instructions
         instructions = []
         for inst in action.flat_call_sequence:
-            if inst[0].name == 'register_read':
-                params = []
-                for param in inst[1]:
-                    if isinstance(param, int):
-                        params.append(param)
-                    else:
-                        params.append(param.__str__())
-                instructions.append(['O', 'register_read', params])
-            elif inst[0].name == 'register_write':
-                params = []
-                for param in inst[1]:
-                    if isinstance(param, int):
-                        params.append(param)
-                    else:
-                        params.append(param.__str__())
-                instructions.append(['O', 'register_write', params])
+            print_instruction(inst, instructions)
         self.instructions = instructions
 
         # next_control_state
-        next_control_state = ['$done$']
-        if next_ is not None:
-            if next_.condition.op == 'valid':
-                expr = ("("+"meta.valid_{} == 1".format(str(next_.condition.right))+")")
-            else:
-                expr = print_cond(next_.condition)
-            name = 'bb_' + next_.next_[True].name
-            next_control_state.insert(0, [expr, name])
+        next_control_state = []
+        get_next_control_state(next_, next_control_state)
+        next_control_state.append('$done$')
         self.next_control_state = [[0], next_control_state]
 
     def build_table(self, table):
@@ -340,7 +340,7 @@ class ControlFlow(ControlFlowBase):
             start_states = kwargs['start_control_state']
         start_control_state = []
         for state in start_states:
-            expr = ("("+"meta.valid${} == 1".format(str(state.condition.right))+")")
+            expr = ("("+"meta.valid_{} == 1".format(str(state.condition.right))+")")
             name = 'bb_' + state.next_[True].name
             start_control_state.append([expr, name])
         start_control_state.append('$done$')
@@ -450,7 +450,6 @@ class MetaIR(object):
             if not hdr.metadata:
                 struct = Header(hdr)
                 self.structs[struct.name] = struct
-            #print 'header instances', hdr, hdr.max_index, hdr.metadata
 
         for tbl in self.hlir.p4_tables.values():
             req = TableRequest(tbl)
@@ -506,7 +505,6 @@ class MetaIR(object):
 
     def build_match_actions(self):
         ''' build match & action pipeline stage '''
-        actions = set()
         for table in self.hlir.p4_tables.values():
             for action, next_ in table.next_.items():
                 basic_block = BasicBlock(action, cond=next_)
@@ -528,6 +526,7 @@ class MetaIR(object):
                     if type(next_) is p4_conditional_node and cond in out:
                         out.append(next_)
             elif type(control_flow) == p4_table:
+                #FIXME BUG?
                 return
             else:
                 raise NotImplementedError
@@ -537,6 +536,7 @@ class MetaIR(object):
         for cond in self.hlir.p4_conditional_nodes.values():
             cond_map[cond.condition] = cond
 
+        #FIXME potential bug?
         for index, control_flow in enumerate(self.hlir.p4_control_flows.values()):
             start_control_states = []
             if isinstance(control_flow.call_sequence[0][0], p4_expression):
