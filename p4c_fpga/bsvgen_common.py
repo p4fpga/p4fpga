@@ -476,7 +476,7 @@ endmodule
 '''
 def generate_control_flow(control_flow):
     ''' TODO '''
-    def generate_control_state(cond_list, control_states, defaultName=None, request=False):
+    def generate_control_state(cond_list, control_states, moduleName=None, request=False):
         cond = []
         for item in cond_list:
             name = item[1][3:] #remove leading 'bb_'
@@ -484,18 +484,15 @@ def generate_control_flow(control_flow):
                                         'name': camelCase(name),
                                         'Name': CamelCase(name)}))
 
-        if defaultName:
-            name = defaultName
-
         if request:
-            fifo = camelCase(name) + 'ReqFifo'
-            rtype = CamelCase(name) + 'Request'
+            fifo = camelCase(moduleName) + 'ReqFifo'
+            rtype = CamelCase(moduleName) + 'Request'
         else:
-            fifo = camelCase(name) + 'RespFifo'
-            rtype = CamelCase(name) + 'Response'
+            fifo = camelCase(moduleName) + 'RespFifo'
+            rtype = CamelCase(moduleName) + 'Response'
 
         control_states.append(\
-            CONTROL_STATE_TEMPLATE%({'name': name,
+            CONTROL_STATE_TEMPLATE%({'name': moduleName,
                                      'fifo': fifo,
                                      'type': rtype,
                                      'cond': '\n'.join(cond)}))
@@ -561,12 +558,12 @@ def generate_control_flow(control_flow):
 
     cond_list = control_flow.control_state.basic_block[:-1]
     generate_control_state(cond_list, control_states,
-                           defaultName='default', request=True)
+                           moduleName='default', request=True)
 
     for table, conditions in fmap.items():
         cond_list = [tmap[c] for c in conditions if c in tmap]
         for cond in cond_list:
-            generate_control_state(cond, control_states)
+            generate_control_state(cond, control_states, moduleName=table)
     pmap['control_state'] = "\n".join(control_states)
     return CONTROL_FLOW_TEMPLATE % pmap
 

@@ -285,7 +285,6 @@ class BasicBlock(object):
         self.instructions = []
         next_state = []
         for index, action in enumerate(table.actions):
-            #FIXME
             pred = table.name + '_resp.hit == 1'
             action_name = 'bb_' + action.name
             if len(table.actions) > 1:
