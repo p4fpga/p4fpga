@@ -248,7 +248,6 @@ class BasicBlock(object):
 
         def get_next_control_state(next_, next_control_state):
             ''' TODO '''
-            print 'next', type(next_)
             if isinstance(next_, p4_conditional_node):
                 expr = print_cond(next_.condition)
                 name = 'bb_' + next_.next_[True].name
@@ -263,9 +262,39 @@ class BasicBlock(object):
                 for param in inst[1]:
                     params.append(str(param))
                 instructions.append(['O', inst[0].name, params])
-            else:
-                print inst[0]
-                #raise NotImplementedError
+            elif inst[0].name in ['modify_field', 'modify_field_rng_uniform']:
+                pass
+            elif inst[0].name in ['add_to_field', 'subtract_from_field']:
+                pass
+            elif inst[0].name in ['add', 'subtract']:
+                pass
+            elif inst[0].name in ['clone_ingress_pkt_to_egress',
+                                  'clone_egress_pkt_to_egress']:
+                pass
+            elif inst[0].name in ['resubmit']:
+                pass
+            elif inst[0].name in ['generate_digest']:
+                pass
+            elif inst[0].name in ['recirculate']:
+                pass
+            elif inst[0].name in ['modify_field_with_hash_based_offset']:
+                pass
+            elif inst[0].name in ['no_op']:
+                pass
+            elif inst[0].name in ['drop']:
+                pass
+            elif inst[0].name in ['count']:
+                pass
+            elif inst[0].name in ['truncate']:
+                pass
+            elif inst[0].name in ['execute_meter']:
+                pass
+            elif inst[0].name in ['bit_xor', 'bit_or', 'bit_and']:
+                pass
+            elif inst[0].name in ['push', 'pop']:
+                pass
+            elif inst[0].name in ['add_header', 'remove_header', 'copy_header']:
+                raise NotImplementedError
 
         # instructions
         instructions = []
