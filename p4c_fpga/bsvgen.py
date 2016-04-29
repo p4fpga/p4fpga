@@ -55,12 +55,15 @@ class BirInstance(MetaIRInstance):
         for name, val in self.struct.items():
             self.bir_structs[name] = BSVBIRStruct(name, val)
         for name, val in self.table.items():
+            print 'table', name
             self.bir_tables[name] = BSVTable(name, val)
         for name, val in self.other_module.items():
             for operation in val['operations']:
                 module = "{}.{}".format(name, operation)
                 self.bir_other_modules[module] = self._load_module(name, operation)
         for name, val in self.basic_block.items():
+            if name[3:] in self.bir_tables:
+                continue
             self.bir_basic_blocks[name] = BSVBasicBlock(name, val,
                                                         self.bir_structs,
                                                         self.bir_tables,
@@ -100,11 +103,25 @@ class BirInstance(MetaIRInstance):
         else:
             raise BIRError("unknown processor: {}".format(name))
 
+    # serialize_json():
+    def serialize_json(self):
+        # struct
+        # table
+        # basic_block
+        # control_flow
+        # ingress
+        # egress
+
+    # generatebsv(self, serializer, jsondata):
     def generatebsv(self, serializer):
+        # jsondata with datatype
+        # print jsondata
         ''' TODO '''
         for item in self.bir_structs.values():
             item.bsvgen(serializer)
         for item in self.bir_tables.values():
+            item.bsvgen(serializer)
+        for item in self.bir_basic_blocks.values():
             item.bsvgen(serializer)
         for item in self.bir_control_flows.values():
             item.bsvgen(serializer)
@@ -119,7 +136,13 @@ def main():
                            help='Output BSV file')
     options = argparser.parse_args()
 
+    # our frontend or ocaml frontend
+    # verified p4 frontend
     bir = BirInstance('p4fpga', options.yaml)
+
+    # jsondata = serialize_json(bir)
+
+    # generate_bsv
     serializer = ProgramSerializer()
     bir.generatebsv(serializer)
 

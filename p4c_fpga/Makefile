@@ -1,6 +1,6 @@
 
-ROOT_DIR=..
-P4PAXOS:=~/p4paxos/p4src
+ROOT_DIR=~/dev/p4c-bluespec/pif_ir
+P4PAXOS:=~/dev/p4paxos/p4src
 PYPATH=PYTHONPATH=${ROOT_DIR}
 
 simple:

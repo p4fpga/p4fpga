@@ -19,21 +19,19 @@ class BSVControlState(ControlState):
 
     def _get_basic_block(self):
         ''' TODO '''
-        print 'basic_block', self.basic_block
+        blocks = []
         for cond in self.basic_block:
             if isinstance(cond, str):
-                return cond
+                blocks.append(cond)
             else:
-                return cond[1]
-        raise BIRError("didn't find basic block!")
+                blocks.append(cond[1])
+        return blocks
 
     def bsvgen(self, serializer):
         ''' TODO '''
         assert isinstance(serializer, ProgramSerializer)
-        #print 'header', self.header
-        #print 'basicblock', self.basic_block
-        basic_block = self._get_basic_block()
-        if basic_block == '$done$':
-            basic_block = None
-        return 0, basic_block
+        basic_blocks = self._get_basic_block()
+        for block in basic_blocks:
+            if block == '$done$':
+                continue
 

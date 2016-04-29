@@ -477,6 +477,7 @@ endmodule
 def generate_control_flow(control_flow):
     ''' TODO '''
     def generate_control_state(cond_list, control_states, moduleName=None, request=False):
+        print 'controlstate', moduleName
         cond = []
         for item in cond_list:
             name = item[1][3:] #remove leading 'bb_'
@@ -566,4 +567,88 @@ def generate_control_flow(control_flow):
             generate_control_state(cond, control_states, moduleName=table)
     pmap['control_state'] = "\n".join(control_states)
     return CONTROL_FLOW_TEMPLATE % pmap
+
+ACTION_REG_READ_TEMPLATE = '''
+  rule reg_add;
+    // read reg
+    // reg_val.first;
+    // reg_val.deq;
+
+    // modify reg
+    // let newval = reg_val op;
+
+    // write reg
+    // reg_val.write;
+
+    // next action
+  endrule
+'''
+
+ACTION_REG_WRITE_TEMPLATE = '''
+%(rule)s
+'''
+
+INTF_DECL_TEMPLATE = '''
+%(intf)s
+'''
+
+INTF_IMPL_TEMPLATE = '''
+%(intf)s
+'''
+
+RULE_TEMPLATE = '''
+%(rule)s
+%(join)s
+'''
+
+STATE_TEMPLATE = '''
+%(reg)s
+%(fifo)s
+'''
+
+MODULE_TEMPLATE = '''
+module mk%(name)s(%(name)s);
+%(state)s
+%(rule)s
+%(intf)s
+endmodule
+'''
+
+# class Interface, __repr__
+INTERFACE_TEMPLATE = '''
+interface %(name)s
+endinterface
+'''
+
+# class Module, __repr__
+BASIC_BLOCK_TEMPLATE = '''
+%(intf)s
+%(module)s
+'''
+
+# AST.Interface
+# AST.Param
+# AST.Module
+#   - name
+#   - moduleContext
+#   - interface -> class
+#   - params -> class
+#   - provisos ??
+#   - decls ??
+def generate_basic_block (block):
+    ''' Each basic block is translated to a Module
+        'moduleContext' is derived from BIR instruction
+        'interface', by default, it provides an #Server interface,
+            additional, register access interface can be added.
+        'params', currently requires no parameters
+        'provisos', currently requires no provisos
+        'decls', methods, and interface declaration at the end
+    '''
+    pmap = {}
+    pmap['intf'] = INTERFACE_TEMPLATE % {'name': block.name}
+    pmap['module'] = MODULE_TEMPLATE % {'name': block.name,
+                                        'state': "",
+                                        'rule': "",
+                                        'intf': ""}
+    return BASIC_BLOCK_TEMPLATE % pmap
 

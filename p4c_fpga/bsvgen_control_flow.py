@@ -101,6 +101,9 @@ class BSVControlFlow(ControlFlow):
             serializer.append(generate_parse_epilog(visited, putmap))
         elif self.name == 'deparser':
             pass
+            print "TODO"
         else:
+            print 'xxx', self.name, self.control_state
             serializer.append(generate_control_flow(self))
             #self.next_processor.bsvgen()
+
