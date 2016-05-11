@@ -36,9 +36,32 @@ class BSVBasicBlock(BasicBlock):
         # reg_read, reg_read, reg_read, reg_write
         # create Module instance
 
-    def __repr__(self):
-        # print self.bsv_module
-        pass
+    def build_rule(self, inp, outp):
+        ''' TODO '''
+        rule = {}
+        rule['get'] = inp
+        rule['put'] = outp
+        return rule
+
+    def serialize(self):
+        json = {}
+
+        prev_control_state = []
+        prev_control_state.append('BBRequest')
+
+        reg_access = []
+
+        interface = [ prev_control_state , reg_access ]
+        json['interface'] = interface
+
+        rules = {}
+        # extract these info
+        inp = { 'type': 'packetInstance', 'name': 'curr_packet' }
+        outp = []
+        rules['bb_request'] = self.build_rule(inp, outp)
+        rules['bb_response'] = self.build_rule(inp, outp)
+        json['rule'] = rules
+        return json
 
     def bsvgen(self, serializer):
         ''' TODO '''

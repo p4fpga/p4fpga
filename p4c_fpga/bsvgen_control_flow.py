@@ -13,6 +13,7 @@ import pprint
 def dfs(bbmap, structmap, node, stack, prev_bits, visited, getmap, putmap, parse_step):
     '''
     DFS to fill codegen data struct
+    walk parse tree to collect required info for bsv
     '''
     visited.add(node.name)
     stack.append(node.name)
@@ -91,9 +92,11 @@ class BSVControlFlow(ControlFlow):
         getmap = {}
         stepmap = {}
         if self.name == 'parser':
+            # build_json
             basic_block = self.basic_blocks[self.control_state.basic_block[0]]
             dfs(self.basic_blocks, self.structs, basic_block, stack,
                 0, visited, getmap, putmap, stepmap)
+            # bsvgen
             serializer.append(generate_parse_prolog())
             serializer.append(generate_parse_body(self.basic_blocks, self.structs,
                                                   serializer, basic_block, [],
@@ -104,6 +107,8 @@ class BSVControlFlow(ControlFlow):
             print "TODO"
         else:
             print 'xxx', self.name, self.control_state
+            # build_json
+            # bsvgen
             serializer.append(generate_control_flow(self))
             #self.next_processor.bsvgen()
 

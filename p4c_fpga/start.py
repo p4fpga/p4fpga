@@ -567,8 +567,10 @@ class MetaIR(object):
         #FIXME potential bug?
         for index, control_flow in enumerate(self.hlir.p4_control_flows.values()):
             start_control_states = []
-            if isinstance(control_flow.call_sequence[0][0], p4_expression):
-                start_control_states.append(cond_map[control_flow.call_sequence[0][0]])
+            print "call_sequence", control_flow.call_sequence
+            #FIXME
+            #if isinstance(control_flow.call_sequence[0][0], p4_expression):
+            #    start_control_states.append(cond_map[control_flow.call_sequence[0][0]])
             get_start_control_state(control_flow.call_sequence, cond_map,
                                     start_control_states)
             control_flow = ControlFlow(control_flow, index=index,

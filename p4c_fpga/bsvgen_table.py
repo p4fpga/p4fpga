@@ -11,6 +11,12 @@ class BSVTable(Table):
     def __init__(self, name, table_attrs):
         super(BSVTable, self).__init__(name, table_attrs)
 
+    def serialize(self):
+        ''' Serialize Table to JSON '''
+        json = {}
+
+        return json
+
     def bsvgen(self, serializer):
         ''' TODO '''
         assert isinstance(serializer, ProgramSerializer)

@@ -224,6 +224,41 @@ def gen_parse_stmt(node, stepmap, getmap, putmap):
     pmap['parse_step'] = "\n".join(source)
     return FSM_TEMPLATE % pmap
 
+"""
+class.Interface
+-- name
+-- methods, decls
+-- subinterfacename
+subinterfacename = [Put#(Bit#(112)), Get#(Bit#(176)), Get#(Bit#(16))]
+decls = [method start, method clear]
+Interface(name, [], decls, subinterfacename, packagename)
+
+functions = []
+class.Function
+-- name
+-- return_type
+-- params
+
+class.Type: FIFO
+-- name = unparsed_0
+-- params = Bit#(16)
+
+class.Type: Wire
+-- name = packet_in_wire
+-- params = Bit#(128)
+
+fifos = []
+wires = []
+rules = []
+methods = []
+
+class.Module
+-- name
+-- params = [Reg#(ParserState), FIFO#(EtherData)]
+-- decls = [FIFO, Wire, rule, method, interface]
+-- provisos
+"""
+
 PARSE_STATE_TEMPLATE = '''
 interface %(name)s;
 %(intf_put)s

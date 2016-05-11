@@ -1,9 +1,12 @@
 ''' BIR to Bluespec translation
 '''
-import os
-import yaml
-import logging
 import argparse
+import json
+import logging
+import os
+import sys
+import yaml
+from collections import OrderedDict
 
 from pif_ir.meta_ir.instance import MetaIRInstance
 
@@ -17,9 +20,12 @@ from pif_ir.bir.utils.bir_parser import BIRParser
 
 from bsvgen_control_flow import BSVControlFlow
 from bsvgen_basic_block import BSVBasicBlock
-from bsvgen_bir_struct import BSVBIRStruct
+from bsvgen_struct import BSVBIRStruct
 from bsvgen_table import BSVTable
 from programSerializer import ProgramSerializer
+
+verbose = False
+tempFilename = 'generatedPipeline.json'
 
 class BirInstance(MetaIRInstance):
     ''' TODO '''
@@ -81,7 +87,7 @@ class BirInstance(MetaIRInstance):
         # BIR processor layout
         for layout in self.processor_layout.values():
             if layout['format'] != 'list':
-                logging.error("usupported layout format")
+                logging.error("unsupported layout format")
                 exit(1)
 
             last_proc = None
@@ -103,19 +109,53 @@ class BirInstance(MetaIRInstance):
         else:
             raise BIRError("unknown processor: {}".format(name))
 
-    # serialize_json():
     def serialize_json(self):
-        # struct
-        # table
-        # basic_block
+        global verbose
+        jfile = open(tempFilename, 'w')
+        toplevel = OrderedDict()
+
+        # Tables
+        tables = OrderedDict()
+        for item in self.bir_tables.values():
+            tables[item.name] = item.serialize()
+        toplevel['table'] = tables
+
+        # Structs
+        structs = OrderedDict()
+        for key, item in self.bir_structs.items():
+            structs[key] = item.serialize()
+        toplevel['struct'] = structs
+
+        # Basic Blocks
+        bb = OrderedDict()
+        parse_states = OrderedDict()
+        deparse_states = OrderedDict()
+        for key, item in self.bir_basic_blocks.items():
+            if key.startswith('parse_'):
+                parse_states[key] = item.serialize()
+            elif key.startswith('deparse_'):
+                deparse_states[key] = item.serialize()
+            else:
+                bb[key] = item.serialize()
+        toplevel['parser'] = parse_states
+        toplevel['deparser'] = deparse_states
+        toplevel['basicblock'] = bb
+
         # control_flow
         # ingress
         # egress
+        try:
+            print json.dump(toplevel, jfile, sort_keys=False, indent=4)
+            jfile.close()
+            j2file = open(tempFilename).read()
+            toplevelnew = json.loads(j2file)
+        except TypeError as e:
+            print 'Unabled to encode json file: {0} {1}'.format(tempFilename, e)
 
-    # generatebsv(self, serializer, jsondata):
-    def generatebsv(self, serializer):
+        return toplevel
+
+    def generatebsv(self, serializer, noisyFlag, jsondata):
         # jsondata with datatype
-        # print jsondata
         ''' TODO '''
         for item in self.bir_structs.values():
             item.bsvgen(serializer)
@@ -144,7 +184,9 @@ def main():
 
     # generate_bsv
     serializer = ProgramSerializer()
-    bir.generatebsv(serializer)
+    jsondata = bir.serialize_json()
+    noisyFlag = os.environ.get('D') == '1'
+    bir.generatebsv(serializer, noisyFlag, jsondata)
 
     if not os.path.exists(os.path.dirname(options.output)):
         os.makedirs(os.path.dirname(options.output))
