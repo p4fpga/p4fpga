@@ -17,7 +17,7 @@ PYPATH?=PYTHONPATH=${BIRDIR}
 # Connectal Support
 ###########################################
 S2H_INTERFACES=MainRequest:Main.request
-H2S_INTERFACES=Main:MainIndication
+H2S_INTERFACES=Main:MainIndication,MemServerIndication
 BSVFILES=Main.bsv MainAPI.bsv
 CPPFILES=main.cpp
 CPPFILES += $(SONICDIR)/sw/lpcap.c
