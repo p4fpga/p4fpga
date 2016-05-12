@@ -259,9 +259,10 @@ interface %(name)s;
 %(intf_put)s
 %(intf_get)s
   method Action start;
-  method Action clear;
+  method Action stop;
 endinterface
-module mkState%(name)s#(Reg#(ParserState) state, FIFO#(EtherData) datain)(%(name)s);
+module mkState%(name)s#(Reg#(ParserState) state, FIFOF#(EtherData) datain)(%(name)s);
+  let verbose = False;
 %(unparsed_in_fifo)s
 %(unparsed_out_fifo)s
 %(internal_fifo)s
@@ -413,7 +414,7 @@ module mk%(name)s#(Client#(MetadataRequest, MetadataResponse) md)(%(name)s);
   FIFO#(MetadataRequest) outReqFifo <- mkFIFO;
   FIFO#(MetadataResponse) inRespFifo <- mkFIFO;
 
-  MatchTable#(%(depth)s, %(req)s, %(resp)s) matchTable <- mkMatchTable;
+  MatchTable#(%(depth)s, SizeOf#(%(req)s), SizeOf#(%(resp)s)) matchTable <- mkMatchTable;
 
   rule handleRequest;
     let v <- md.request.get;
@@ -481,7 +482,7 @@ module mk%(name)s#(Vector#(numClients, MetadataClient) mdc)(%(name)s);
   FIFO#(MetadataResponse) defaultRespFifo <- mkFIFO;
   Vector#(numClients, MetadataServer) mds = newVector;
   for (Integer i=0; i<valueOf(numClients); i=i+1) begin
-    metadataServers[i] = (interface MetadataServer;
+    mds[i] = (interface MetadataServer;
       interface Put request = toPut(defaultReqFifo);
       interface Get response = toGet(defaultRespFifo);
     endinterface);
@@ -495,6 +496,7 @@ module mk%(name)s#(Vector#(numClients, MetadataClient) mdc)(%(name)s);
       interface Get request = toGet(reqFifo);
       interface Put response = toPut(respFifo);
     endinterface);
+    return ret_ifc;
   endfunction
 %(table)s
 
@@ -675,8 +677,8 @@ def generate_basic_block (block):
         'decls', methods, and interface declaration at the end
     '''
     pmap = {}
-    pmap['intf'] = INTERFACE_TEMPLATE % {'name': block.name}
-    pmap['module'] = MODULE_TEMPLATE % {'name': block.name,
+    pmap['intf'] = INTERFACE_TEMPLATE % {'name': CamelCase(block.name)}
+    pmap['module'] = MODULE_TEMPLATE % {'name': CamelCase(block.name),
                                         'state': "",
                                         'rule': "",
                                         'intf': ""}
