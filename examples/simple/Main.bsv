@@ -22,7 +22,10 @@
 
 //package Main;
 
+import BuildVector::*;
 import MainAPI::*;
+import Simple::*;
+import HostChannel::*;
 
 interface Main;
    interface MainRequest request;
@@ -32,7 +35,8 @@ module mkMain#(MainIndication indication)(Main);
    Clock defaultClock <- exposeCurrentClock();
    Reset defaultReset <- exposeCurrentReset();
 
-   // instantiate
+   HostChannel hostchan <- mkHostChannel();
+   Ingress0 ingress <- mkIngress0(vec(hostchan.next));
 
    MainAPI api <- mkMainAPI(indication);
    interface request = api.request;

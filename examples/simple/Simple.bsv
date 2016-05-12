@@ -1,3 +1,18 @@
+import Connectable::*;
+import DefaultValue::*;
+import DbgDefs::*;
+import FIFO::*;
+import FIFOF::*;
+import FShow::*;
+import GetPut::*;
+import List::*;
+import StmtFSM::*;
+import SpecialFIFOs::*;
+import Vector::*;
+import Ethernet::*;
+import ClientServer::*;
+import MatchTable::*;
+
 
 typedef struct {
   Bit#(1) hit;
@@ -15,6 +30,71 @@ instance FShow#(RoutingRespT);
   endfunction
 endinstance
 
+typedef struct {
+   Maybe#(Bit#(16)) msgtype; // ethernet$msgtype
+   Maybe#(Bit#(48)) dstAddr; // ethernet$dstAddr
+   Maybe#(Bit#(16)) etherType; // ethernet$etherType
+   Maybe#(Bit#(8))  protocol; // ipv4$protocol
+   Maybe#(Bit#(16)) dstPort; // ipv4$dstPort
+   Maybe#(Bool) valid_ethernet;
+   Maybe#(Bool) valid_arp;
+   Maybe#(Bool) valid_ipv4;
+   Maybe#(Bool) valid_ipv6;
+   Maybe#(Bool) valid_udp;
+} MetadataT deriving (Bits, Eq);
+
+instance DefaultValue#(MetadataT);
+defaultValue =
+MetadataT {
+   msgtype: tagged Invalid,
+   dstAddr: tagged Invalid,
+   etherType: tagged Invalid,
+   protocol: tagged Invalid,
+   dstPort: tagged Invalid,
+   valid_ethernet: tagged Invalid,
+   valid_arp: tagged Invalid,
+   valid_ipv4: tagged Invalid,
+   valid_ipv6: tagged Invalid,
+   valid_udp: tagged Invalid
+};
+endinstance
+
+instance FShow#(MetadataT);
+   function Fmt fshow(MetadataT p);
+      return $format("msgtype=", fshow(p.msgtype), ",")+
+             $format("dstAddr=", fshow(p.dstAddr), ",")+
+             $format("etherType=", fshow(p.etherType), ",")+
+             $format("protocol=", fshow(p.protocol), ",")+
+             $format("dstPort=", fshow(p.dstPort), ",");
+   endfunction
+endinstance
+
+typedef union tagged {
+   struct {
+      PacketInstance pkt;
+   } PacketMemRequest;
+
+   struct {
+      PacketInstance pkt;
+      MetadataT meta;
+   } ForwardQueueRequest;
+
+   struct {
+      PacketInstance pkt;
+      MetadataT meta;
+   } DefaultRequest;
+} MetadataRequest deriving (Bits, Eq, FShow);
+
+typedef union tagged {
+   struct {
+      PacketInstance pkt;
+      MetadataT meta;
+   } DstMacResponse;
+} MetadataResponse deriving (Bits, Eq, FShow);
+
+typedef Client#(MetadataRequest, MetadataResponse) MetadataClient;
+typedef Server#(MetadataRequest, MetadataResponse) MetadataServer;
+
 function RoutingRespT extract_RoutingRespT(Bit#(11) data);
   Vector#(11, Bit#(1)) dataVec = unpack(data);
   Vector#(1, Bit#(1)) hit = takeAt(0, dataVec);
@@ -28,6 +108,7 @@ function RoutingRespT extract_RoutingRespT(Bit#(11) data);
 endfunction
 
 typedef struct {
+  Bit#(4) padding;
   Bit#(32) dstAddr;
 } RoutingReqT deriving (Bits, Eq);
 
@@ -210,11 +291,14 @@ module mkRouting#(Client#(MetadataRequest, MetadataResponse) md)(Routing);
   FIFO#(MetadataRequest) outReqFifo <- mkFIFO;
   FIFO#(MetadataResponse) inRespFifo <- mkFIFO;
 
-  MatchTable#(512, RoutingReqT, RoutingRespT) matchTable <- mkMatchTable;
+  MatchTable#(512, SizeOf#(RoutingReqT), SizeOf#(RoutingRespT)) matchTable <- mkMatchTable;
 
   rule handleRequest;
     let v <- md.request.get;
     case (v) matches
+      default: begin
+         
+      end
     endcase
   endrule
 
@@ -229,11 +313,11 @@ module mkRouting#(Client#(MetadataRequest, MetadataResponse) md)(Routing);
 endmodule
 
 
-interface bb_forward
+interface BbForward;
 endinterface
 
 
-module mkbb_forward(bb_forward);
+module mkBbForward(BbForward);
 
 
 
@@ -241,11 +325,11 @@ endmodule
 
 
 
-interface bb_nop
+interface BbNop;
 endinterface
 
 
-module mkbb_nop(bb_nop);
+module mkBbNop(BbNop);
 
 
 
@@ -262,7 +346,7 @@ module mkIngress0#(Vector#(numClients, MetadataClient) mdc)(Ingress0);
   FIFO#(MetadataResponse) defaultRespFifo <- mkFIFO;
   Vector#(numClients, MetadataServer) mds = newVector;
   for (Integer i=0; i<valueOf(numClients); i=i+1) begin
-    metadataServers[i] = (interface MetadataServer;
+    mds[i] = (interface MetadataServer;
       interface Put request = toPut(defaultReqFifo);
       interface Get response = toGet(defaultRespFifo);
     endinterface);
@@ -276,6 +360,7 @@ module mkIngress0#(Vector#(numClients, MetadataClient) mdc)(Ingress0);
       interface Get request = toGet(reqFifo);
       interface Put response = toPut(respFifo);
     endinterface);
+    return ret_ifc;
   endfunction
 
 
@@ -283,7 +368,7 @@ module mkIngress0#(Vector#(numClients, MetadataClient) mdc)(Ingress0);
 
 
 
-  rule default_next_control_state:
+  rule default_next_control_state;
     let v <- toGet(defaultReqFifo).get;
     case (v) matches
       tagged DefaultRequest {pkt: .pkt, meta: .meta} : begin
@@ -293,26 +378,45 @@ module mkIngress0#(Vector#(numClients, MetadataClient) mdc)(Ingress0);
   endrule
 endmodule
 
-import Connectable::*;
-import DefaultValue::*;
-import FIFO::*;
-import FIFOF::*;
-import FShow::*;
-import GetPut::*;
-import List::*;
-import StmtFSM::*;
-import SpecicalFIFOs::*;
-import Vector::*;
-import Ethernet::*
+typedef enum {
+   StateStart,
+   StateParseEthernet,
+   StateParseArp,
+   StateParseIpv4,
+   StateParseIpv6,
+   StateParseCpuHeader,
+   StateParseUdp,
+   StateParsePaxos
+} ParserState deriving (Bits, Eq);
+instance FShow#(ParserState);
+    function Fmt fshow (ParserState state);
+        return $format(" State %x", state);
+    endfunction
+endinstance
+
+module mkStateStart#(Reg#(ParserState) state, FIFOF#(EtherData) datain, Wire#(Bool) start_fsm)(Empty);
+
+    rule load_packet if (state==StateStart);
+        let v = datain.first;
+        if (v.sop) begin
+            state <= StateParseEthernet;
+            start_fsm <= True;
+        end
+        else begin
+            datain.deq;
+            start_fsm <= False;
+        end
+    endrule
+endmodule
 
 interface ParseEthernet;
 
   interface Get#(Bit#(16)) parse_ipv4;
   method Action start;
-  method Action clear;
+  method Action stop;
 endinterface
-module mkStateParseEthernet#(Reg#(ParserState) state, FIFO#(EtherData) datain)(ParseEthernet);
-
+module mkStateParseEthernet#(Reg#(ParserState) state, FIFOF#(EtherData) datain)(ParseEthernet);
+  let verbose = True;
   FIFOF#(Bit#(16)) unparsed_parse_ipv4_fifo <- mkSizedFIFOF(1);
 
 
@@ -337,7 +441,7 @@ module mkStateParseEthernet#(Reg#(ParserState) state, FIFO#(EtherData) datain)(P
   function ParserState compute_next_state(Bit#(16) v);
     ParserState nextState = StateStart;
     case (v) matches
-      0x800: begin
+      'h800: begin
         nextState = StateParseIpv4;
       end
       default: begin
@@ -356,7 +460,7 @@ module mkStateParseEthernet#(Reg#(ParserState) state, FIFO#(EtherData) datain)(P
   seq
   action
     let data_this_cycle = packet_in_wire;
-    Vector#(128, Bit#(1)) dataVec = unpack(data);
+    Vector#(128, Bit#(1)) dataVec = unpack(data_this_cycle);
     let hdr = extract_EthernetT(pack(takeAt(0, dataVec)));
     $display(fshow(hdr));
     Vector#(16, Bit#(1)) unparsed = takeAt(0, dataVec);
@@ -390,9 +494,10 @@ interface ParseIpv4;
   interface Put#(Bit#(16)) parse_ethernet;
 
   method Action start;
-  method Action clear;
+  method Action stop;
 endinterface
-module mkStateParseIpv4#(Reg#(ParserState) state, FIFO#(EtherData) datain)(ParseIpv4);
+module mkStateParseIpv4#(Reg#(ParserState) state, FIFOF#(EtherData) datain)(ParseIpv4);
+  let verbose = True;
   FIFOF#(Bit#(16)) unparsed_parse_ethernet_fifo <- mkBypassFIFOF;
 
   FIFOF#(Bit#(144)) internal_fifo_144 <- mkSizedFIFOF(1);
@@ -424,7 +529,7 @@ module mkStateParseIpv4#(Reg#(ParserState) state, FIFO#(EtherData) datain)(Parse
   seq
   action
     let data_this_cycle = packet_in_wire;
-    let data_last_cycle <- toGet(unparsed_parse_ethernet).get;
+    let data_last_cycle <- toGet(unparsed_parse_ethernet_fifo).get;
     Bit#(144) data = {data_this_cycle, data_last_cycle};
     internal_fifo_144.enq(data);
 
@@ -434,7 +539,7 @@ module mkStateParseIpv4#(Reg#(ParserState) state, FIFO#(EtherData) datain)(Parse
     let data_last_cycle <- toGet(internal_fifo_144).get;
     Bit#(272) data = {data_this_cycle, data_last_cycle};
     Vector#(272, Bit#(1)) dataVec = unpack(data);
-    let hdr = extract_parse_ipv4(pack(takeAt(0, dataVec)));
+    let hdr = extract_Ipv4T(pack(takeAt(0, dataVec)));
     $display(fshow(hdr));
     Vector#(0, Bit#(1)) unparsed = takeAt(0, dataVec);
     next_state_wire[0] <= tagged Valid StateStart;
@@ -461,6 +566,7 @@ endmodule
 interface Parser;
   interface Put#(EtherData) frameIn;
   interface Get#(MetadataT) meta;
+  method ParserPerfRec read_perf_info;
 endinterface
 typedef 4 PortMax;
 (* synthesize *)
