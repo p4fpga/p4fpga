@@ -33,9 +33,7 @@ typedef struct {
 } %(name)s deriving (Bits, Eq);
 
 instance DefaultValue#(%(name)s);
-defaultValue = %(name)s {
-%(value)s
-};
+  defaultValue = unpack(0);
 endinstance
 
 instance FShow#(%(name)s);
@@ -58,7 +56,6 @@ def generate_typedef(struct):
     assert isinstance(struct, BIRStruct)
 
     typedef_fields = []
-    typedef_values = []
     printf = []
     printv = []
     extract = []
@@ -69,9 +66,8 @@ def generate_typedef(struct):
 
     offset = 0
     for field, size in struct.fields.items():
-        typedef_fields.append('  Bit#({w}) {v}'.format(w=size,
+        typedef_fields.append('  Bit#({w}) {v};'.format(w=size,
                                                        v=field))
-        typedef_values.append('  {v} : 0'.format(v=field))
         printf.append('{f}=%h'.format(f=field))
         printv.append('p.{v}'.format(v=field))
         extract.append(extract_template.format(s=size, f=field, o=offset))
@@ -79,8 +75,7 @@ def generate_typedef(struct):
         offset += size
 
     pmap = {'name': CamelCase(struct.name),
-            'field': ',\n'.join(typedef_fields),
-            'value': ',\n'.join(typedef_values),
+            'field': '\n'.join(typedef_fields),
             'printf': ', '.join(printf),
             'printv': ', '.join(printv),
             'width': width,
@@ -97,7 +92,7 @@ def generate_parse_prolog():
     import_modules = ["Connectable", "DefaultValue", "FIFO", "FIFOF", "FShow",
                       "GetPut", "List", "StmtFSM", "SpecicalFIFOs", "Vector",
                       "Ethernet"]
-    pmap['imports'] = ";\n".join(["import {}::*".format(x) for x in import_modules])
+    pmap['imports'] = "\n".join(["import {}::*;".format(x) for x in import_modules])
     return PARSE_PROLOG_TEMPLATE % (pmap)
 
 COMPUTE_NEXT_STATE = '''
@@ -408,7 +403,7 @@ def generate_parse_epilog(states, putmap):
     return PARSE_EPILOG_TEMPLATE % (pmap)
 
 TABLE_TEMPLATE = '''
-interface %(name)s
+interface %(name)s;
   interface Client#(MetadataRequest, MetadataResponse) next;
 endinterface
 
@@ -476,7 +471,7 @@ CONTROL_STATE_TEMPLATE = '''
   endrule'''
 
 CONTROL_FLOW_TEMPLATE = '''
-interface %(name)s
+interface %(name)s;
 endinterface
 
 module mk%(name)s#(Vector#(numClients, MetadataClient) mdc)(%(name)s);

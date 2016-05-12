@@ -103,12 +103,10 @@ class BSVControlFlow(ControlFlow):
                                                   getmap, putmap, stepmap))
             serializer.append(generate_parse_epilog(visited, putmap))
         elif self.name == 'deparser':
-            pass
             print "TODO"
         else:
             print 'xxx', self.name, self.control_state
             # build_json
-            # bsvgen
             serializer.append(generate_control_flow(self))
             #self.next_processor.bsvgen()
 

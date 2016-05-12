@@ -188,7 +188,8 @@ def main():
     noisyFlag = os.environ.get('D') == '1'
     bir.generatebsv(serializer, noisyFlag, jsondata)
 
-    if not os.path.exists(os.path.dirname(options.output)):
+    if os.path.dirname(options.output) and \
+        not os.path.exists(os.path.dirname(options.output)):
         os.makedirs(os.path.dirname(options.output))
     with open(options.output, 'w') as bsv:
         bsv.write(serializer.toString())
