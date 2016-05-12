@@ -38,6 +38,6 @@ module mkMain#(MainIndication indication)(Main);
    HostChannel hostchan <- mkHostChannel();
    Ingress0 ingress <- mkIngress0(vec(hostchan.next));
 
-   MainAPI api <- mkMainAPI(indication);
+   MainAPI api <- mkMainAPI(indication, hostchan);
    interface request = api.request;
 endmodule
