@@ -22,12 +22,11 @@ BSVFILES=Main.bsv MainAPI.bsv
 CPPFILES=main.cpp
 CPPFILES += $(SONICDIR)/sw/lpcap.c
 CONNECTALFLAGS += -I $(SONICDIR)/sw/
-CONNECTALFLAGS += --bsvpath=$(P4EXAMPLEDIR)/bsv/
+#CONNECTALFLAGS += --bsvpath=$(P4EXAMPLEDIR)/bsv/
 CONNECTALFLAGS += --bsvpath=$(P4EXAMPLEDIR)/bsv/AsymmetricBRAM
 CONNECTALFLAGS += --bsvpath=$(P4EXAMPLEDIR)/bsv/Bcam
 CONNECTALFLAGS += --bsvpath=$(SONICDIR)/hw/bsv
 CONNECTALFLAGS += --bsvpath=$(SONICDIR)/hw/generated
-CONNECTALFLAGS += --verilog=$(P4EXAMPLEDIR)/bsv/AsymmetricBRAM
 CONNECTALFLAGS += -D NicVersion=$(shell printf "%d" 0x`git rev-parse --short=8 HEAD`)
 CONNECTALFLAGS += -D DataBusWidth=128
 CONNECTALFLAGS += -D IMPORT_HOSTIF
@@ -45,6 +44,7 @@ BURST_LEN_SIZE=12
 
 P4FILE=simple.p4
 CONNECTALFLAGS += -D PARSER=Simple
+CONNECTALFLAGS += -D MATCHTABLE=MatchTableSim
 
 ALL: codegen simgen
 
@@ -56,7 +56,7 @@ simgen: codegen
 	make build.bluesim
 
 run:
-	(cd bluesim; ./bin/ubuntu.exe -p ${T})
+	(cd bluesim; ./bin/ubuntu.exe -p ../${T})
 
 bitgen: codegen
 	make build.nfsume

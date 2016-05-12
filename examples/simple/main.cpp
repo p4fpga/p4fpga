@@ -19,6 +19,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#include "MemServerIndication.h"
 #include "MainIndication.h"
 #include "MainRequest.h"
 #include "GeneratedTypes.h"
@@ -40,6 +41,24 @@ public:
         fprintf(stderr, "version %x\n", a);
     }
     MainIndication(unsigned int id): MainIndicationWrapper(id) {}
+};
+
+class MemServerIndication : public MemServerIndicationWrapper
+{
+public:
+    virtual void error(uint32_t code, uint32_t sglId, uint64_t offset, uint64_t extra) {
+        fprintf(stderr, "memServer Indication.error=%d\n", code);
+    }
+    virtual void addrResponse ( const uint64_t physAddr ) {
+        fprintf(stderr, "phyaddr=%lx\n", physAddr);
+    }
+    virtual void reportStateDbg ( const DmaDbgRec rec ) {
+        fprintf(stderr, "rec\n");
+    }
+    virtual void reportMemoryTraffic ( const uint64_t words ) {
+        fprintf(stderr, "words %lx\n", words);
+    }
+    MemServerIndication(unsigned int id) : MemServerIndicationWrapper(id) {}
 };
 
 void usage (const char *program_name) {
