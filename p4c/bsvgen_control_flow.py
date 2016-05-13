@@ -11,7 +11,7 @@ from bsvgen_common import generate_parse_epilog,\
                           generate_deparse_state, generate_deparse_top
 import pprint
 
-def dfs(bbmap, structmap, node, stack, prev_bits, visited, getmap, putmap, parse_step):
+def parse_dfs(bbmap, structmap, node, stack, prev_bits, visited, json):
     '''
     DFS to fill codegen data struct
     walk parse tree to collect required info for bsv
@@ -19,53 +19,99 @@ def dfs(bbmap, structmap, node, stack, prev_bits, visited, getmap, putmap, parse
     visited.add(node.name)
     stack.append(node.name)
 
+    print 'nnn', node.name
     curr_bits = prev_bits
     curr_bits += 128
 
     header = node.local_header.name
     width = sum([x for _, x in structmap[header].fields.items()])
 
-    if node.name not in parse_step:
-        parse_step[node.name] = []
+    if node.name not in json.parse_step:
+        json.parse_step[node.name] = []
 
     while curr_bits < width:
-        # parse_step
-        parse_step[node.name].append(curr_bits)
+        json.parse_step[node.name].append(curr_bits)
         curr_bits += 128
-    parse_step[node.name].append(curr_bits)
+    json.parse_step[node.name].append(curr_bits)
 
     for block in node.control_state.basic_block:
         if type(block) == str:
             continue
         next_header = bbmap[block[1]].name
+        print 'nnn', next_header
+        print 'nnn', visited
         if next_header not in visited:
             next_bits = curr_bits - width
-            #print 'next_bits', next_header, stack[-1], next_bits
-            if next_header not in putmap:
-                putmap[next_header] = {}
-            if stack[-1] not in getmap:
-                getmap[stack[-1]] = {}
-            putmap[next_header][stack[-1]] = next_bits
-            getmap[stack[-1]][next_header] = next_bits
-            dfs(bbmap, structmap, bbmap[block[1]], stack,
-                next_bits, visited, getmap, putmap, parse_step)
+            print 'next_bits', next_header, stack[-1], next_bits
+            if next_header not in json.putmap:
+                json.putmap[next_header] = {}
+            if stack[-1] not in json.getmap:
+                json.getmap[stack[-1]] = {}
+            json.putmap[next_header][stack[-1]] = next_bits
+            json.getmap[stack[-1]][next_header] = next_bits
+            parse_dfs(bbmap, structmap, bbmap[block[1]], stack,
+                next_bits, visited, json)
     stack.pop()
 
-def generate_parse_body(bbmap, structmap, serializer, node, stack, getmap, putmap,
-                        stepmap, visited=None):
+def generate_parse_body(bbmap, structmap, serializer, node, stack, json, visited=None):
     ''' walk parser tree '''
     if not visited:
         visited = set()
     visited.add(node.name)
     stack.append(node.name)
-    serializer.append(generate_parse_state(node, structmap, getmap, putmap, stepmap))
+    serializer.append(generate_parse_state(node, structmap, json))
     for block in node.control_state.basic_block:
         if type(block) == str:
             continue
         next_header = bbmap[block[1]].name
         if next_header not in visited:
-            generate_parse_body(bbmap, structmap, serializer, bbmap[block[1]],
-                                stack, getmap, putmap, stepmap, visited)
+            generate_parse_body(bbmap, structmap, serializer, bbmap[block[1]], stack, json, visited)
+    stack.pop()
+
+def deparse_dfs(bbmap, structmap, node, stack, prev_bits, visited, json):
+    '''
+    DFS to fill codegen data struct
+    walk parse tree to collect required info for bsv
+    '''
+    visited.add(node.name)
+    stack.append(node.name)
+
+    print 'nnn', node.name
+    curr_bits = prev_bits
+    curr_bits += 128
+
+    header = node.local_header.name
+    width = sum([x for _, x in structmap[header].fields.items()])
+
+    print 'nnn parsestep', json.parse_step
+    if node.name not in json.parse_step:
+        json.parse_step[node.name] = []
+
+    print 'nnn parsestep', json.parse_step
+    while curr_bits < width:
+        # parse_step
+        json.parse_step[node.name].append(curr_bits)
+        curr_bits += 128
+    json.parse_step[node.name].append(curr_bits)
+
+    print 'nnn parsestep', json.parse_step
+    for block in node.control_state.basic_block:
+        if type(block) == str:
+            continue
+        next_header = bbmap[block[1]].name
+        print 'nnn', next_header
+        print 'nnn', visited
+        if next_header not in visited:
+            next_bits = curr_bits - width
+            print 'next_bits', next_header, stack[-1], next_bits
+            if next_header not in json.putmap:
+                json.putmap[next_header] = {}
+            if stack[-1] not in json.getmap:
+                json.getmap[stack[-1]] = {}
+            json.putmap[next_header][stack[-1]] = next_bits
+            json.getmap[stack[-1]][next_header] = next_bits
+            deparse_dfs(bbmap, structmap, bbmap[block[1]], stack,
+                next_bits, visited, json)
     stack.pop()
 
 def generate_deparse_body(serializer, json, bbmap, node, stack, visited=None):
@@ -97,10 +143,13 @@ class BSVControlFlow(ControlFlow):
         self.structs = structs
 
     def generate_deparser(self, serializer, json):
-        # first state
         stack = []
         visited = set()
         start_block = self.basic_blocks[self.control_state.basic_block[0]]
+        print 'mmm', self.basic_blocks
+        print 'mmm', self.structs
+        print 'mmm', start_block.name
+        deparse_dfs(self.basic_blocks, self.structs, start_block, stack, 0, visited, json)
         generate_deparse_body(serializer, json, self.basic_blocks, start_block, stack, visited)
         #generate_deparse_top(serializer, json)
         serializer.append(generate_deparse_top())
@@ -108,17 +157,12 @@ class BSVControlFlow(ControlFlow):
     def generate_parser(self, serializer, json):
         stack = []
         visited = set()
-        #FIXME: remove
-        putmap = {}
-        getmap = {}
-        stepmap = {}
         start_block = self.basic_blocks[self.control_state.basic_block[0]]
-        dfs(self.basic_blocks, self.structs, start_block, stack,
-            0, visited, getmap, putmap, stepmap)
+        parse_dfs(self.basic_blocks, self.structs, start_block, stack,
+            0, visited, json)
         generate_parse_body(self.basic_blocks, self.structs,
-                            serializer, start_block, [],
-                            getmap, putmap, stepmap)
-        serializer.append(generate_parse_epilog(visited, putmap))
+                            serializer, start_block, [], json)
+        serializer.append(generate_parse_epilog(visited, json.putmap))
 
     def bsvgen(self, serializer, json):
         ''' generate control flow from json '''
@@ -128,7 +172,6 @@ class BSVControlFlow(ControlFlow):
         elif self.name == 'deparser':
             self.generate_deparser(serializer, json)
         else:
-            print 'xxx', self.name, self.control_state
             serializer.append(generate_control_flow(self))
             #self.next_processor.bsvgen()
 

@@ -179,7 +179,7 @@ def reset_smap():
     smap['carry_out'] = ""
     smap['next_state'] = ""
     return smap
-def gen_parse_stmt(node, stepmap, getmap, putmap):
+def gen_parse_stmt(node, parse_step, getmap, putmap):
     pmap = {}
     name = node.name
     header = node.local_header.name
@@ -191,30 +191,30 @@ def gen_parse_stmt(node, stepmap, getmap, putmap):
     unpack = '    Vector#({}, Bit#(1)) dataVec = unpack(data);\n'
     extract = '    let hdr = extract_{}(pack(takeAt(0, dataVec)));\n    $display(fshow(hdr));\n'
     carry_out = '    Vector#({}, Bit#(1)) unparsed = takeAt({}, dataVec);\n'
-    for index, step in enumerate([stepmap[name][0]]):
+    for index, step in enumerate([parse_step[name][0]]):
         smap = reset_smap()
         if name in putmap:
             for cname, clen in putmap[name].items():
                 smap['carry_in'] = carry_in.format('unparsed_'+cname+'_fifo')
             smap['concat'] = concat.format(step, ", data_last_cycle")
             smap['internal'] = internal.format(step)
-        if len(stepmap[name]) == 1:
+        if len(parse_step[name]) == 1:
             smap['unpack'] = unpack.format(step)
             smap['extract'] = extract.format(CamelCase(header))
             carry_out_width = getmap[name].items()[0][1]
             smap['carry_out'] = carry_out.format(carry_out_width, 0)
             smap['next_state'] = apply_comp_next_state(node, getmap)
         source.append(STEP_TEMPLATE % smap)
-    for index, step in enumerate(stepmap[name][1:-1]):
+    for index, step in enumerate(parse_step[name][1:-1]):
         smap = reset_smap()
-        smap['carry_in'] = carry_in.format('internal_fifo_{}'.format(stepmap[name][index]))
+        smap['carry_in'] = carry_in.format('internal_fifo_{}'.format(parse_step[name][index]))
         smap['concat'] = concat.format(step, ', data_last_cycle')
         smap['internal'] = internal.format(step)
         source.append(STEP_TEMPLATE % smap)
-    last_step = (x for x in [stepmap[name][-1]] if len(stepmap[name]) > 1)
+    last_step = (x for x in [parse_step[name][-1]] if len(parse_step[name]) > 1)
     for step in last_step:
         smap = reset_smap()
-        smap['carry_in'] = carry_in.format('internal_fifo_{}'.format(stepmap[name][-2]))
+        smap['carry_in'] = carry_in.format('internal_fifo_{}'.format(parse_step[name][-2]))
         smap['concat'] = concat.format(step, ', data_last_cycle')
         smap['unpack'] = unpack.format(step)
         smap['extract'] = extract.format(CamelCase(header))
@@ -305,17 +305,17 @@ module mkState%(name)s#(Reg#(ParserState) state, FIFOF#(EtherData) datain)(%(nam
 %(intf_parsed_out)s
 endmodule
 '''
-def generate_parse_state(node, structmap, getmap, putmap, stepmap):
+def generate_parse_state(node, structmap, json):
     ''' generate one parse state '''
     pmap = {}
     pmap['name'] = CamelCase(node.name)
 
     tput = "  interface Put#(Bit#({})) {};"
-    tputmap = putmap[node.name] if node.name in putmap else {}
+    tputmap = json.putmap[node.name] if node.name in json.putmap else {}
     pmap['intf_put'] = "\n".join([tput.format(v, x) for x, v in tputmap.items()])
 
     tget = "  interface Get#(Bit#({})) {};"
-    tgetmap = getmap[node.name] if node.name in getmap else {}
+    tgetmap = json.getmap[node.name] if node.name in json.getmap else {}
     pmap['intf_get'] = "\n".join([tget.format(v, x) for x, v in tgetmap.items()])
 
     tfifo_in = "  FIFOF#(Bit#({})) unparsed_{}_fifo <- mkBypassFIFOF;"
@@ -325,7 +325,8 @@ def generate_parse_state(node, structmap, getmap, putmap, stepmap):
 
     # internal fifos
     tinternal = '  FIFOF#(Bit#({})) internal_fifo_{} <- mkSizedFIFOF(1);'
-    pmap['internal_fifo'] = "\n".join([tinternal.format(x, x) for x in stepmap[node.name][:-1]])
+    print 'xxx', json.parse_step
+    pmap['internal_fifo'] = "\n".join([tinternal.format(x, x) for x in json.parse_step[node.name][:-1]])
 
     # only if output is required
     tout = "  FIFOF#(Bit#({})) parsed_{}_fifo <- mkFIFOF;"
@@ -335,7 +336,7 @@ def generate_parse_state(node, structmap, getmap, putmap, stepmap):
     # next state
     pmap['n'] = 4
     pmap['compute_next_state'] = func_comp_next_state(structmap, node)
-    pmap['stmt'] = gen_parse_stmt(node, stepmap, getmap, putmap)
+    pmap['stmt'] = gen_parse_stmt(node, json.parse_step, json.getmap, json.putmap)
     tunparse = "  interface {} = toGet(unparsed_{}_fifo);"
     pmap['intf_unparsed'] = "\n".join([tunparse.format(x, x) for x in tgetmap])
     pmap['intf_parsed_out'] = ""
