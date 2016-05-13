@@ -2,12 +2,18 @@
 Basic block with bsv backend
 '''
 
+from dotmap import DotMap
 from pif_ir.bir.objects.basic_block import BasicBlock
 from pif_ir.bir.utils.validate import check_control_state
 
 from bsvgen_control_state import BSVControlState
 from bsvgen_common import generate_basic_block
 from programSerializer import ProgramSerializer
+
+def CamelCase(name):
+    ''' CamelCase '''
+    output = ''.join(x for x in name.title() if x.isalnum())
+    return output
 
 # BSVBasicBlock should be an AST node
 class BSVBasicBlock(BasicBlock):
@@ -43,38 +49,52 @@ class BSVBasicBlock(BasicBlock):
         rule['put'] = outp
         return rule
 
-    def serialize(self):
-        json = {}
+    def serialize_json_deparse(self):
+        ''' jsondata for deparse state '''
+        d = DotMap()
+        d.name = CamelCase(self.name)
+        d.intf_put = []
+        d.intf_get = []
+        d.data_in_fifo = []
+        d.data_out_fifo = []
+        d.compute_next_state = []
+        d.intf_data_out = []
+        d.intf_ctrl_out = []
+        d.statement = []
+        return d
 
-        prev_control_state = []
-        prev_control_state.append('BBRequest')
+    def serialize_json_parse(self):
+        ''' jsondata for parse state '''
+        p = DotMap()
+        p.name = CamelCase(self.name)
+        p.intf_put = []
+        p.intf_get = []
+        p.unparsed_in_fifo = []
+        p.unparsed_out_fifo = []
+        p.internal_fifo = []
+        p.parsed_out_fifo = []
+        p.compute_next_state = []
+        p.stmt = []
+        p.intf_data_out = []
+        p.intf_ctrl_out = []
+        return p
 
-        reg_access = []
-
-        interface = [ prev_control_state , reg_access ]
-        json['interface'] = interface
-
-        rules = {}
-        # extract these info
-        inp = { 'type': 'packetInstance', 'name': 'curr_packet' }
-        outp = []
-        rules['bb_request'] = self.build_rule(inp, outp)
-        rules['bb_response'] = self.build_rule(inp, outp)
-        json['rule'] = rules
-        return json
+    def serialize_json_basicblock(self):
+        ''' jsondata for basicblock '''
+        pass
 
     def bsvgen(self, serializer):
         ''' TODO '''
         assert isinstance(serializer, ProgramSerializer)
 
-        #FIXME
+        #FIXME: generate parser from json
         if self.name.startswith('parse_'):
             return
 
+        #FIXME: generate deparser from json
         if self.name.startswith('deparse_'):
             return
 
         serializer.append(generate_basic_block(self))
-        # need control state info
         # self.control_state.bsvgen(serializer)
 

@@ -6,6 +6,8 @@ import logging
 import os
 import sys
 import yaml
+
+from dotmap import DotMap
 from collections import OrderedDict
 
 from pif_ir.meta_ir.instance import MetaIRInstance
@@ -113,38 +115,22 @@ class BirInstance(MetaIRInstance):
     def serialize_json(self):
         global verbose
         jfile = open(tempFilename, 'w')
-        toplevel = OrderedDict()
+        toplevel = DotMap()
 
-        # Tables
-        tables = OrderedDict()
         for item in self.bir_tables.values():
-            tables[item.name] = item.serialize()
-        toplevel['table'] = tables
+            toplevel.table[item.name] = item.serialize()
 
-        # Structs
-        structs = OrderedDict()
         for key, item in self.bir_structs.items():
-            structs[key] = item.serialize()
-        toplevel['struct'] = structs
+            toplevel.struct[key] = item.serialize()
 
-        # Basic Blocks
-        bb = OrderedDict()
-        parse_states = OrderedDict()
-        deparse_states = OrderedDict()
         for key, item in self.bir_basic_blocks.items():
             if key.startswith('parse_'):
-                parse_states[key] = item.serialize()
-            elif key.startswith('deparse_'):
-                deparse_states[key] = item.serialize()
-            else:
-                bb[key] = item.serialize()
-        toplevel['parser'] = parse_states
-        toplevel['deparser'] = deparse_states
-        toplevel['basicblock'] = bb
+                toplevel.parser[key] = item.serialize_json_parse()
+            if key.startswith('deparse_'):
+                toplevel.deparser[key] = item.serialize_json_deparse()
+            if key.startswith('bb_'):
+                toplevel.basicblock[key] = item.serialize_json_basicblock()
 
-        # control_flow
-        # ingress
-        # egress
         try:
             print json.dump(toplevel, jfile, sort_keys=False, indent=4)
             jfile.close()
@@ -158,7 +144,7 @@ class BirInstance(MetaIRInstance):
     def generatebsv(self, serializer, noisyFlag, jsondata):
         # jsondata with datatype
         ''' TODO '''
-        serializer.append(generate_import_statements())
+        generate_import_statements(serializer)
         for item in self.bir_structs.values():
             item.bsvgen(serializer)
         for item in self.bir_tables.values():
@@ -166,7 +152,7 @@ class BirInstance(MetaIRInstance):
         for item in self.bir_basic_blocks.values():
             item.bsvgen(serializer)
         for item in self.bir_control_flows.values():
-            item.bsvgen(serializer)
+            item.bsvgen(serializer, jsondata)
 
 def main():
     ''' entry point '''
@@ -181,8 +167,6 @@ def main():
     # our frontend or ocaml frontend
     # verified p4 frontend
     bir = BirInstance('p4fpga', options.yaml)
-
-    # jsondata = serialize_json(bir)
 
     # generate_bsv
     serializer = ProgramSerializer()

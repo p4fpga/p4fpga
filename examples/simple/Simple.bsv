@@ -726,7 +726,6 @@ interface DeparseEthernet;
    method Action start;
    method Action clear;
 endinterface
-
 module mkStateDeparseEthernet#(Reg#(DeparserState) state,
                                FIFOF#(EtherData) datain,
                                FIFOF#(EtherData) dataout,
@@ -796,20 +795,16 @@ module mkStateDeparseEthernet#(Reg#(DeparserState) state,
    rule clear_fsm if (clear_wire);
       fsm_deparse_ethernet.abort;
    endrule
-   method Action start();
-      start_wire.send();
-   endmethod
-   method Action clear();
-      clear_wire.send();
-   endmethod
+   method start = start_wire.send;
+   method clear = clear_wire.send;
    interface deparse_arp = toGet(parse_arp_fifo);
    interface deparse_ipv4 = toGet(parse_ipv4_fifo);
 endmodule
 
 interface DeparseIpv4;
-   interface Put#(EtherData) deparse_ethernet;
-   method Action start;
-   method Action clear;
+  interface Put#(EtherData) deparse_ethernet;
+  method Action start;
+  method Action clear;
 endinterface
 module mkStateDeparseIpv4#(Reg#(DeparserState) state,
                            FIFOF#(EtherData) datain,
@@ -833,11 +828,11 @@ module mkStateDeparseIpv4#(Reg#(DeparserState) state,
        return nextState;
    endfunction
 
-   rule load_packet if (state == StateDeparseIpv4 && !deparse_ethernet_fifo.notEmpty());
-       let data_current <- toGet(datain).get;
-       packet_in_wire <= data_current;
-       $display("(%0d) IPv4: ", $time, fshow(data_current));
-   endrule
+  rule load_packet if (state == StateDeparseIpv4 && !deparse_ethernet_fifo.notEmpty());
+    let data_current <- toGet(datain).get;
+    packet_in_wire <= data_current;
+    $display("(%0d) IPv4: ", $time, fshow(data_current));
+  endrule
 
    Stmt deparse_ipv4 = 
    seq
@@ -889,110 +884,103 @@ module mkStateDeparseIpv4#(Reg#(DeparserState) state,
    rule clear_fsm if (clear_wire);
       fsm_deparse_ipv4.abort;
    endrule
-   method Action start();
-      start_wire.send();
-   endmethod
-   method Action clear();
-      clear_wire.send();
-   endmethod
+   method start = start_wire.send;
+   method clear = clear_wire.send;
    interface deparse_ethernet = toPut(deparse_ethernet_fifo);
 endmodule
 
 interface Deparser;
-   interface PipeIn#(MetadataT) metadata;
-   interface PktWriteServer writeServer;
-   interface PktWriteClient writeClient;
-   method DeparserPerfRec read_perf_info;
+  interface PipeIn#(MetadataT) metadata;
+  interface PktWriteServer writeServer;
+  interface PktWriteClient writeClient;
+  method DeparserPerfRec read_perf_info;
 endinterface
 (* synthesize *)
 module mkDeparser(Deparser);
-   let verbose = True;
-   FIFOF#(EtherData) data_in_fifo <- mkSizedFIFOF(4);
-   FIFOF#(EtherData) data_out_fifo <- mkFIFOF;
-   FIFOF#(MetadataT) metadata_in_fifo <- mkFIFOF;
+  let verbose = False;
+  FIFOF#(EtherData) data_in_fifo <- mkSizedFIFOF(4);
+  FIFOF#(EtherData) data_out_fifo <- mkFIFOF;
+  FIFOF#(MetadataT) metadata_in_fifo <- mkFIFOF;
+  Reg#(Bool) started <- mkReg(False);
+  Wire#(Bool) start_fsm <- mkDWire(False);
+  Reg#(DeparserState) curr_state <- mkReg(StateDeparseIdle);
 
-   Reg#(Bool) started <- mkReg(False);
-   Wire#(Bool) start_fsm <- mkDWire(False);
-   Reg#(DeparserState) curr_state <- mkReg(StateDeparseIdle);
+  Vector#(PortMax, FIFOF#(DeparserState)) deparse_state_in_fifo <- replicateM(mkGFIFOF(False, True));
+  FIFOF#(DeparserState) deparse_state_out_fifo <- mkFIFOF;
 
-   Vector#(PortMax, FIFOF#(DeparserState)) deparse_state_in_fifo <- replicateM(mkGFIFOF(False, True));
-   FIFOF#(DeparserState) deparse_state_out_fifo <- mkFIFOF;
+  FIFOF#(EthernetT) ethernet_meta_fifo <- mkFIFOF;
+  FIFOF#(Ipv4T) ipv4_meta_fifo <- mkFIFOF;
 
-   FIFOF#(EthernetT) ethernet_meta_fifo <- mkFIFOF;
-   FIFOF#(Ipv4T) ipv4_meta_fifo <- mkFIFOF;
+  FIFOF#(EthernetT) ethernet_mask_fifo <- mkFIFOF;
+  FIFOF#(Ipv4T) ipv4_mask_fifo <- mkFIFOF;
 
-   FIFOF#(EthernetT) ethernet_mask_fifo <- mkFIFOF;
-   FIFOF#(Ipv4T) ipv4_mask_fifo <- mkFIFOF;
+  Reg#(Bit#(32)) clk_cnt <- mkReg(0);
+  Reg#(Bit#(32)) deparser_start_time <- mkReg(0);
+  Reg#(Bit#(32)) deparser_end_time <- mkReg(0);
+  rule clockrule;
+    clk_cnt <= clk_cnt + 1;
+  endrule
 
-   Reg#(Bit#(32)) clk_cnt <- mkReg(0);
-   Reg#(Bit#(32)) deparser_start_time <- mkReg(0);
-   Reg#(Bit#(32)) deparser_end_time <- mkReg(0);
-   rule clockrule;
-      clk_cnt <= clk_cnt + 1;
-   endrule
-
-   (* fire_when_enabled *)
-   rule arbitrate_deparse_state;
-      Bool sentOne = False;
-      for (Integer port = 0; port < valueOf(PortMax); port = port+1) begin
-         if (!sentOne && deparse_state_in_fifo[port].notEmpty()) begin
-            DeparserState state <- toGet(deparse_state_in_fifo[port]).get();
-            sentOne = True;
-            $display("(%0d) xxx arbitrate %h", $time, port);
-            deparse_state_out_fifo.enq(state);
-         end
+  (* fire_when_enabled *)
+  rule arbitrate_deparse_state;
+    Bool sentOne = False;
+    for (Integer port = 0; port < valueOf(PortMax); port = port+1) begin
+      if (!sentOne && deparse_state_in_fifo[port].notEmpty()) begin
+        DeparserState state <- toGet(deparse_state_in_fifo[port]).get();
+        sentOne = True;
+        $display("(%0d) xxx arbitrate %h", $time, port);
+        deparse_state_out_fifo.enq(state);
       end
-   endrule
+    end
+  endrule
 
-   rule get_metadata;
-      let v <- toGet(metadata_in_fifo).get;
-      let ethernet = toEthernet(v);
-      match {.data, .mask} = ethernet;
-      ethernet_meta_fifo.enq(data);
-      ethernet_mask_fifo.enq(mask);
+  rule get_metadata;
+     let v <- toGet(metadata_in_fifo).get;
+     let ethernet = toEthernet(v);
+     match {.data, .mask} = ethernet;
+     ethernet_meta_fifo.enq(data);
+     ethernet_mask_fifo.enq(mask);
 
-      let ipv4 = toIpv4(v);
-      match {.ipv4_data, .ipv4_mask} = ipv4;
-      if (verbose) $display("(%0d) ipv4 meta", $time, fshow(ipv4));
-      ipv4_meta_fifo.enq(ipv4_data);
-      ipv4_mask_fifo.enq(ipv4_mask);
-   endrule
+     let ipv4 = toIpv4(v);
+     match {.ipv4_data, .ipv4_mask} = ipv4;
+     if (verbose) $display("(%0d) ipv4 meta", $time, fshow(ipv4));
+     ipv4_meta_fifo.enq(ipv4_data);
+     ipv4_mask_fifo.enq(ipv4_mask);
+  endrule
 
-   Empty init_state <- mkStateDeparseIdle(curr_state, data_in_fifo, data_out_fifo, start_fsm);
-   DeparseEthernet deparse_ethernet <- mkStateDeparseEthernet(curr_state, data_in_fifo, data_out_fifo, ethernet_meta_fifo, ethernet_mask_fifo);
-   DeparseIpv4 deparse_ipv4 <- mkStateDeparseIpv4(curr_state, data_in_fifo, data_out_fifo, ipv4_meta_fifo, ipv4_mask_fifo);
+  Empty init_state <- mkStateDeparseIdle(curr_state, data_in_fifo, data_out_fifo, start_fsm);
+  DeparseEthernet deparse_ethernet <- mkStateDeparseEthernet(curr_state, data_in_fifo, data_out_fifo, ethernet_meta_fifo, ethernet_mask_fifo);
+  DeparseIpv4 deparse_ipv4 <- mkStateDeparseIpv4(curr_state, data_in_fifo, data_out_fifo, ipv4_meta_fifo, ipv4_mask_fifo);
 
-   mkConnection(deparse_ipv4.deparse_ethernet, deparse_ethernet.deparse_ipv4);
+  mkConnection(deparse_ipv4.deparse_ethernet, deparse_ethernet.deparse_ipv4);
 
-   rule start if (start_fsm);
-      if (!started) begin
-         deparse_ethernet.start;
-         deparse_ipv4.start;
-         started <= True;
-         deparser_start_time <= clk_cnt;
-      end
-   endrule
-
-   rule clear if (!start_fsm && curr_state == StateDeparseIdle);
-      if (started) begin
-         deparse_ethernet.clear;
-         deparse_ipv4.clear;
-         started <= False;
-         deparser_end_time <= clk_cnt;
-      end
-   endrule
-
-   interface PktWriteServer writeServer;
-      interface writeData = toPut(data_in_fifo);
-   endinterface
-   interface PktWriteClient writeClient;
-      interface writeData = toGet(data_out_fifo);
-   endinterface
-   interface metadata = toPipeIn(metadata_in_fifo);
-   method DeparserPerfRec read_perf_info;
-      return DeparserPerfRec {
-         deparser_start_time: deparser_start_time,
-         deparser_end_time: deparser_end_time
-      };
-   endmethod
+  rule start if (start_fsm);
+    if (!started) begin
+      deparse_ethernet.start;
+      deparse_ipv4.start;
+      started <= True;
+      deparser_start_time <= clk_cnt;
+    end
+  endrule
+  rule clear if (!start_fsm && curr_state == StateDeparseIdle);
+    if (started) begin
+      deparse_ethernet.clear;
+      deparse_ipv4.clear;
+      started <= False;
+      deparser_end_time <= clk_cnt;
+    end
+  endrule
+  interface PktWriteServer writeServer;
+    interface writeData = toPut(data_in_fifo);
+  endinterface
+  interface PktWriteClient writeClient;
+    interface writeData = toGet(data_out_fifo);
+  endinterface
+  interface metadata = toPipeIn(metadata_in_fifo);
+  method DeparserPerfRec read_perf_info;
+    return DeparserPerfRec {
+      deparser_start_time: deparser_start_time,
+      deparser_end_time: deparser_end_time
+    };
+  endmethod
 endmodule

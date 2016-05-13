@@ -3,6 +3,7 @@ Common template for bsv generation
 '''
 
 import re
+from dotmap import DotMap
 from collections import OrderedDict
 from pif_ir.bir.objects.bir_struct import BIRStruct
 from pif_ir.bir.objects.table import Table
@@ -29,7 +30,7 @@ def CamelCase(name):
 IMPORT_TEMPLATE = '''
 %(imports)s
 '''
-def generate_import_statements():
+def generate_import_statements(serializer):
     ''' TODO '''
     pmap = {}
     import_modules = ["Connectable", "DefaultValue", "FIFO", "FIFOF", "FShow",
@@ -37,7 +38,7 @@ def generate_import_statements():
                       "Ethernet", "ClientServer", "DbgDefs", "PacketBuffer", 
                       "Pipe", "MatchTable", "MatchTableSim", "Utils"]
     pmap['imports'] = "\n".join(["import {}::*;".format(x) for x in sorted(import_modules)])
-    return IMPORT_TEMPLATE % (pmap)
+    serializer.append(IMPORT_TEMPLATE % (pmap))
 
 
 TYPEDEF_TEMPLATE = '''
@@ -305,7 +306,7 @@ module mkState%(name)s#(Reg#(ParserState) state, FIFOF#(EtherData) datain)(%(nam
 endmodule
 '''
 def generate_parse_state(node, structmap, getmap, putmap, stepmap):
-    ''' TODO '''
+    ''' generate one parse state '''
     pmap = {}
     pmap['name'] = CamelCase(node.name)
 
@@ -406,6 +407,112 @@ def generate_parse_epilog(states, putmap):
     tstop = '      {}.stop;'
     pmap['stop_states'] = "\n".join([tstop.format(x) for x in states])
     return PARSE_EPILOG_TEMPLATE % (pmap)
+
+DEPARSE_STATE_TEMPLATE= '''
+interface %(name)s;
+%(intf_put)s
+%(intf_get)s
+  method Action start;
+  method Action clear;
+endinterface
+module mkState%(name)s#(Reg#(DeparserState) state, FIFOF#(EtherData) datain, FIFOF#(EtherData) dataout)(%(name)s);
+%(data_in_fifo)s
+%(data_out_fifo)s
+  let verbose = False;
+  Wire#(Bit#(128)) packet_in_wire <- mkDWire(defaultValue);
+  PulseWire start_wire <- mkPulseWire();
+  PulseWire clear_wire <- mkPulseWire();
+%(compute_next_state)s
+  rule load_packet if (state == State%(name)s);
+    let data_current <- toGet(datain).get;
+    packet_in_wire <= data_current;
+  endrule
+%(statement)s
+  FSM fsm_%(name)s <- mkFSM(stmt_%(name)s);
+  rule start_fsm if (start_wire);
+    fsm_%(name)s.start;
+  endrule
+  rule clear_fsm if (clear_wire);
+    fsm_%(name)s.abort;
+  endrule
+  method start = start_wire.send;
+  method stop = clear_wire.send;
+%(intf_data_out)s;
+%(intf_ctrl_out)s;
+endmodule
+'''
+def generate_deparse_state(serializer, json):
+    ''' generate one deparse state '''
+    assert isinstance(json, DotMap)
+    serializer.append(DEPARSE_STATE_TEMPLATE % (json))
+
+DEPARSE_TOP_TEMPLATE = '''
+interface Deparser;
+  interface PipeIn#(MetadataT) metadata;
+  interface PktWriteServer writeServer;
+  interface PktWriteClient writeClient;
+  method DeparserPerfRec read_perf_info;
+endinterface
+(* synthesize *)
+module mkDeparser(Deparser);
+  let verbose = False;
+  FIFOF#(EtherData) data_in_fifo <- mkSizedFIFOF(4);
+  FIFOF#(EtherData) data_out_fifo <- mkFIFOF;
+  FIFOF#(MetadataT) metadata_in_fifo <- mkFIFOF;
+  Reg#(Bool) started <- mkReg(False);
+  Wire#(Bool) start_fsm <- mkDWire(False);
+  Reg#(DeparserState) curr_state <- mkReg(StateDeparseIdle);
+
+  Vector#(PortMax, FIFOF#(DeparserState)) deparse_state_in_fifo <- replicateM(mkGFIFOF(False, True));
+  FIFOF#(DeparserState) deparse_state_out_fifo <- mkFIFOF;
+%(meta_in_fifo)s
+%(mask_in_fifo)s
+  (* fire_when_enabled *)
+  rule arbitrate_deparse_state;
+    Bool sentOne = False;
+    for (Integer port = 0; port < valueOf(PortMax); port = port+1) begin
+      if (!sentOne && deparse_state_in_fifo[port].notEmpty()) begin
+        DeparserState state <- toGet(deparse_state_in_fifo[port]).get();
+        sentOne = True;
+        deparse_state_out_fifo.enq(state);
+      end
+    end
+  endrule
+  rule get_meta;
+    let v <- toGet(metadata_in_fifo).get;
+%(metadata_func)s
+  endrule
+  Empty init_state <- mkStateDeparseIdle(curr_state, data_in_fifo, data_out_fifo, start_fsm);
+%(deparse_state)s
+  rule start if (start_fsm);
+    if (!started) begin
+%(deparse_state)s
+      started <= True;
+    end
+  endrule
+  rule clear if (!start_fsm && curr_state == StateDeparseIdle);
+    if (started) begin
+%(deparse_state)s
+      started <= False;
+    end
+  endrule
+  interface PktWriteServer writeServer;
+    interface writeData = toPut(data_in_fifo);
+  endinterface
+  interface PktWriteClient writeClient;
+    interface writeData = toGet(data_out_fifo);
+  endinterface
+  interface metadata = toPipeIn(metadata_in_fifo);
+endmodule
+'''
+def generate_deparse_top():
+    ''' generate deparser top module '''
+    pmap = {}
+    pmap["meta_in_fifo"] = ""
+    pmap["mask_in_fifo"] = ""
+    pmap["metadata_func"] = ""
+    pmap["deparse_state"] = ""
+    return DEPARSE_TOP_TEMPLATE % (pmap)
 
 TABLE_TEMPLATE = '''
 interface %(name)s;

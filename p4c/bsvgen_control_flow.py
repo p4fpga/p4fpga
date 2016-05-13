@@ -7,7 +7,8 @@ from pif_ir.bir.utils.validate import check_control_state
 from bsvgen_control_state import BSVControlState
 from programSerializer import ProgramSerializer
 from bsvgen_common import generate_parse_epilog,\
-                          generate_parse_state, generate_control_flow
+                          generate_parse_state, generate_control_flow, \
+                          generate_deparse_state, generate_deparse_top
 import pprint
 
 def dfs(bbmap, structmap, node, stack, prev_bits, visited, getmap, putmap, parse_step):
@@ -67,16 +68,20 @@ def generate_parse_body(bbmap, structmap, serializer, node, stack, getmap, putma
                                 stack, getmap, putmap, stepmap, visited)
     stack.pop()
 
-def generate_deparse_body(bbmap, node, stack, visited=None):
+def generate_deparse_body(serializer, json, bbmap, node, stack, visited=None):
     ''' walk deparser tree '''
     if not visited:
         visited = set()
     visited.add(node.name)
     stack.append(node.name)
+    generate_deparse_state(serializer, json.deparser[node.name])
     for block in node.control_state.basic_block:
         if type(block) == str:
             continue
-        generate_deparse_body(bbmap, bbmap[block[1]], stack, visited)
+        next_header = bbmap[block[1]].name
+        if next_header in visited:
+            continue
+        generate_deparse_body(serializer, json, bbmap, bbmap[block[1]], stack, visited)
     stack.pop()
 
 class BSVControlFlow(ControlFlow):
@@ -91,30 +96,39 @@ class BSVControlFlow(ControlFlow):
         self.control_state = BSVControlState(cf, None, bir_parser)
         self.structs = structs
 
-    def bsvgen(self, serializer):
-        ''' TODO '''
-        assert isinstance(serializer, ProgramSerializer)
-
+    def generate_deparser(self, serializer, json):
+        # first state
         stack = []
         visited = set()
+        start_block = self.basic_blocks[self.control_state.basic_block[0]]
+        generate_deparse_body(serializer, json, self.basic_blocks, start_block, stack, visited)
+        #generate_deparse_top(serializer, json)
+        serializer.append(generate_deparse_top())
+
+    def generate_parser(self, serializer, json):
+        stack = []
+        visited = set()
+        #FIXME: remove
         putmap = {}
         getmap = {}
         stepmap = {}
+        start_block = self.basic_blocks[self.control_state.basic_block[0]]
+        dfs(self.basic_blocks, self.structs, start_block, stack,
+            0, visited, getmap, putmap, stepmap)
+        generate_parse_body(self.basic_blocks, self.structs,
+                            serializer, start_block, [],
+                            getmap, putmap, stepmap)
+        serializer.append(generate_parse_epilog(visited, putmap))
+
+    def bsvgen(self, serializer, json):
+        ''' generate control flow from json '''
+        assert isinstance(serializer, ProgramSerializer)
         if self.name == 'parser':
-            # build_json
-            basic_block = self.basic_blocks[self.control_state.basic_block[0]]
-            dfs(self.basic_blocks, self.structs, basic_block, stack,
-                0, visited, getmap, putmap, stepmap)
-            generate_parse_body(self.basic_blocks, self.structs,
-                                serializer, basic_block, [],
-                                getmap, putmap, stepmap)
-            serializer.append(generate_parse_epilog(visited, putmap))
+            self.generate_parser(serializer, json)
         elif self.name == 'deparser':
-            basic_block = self.basic_blocks[self.control_state.basic_block[0]]
-            generate_deparse_body(self.basic_blocks, basic_block, stack, visited)
+            self.generate_deparser(serializer, json)
         else:
             print 'xxx', self.name, self.control_state
-            # build_json
             serializer.append(generate_control_flow(self))
             #self.next_processor.bsvgen()
 
