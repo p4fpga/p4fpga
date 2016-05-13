@@ -61,6 +61,8 @@ run:
 bitgen: codegen
 	make build.nfsume
 
+clean:
+	rm *.yml *.json
 ###########################################
 # Default Rules
 ###########################################

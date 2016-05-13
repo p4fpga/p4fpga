@@ -19,3 +19,6 @@ p4:
 
 clean:
 	rm *.pyc
+
+doc:
+	doxygen Doxyfile

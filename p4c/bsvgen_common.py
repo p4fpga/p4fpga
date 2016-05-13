@@ -26,6 +26,19 @@ def CamelCase(name):
     output = ''.join(x for x in name.title() if x.isalnum())
     return output
 
+IMPORT_TEMPLATE = '''
+%(imports)s
+'''
+def generate_import_statements():
+    ''' TODO '''
+    pmap = {}
+    import_modules = ["Connectable", "DefaultValue", "FIFO", "FIFOF", "FShow",
+                      "GetPut", "List", "StmtFSM", "SpecialFIFOs", "Vector",
+                      "Ethernet", "ClientServer", "DbgDefs", "PacketBuffer", 
+                      "Pipe", "MatchTable", "MatchTableSim", "Utils"]
+    pmap['imports'] = "\n".join(["import {}::*;".format(x) for x in sorted(import_modules)])
+    return IMPORT_TEMPLATE % (pmap)
+
 
 TYPEDEF_TEMPLATE = '''
 typedef struct {
@@ -34,6 +47,9 @@ typedef struct {
 
 instance DefaultValue#(%(name)s);
   defaultValue = unpack(0);
+endinstance
+instance DefaultMask#(%(name)s);
+  defaultMask = unpack(maxBound);
 endinstance
 
 instance FShow#(%(name)s);
@@ -83,22 +99,10 @@ def generate_typedef(struct):
             'pack': '\n'.join(pack)}
     return TYPEDEF_TEMPLATE % (pmap)
 
-PARSE_PROLOG_TEMPLATE = '''
-%(imports)s
-'''
-def generate_parse_prolog():
-    ''' TODO '''
-    pmap = {}
-    import_modules = ["Connectable", "DefaultValue", "FIFO", "FIFOF", "FShow",
-                      "GetPut", "List", "StmtFSM", "SpecicalFIFOs", "Vector",
-                      "Ethernet"]
-    pmap['imports'] = "\n".join(["import {}::*;".format(x) for x in import_modules])
-    return PARSE_PROLOG_TEMPLATE % (pmap)
-
 COMPUTE_NEXT_STATE = '''
   function ParserState compute_next_state(Bit#(%(width)s) v);
     ParserState nextState = StateStart;
-    case (v) matches
+    case (byteSwap(v)) matches
 %(cases)s
       default: begin
         nextState = StateStart;
@@ -115,7 +119,7 @@ def func_comp_next_state(structmap, node):
     bbcase = [x for x in node.control_state.basic_block if type(x) is not str]
     if len(bbcase) == 0:
         return ""
-    pmap['cases'] = "\n".join([tcase.format(str.split(x[0], '==')[1].strip(),
+    pmap['cases'] = "\n".join([tcase.format(str.split(x[0], '==')[1].strip().replace("0x", "'h"),
                                             CamelCase(x[1])) for x in bbcase])
     field = str.split(bbcase[0][0], '==')[0].strip()
     width = fmap[field]
@@ -190,7 +194,7 @@ def gen_parse_stmt(node, stepmap, getmap, putmap):
         smap = reset_smap()
         if name in putmap:
             for cname, clen in putmap[name].items():
-                smap['carry_in'] = carry_in.format('unparsed_'+cname)
+                smap['carry_in'] = carry_in.format('unparsed_'+cname+'_fifo')
             smap['concat'] = concat.format(step, ", data_last_cycle")
             smap['internal'] = internal.format(step)
         if len(stepmap[name]) == 1:
@@ -212,7 +216,7 @@ def gen_parse_stmt(node, stepmap, getmap, putmap):
         smap['carry_in'] = carry_in.format('internal_fifo_{}'.format(stepmap[name][-2]))
         smap['concat'] = concat.format(step, ', data_last_cycle')
         smap['unpack'] = unpack.format(step)
-        smap['extract'] = extract.format(name)
+        smap['extract'] = extract.format(CamelCase(header))
         smap['carry_out'] = carry_out.format(0, 0)
         smap['next_state'] = apply_comp_next_state(node, getmap)
         source.append(STEP_TEMPLATE % smap)
@@ -477,7 +481,7 @@ endinterface
 
 module mk%(name)s#(Vector#(numClients, MetadataClient) mdc)(%(name)s);
   let verbose = True;
-  FIFOF#(PacketInstance) currPacketFifo <- mkFIFOF;
+  FIFOF#(MetadataRequest) currPacketFifo <- mkFIFOF;
   FIFO#(MetadataRequest) defaultReqFifo <- mkFIFO;
   FIFO#(MetadataResponse) defaultRespFifo <- mkFIFO;
   Vector#(numClients, MetadataServer) mds = newVector;

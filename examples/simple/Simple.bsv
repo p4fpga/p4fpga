@@ -22,22 +22,22 @@
 
 import ClientServer::*;
 import Connectable::*;
-import DefaultValue::*;
 import DbgDefs::*;
+import DefaultValue::*;
 import Ethernet::*;
 import FIFO::*;
 import FIFOF::*;
 import FShow::*;
 import GetPut::*;
 import List::*;
-import PacketBuffer::*;
-import Pipe::*;
-import StmtFSM::*;
-import SpecialFIFOs::*;
-import Vector::*;
 import MatchTable::*;
 import MatchTableSim::*;
+import PacketBuffer::*;
+import Pipe::*;
+import SpecialFIFOs::*;
+import StmtFSM::*;
 import Utils::*;
+import Vector::*;
 
 typedef struct {
   Bit#(1) hit;
@@ -49,7 +49,7 @@ instance DefaultValue#(RoutingRespT);
   defaultValue = unpack(0);
 endinstance
 instance DefaultMask#(RoutingRespT);
-defaultMask= unpack(maxBound);
+  defaultMask= unpack(maxBound);
 endinstance
 
 instance FShow#(RoutingRespT);
@@ -143,6 +143,10 @@ typedef struct {
 instance DefaultValue#(RoutingReqT);
   defaultValue = unpack(0);
 endinstance
+instance DefaultMask#(RoutingReqT);
+  defaultMask = unpack(maxBound);
+endinstance
+
 
 instance FShow#(RoutingReqT);
   function Fmt fshow(RoutingReqT p);
@@ -171,6 +175,9 @@ typedef struct {
 
 instance DefaultValue#(StandardMetadata);
   defaultValue = unpack(0);
+endinstance
+instance DefaultMask#(StandardMetadata);
+  defaultMask = unpack(maxBound);
 endinstance
 
 instance FShow#(StandardMetadata);
@@ -220,7 +227,7 @@ instance DefaultValue#(Ipv4T);
   defaultValue = unpack(0);
 endinstance
 instance DefaultMask#(Ipv4T);
-defaultMask= unpack(maxBound);
+  defaultMask= unpack(maxBound);
 endinstance
 
 instance FShow#(Ipv4T);
@@ -269,7 +276,7 @@ instance DefaultValue#(EthernetT);
   defaultValue = unpack(0);
 endinstance
 instance DefaultMask#(EthernetT);
-defaultMask= unpack(maxBound);
+  defaultMask= unpack(maxBound);
 endinstance
 
 instance FShow#(EthernetT);
@@ -297,6 +304,9 @@ typedef struct {
 
 instance DefaultValue#(MetaT);
   defaultValue = unpack(0);
+endinstance
+instance DefaultMask#(MetaT);
+  defaultMask = unpack(maxBound);
 endinstance
 
 instance FShow#(MetaT);
@@ -494,9 +504,9 @@ module mkStateParseEthernet#(Reg#(ParserState) state, FIFOF#(EtherData) datain)(
     let data_this_cycle = packet_in_wire;
     Vector#(128, Bit#(1)) dataVec = unpack(data_this_cycle);
     let hdr = extract_EthernetT(pack(takeAt(0, dataVec)));
+    $display(fshow(hdr));
     Vector#(16, Bit#(1)) unparsed = takeAt(0, dataVec);
     let nextState = compute_next_state(hdr.etherType);
-    $display("(%0d) ethernetType %x", $time, hdr.etherType);
     if (verbose) $display("Goto state ", nextState);
     if (nextState == StateParseIpv4) begin
       unparsed_parse_ipv4_fifo.enq(pack(unparsed));
@@ -530,7 +540,7 @@ interface ParseIpv4;
   method Action stop;
 endinterface
 module mkStateParseIpv4#(Reg#(ParserState) state, FIFOF#(EtherData) datain, FIFOF#(ParserState) parseStateFifo)(ParseIpv4);
-  let verbose = True;
+  let verbose = False;
   FIFOF#(Bit#(16)) unparsed_parse_ethernet_fifo <- mkBypassFIFOF;
 
   FIFOF#(Bit#(8)) parsed_ipv4_protocol_fifo <- mkFIFOF;
@@ -566,7 +576,6 @@ module mkStateParseIpv4#(Reg#(ParserState) state, FIFOF#(EtherData) datain, FIFO
     let data_last_cycle <- toGet(unparsed_parse_ethernet_fifo).get;
     Bit#(144) data = {data_this_cycle, data_last_cycle};
     internal_fifo_144.enq(data);
-    $display("(%0d) parseipv4 %x", $time, data);
   endaction
   action
     let data_this_cycle = packet_in_wire;
@@ -574,7 +583,7 @@ module mkStateParseIpv4#(Reg#(ParserState) state, FIFOF#(EtherData) datain, FIFO
     Bit#(272) data = {data_this_cycle, data_last_cycle};
     Vector#(272, Bit#(1)) dataVec = unpack(data);
     let hdr = extract_Ipv4T(pack(takeAt(0, dataVec)));
-    $display("(%0d) parseIpv4 ", $time, fshow(hdr));
+    $display(fshow(hdr));
     parseStateFifo.enq(StateParseIpv4);
     parsed_ipv4_protocol_fifo.enq(hdr.protocol);
     next_state_wire[0] <= tagged Valid StateStart;
@@ -641,7 +650,6 @@ module mkParser(Parser);
 
   rule clear if (!start_fsm && curr_state == StateStart);
     if (started) begin
-      $display("(%0d) stop parser", $time);
       parse_ipv4.stop;
       parse_ethernet.stop;
       started <= False;

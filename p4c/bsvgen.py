@@ -22,6 +22,7 @@ from bsvgen_control_flow import BSVControlFlow
 from bsvgen_basic_block import BSVBasicBlock
 from bsvgen_struct import BSVBIRStruct
 from bsvgen_table import BSVTable
+from bsvgen_common import generate_import_statements
 from programSerializer import ProgramSerializer
 
 verbose = False
@@ -157,6 +158,7 @@ class BirInstance(MetaIRInstance):
     def generatebsv(self, serializer, noisyFlag, jsondata):
         # jsondata with datatype
         ''' TODO '''
+        serializer.append(generate_import_statements())
         for item in self.bir_structs.values():
             item.bsvgen(serializer)
         for item in self.bir_tables.values():
