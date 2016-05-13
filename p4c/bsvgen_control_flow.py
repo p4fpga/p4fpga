@@ -52,9 +52,7 @@ def dfs(bbmap, structmap, node, stack, prev_bits, visited, getmap, putmap, parse
 
 def generate_parse_body(bbmap, structmap, serializer, node, stack, getmap, putmap,
                         stepmap, visited=None):
-    '''
-    TODO
-    '''
+    ''' walk parser tree '''
     if not visited:
         visited = set()
     visited.add(node.name)
@@ -67,6 +65,18 @@ def generate_parse_body(bbmap, structmap, serializer, node, stack, getmap, putma
         if next_header not in visited:
             generate_parse_body(bbmap, structmap, serializer, bbmap[block[1]],
                                 stack, getmap, putmap, stepmap, visited)
+    stack.pop()
+
+def generate_deparse_body(bbmap, node, stack, visited=None):
+    ''' walk deparser tree '''
+    if not visited:
+        visited = set()
+    visited.add(node.name)
+    stack.append(node.name)
+    for block in node.control_state.basic_block:
+        if type(block) == str:
+            continue
+        generate_deparse_body(bbmap, bbmap[block[1]], stack, visited)
     stack.pop()
 
 class BSVControlFlow(ControlFlow):
@@ -100,7 +110,8 @@ class BSVControlFlow(ControlFlow):
                                 getmap, putmap, stepmap)
             serializer.append(generate_parse_epilog(visited, putmap))
         elif self.name == 'deparser':
-            print "TODO"
+            basic_block = self.basic_blocks[self.control_state.basic_block[0]]
+            generate_deparse_body(self.basic_blocks, basic_block, stack, visited)
         else:
             print 'xxx', self.name, self.control_state
             # build_json
