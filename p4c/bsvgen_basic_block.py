@@ -53,8 +53,6 @@ class BSVBasicBlock(BasicBlock):
         ''' jsondata for deparse state '''
         d = DotMap()
         d.name = CamelCase(self.name)
-        d.intf_put = []
-        d.intf_get = []
         d.data_in_fifo = []
         d.data_out_fifo = []
         d.compute_next_state = []
@@ -67,8 +65,6 @@ class BSVBasicBlock(BasicBlock):
         ''' jsondata for parse state '''
         p = DotMap()
         p.name = CamelCase(self.name)
-        p.intf_put = []
-        p.intf_get = []
         p.unparsed_in_fifo = []
         p.unparsed_out_fifo = []
         p.internal_fifo = []

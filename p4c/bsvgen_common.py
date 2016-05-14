@@ -149,7 +149,7 @@ NEXT_STATE_TEMPLATE = '''\
     if (verbose) $display("Goto state ", nextState);
 %(ifnext)s
     next_state_wire[0] <= tagged Valid nextState;'''
-def apply_comp_next_state(node, getmap):
+def apply_comp_next_state(node, intf_get):
     ''' TODO '''
     smap = {}
     name = node.name
@@ -159,8 +159,8 @@ def apply_comp_next_state(node, getmap):
     field = str.split(bbcase[0][0], '==')[0].strip()
     smap['field'] = field
     source = []
-    if name in getmap:
-        for state in getmap[name]:
+    if name in intf_get:
+        for state in intf_get[name]:
             source.append(IF_NEXT_STATE_TEMPLATE % {'next_state': CamelCase(state),
                                                     'parse_state': state})
     smap['ifnext'] = "\n".join(source)
@@ -179,7 +179,7 @@ def reset_smap():
     smap['carry_out'] = ""
     smap['next_state'] = ""
     return smap
-def gen_parse_stmt(node, parse_step, getmap, putmap):
+def gen_parse_stmt(node, json):
     pmap = {}
     name = node.name
     header = node.local_header.name
@@ -191,35 +191,36 @@ def gen_parse_stmt(node, parse_step, getmap, putmap):
     unpack = '    Vector#({}, Bit#(1)) dataVec = unpack(data);\n'
     extract = '    let hdr = extract_{}(pack(takeAt(0, dataVec)));\n    $display(fshow(hdr));\n'
     carry_out = '    Vector#({}, Bit#(1)) unparsed = takeAt({}, dataVec);\n'
-    for index, step in enumerate([parse_step[name][0]]):
+    print 'xxx', json.parser[name].parse_step
+    for index, step in enumerate(json.parser[name].parse_step):
         smap = reset_smap()
-        if name in putmap:
-            for cname, clen in putmap[name].items():
+        if name in json.parser[name].intf_put:
+            for cname, clen in json.parser[name].intf_put.items():
                 smap['carry_in'] = carry_in.format('unparsed_'+cname+'_fifo')
             smap['concat'] = concat.format(step, ", data_last_cycle")
             smap['internal'] = internal.format(step)
-        if len(parse_step[name]) == 1:
+        if len(json.parser[name].parse_step) == 1:
             smap['unpack'] = unpack.format(step)
             smap['extract'] = extract.format(CamelCase(header))
-            carry_out_width = getmap[name].items()[0][1]
+            carry_out_width = json.parser[name].intf_get.items()[0][1]
             smap['carry_out'] = carry_out.format(carry_out_width, 0)
-            smap['next_state'] = apply_comp_next_state(node, getmap)
+            smap['next_state'] = apply_comp_next_state(node, json.parser[name].intf_get)
         source.append(STEP_TEMPLATE % smap)
-    for index, step in enumerate(parse_step[name][1:-1]):
+    for index, step in enumerate(json.parser[name].parse_step[1:-1]):
         smap = reset_smap()
-        smap['carry_in'] = carry_in.format('internal_fifo_{}'.format(parse_step[name][index]))
+        smap['carry_in'] = carry_in.format('internal_fifo_{}'.format(json.parser[name].parse_step[index]))
         smap['concat'] = concat.format(step, ', data_last_cycle')
         smap['internal'] = internal.format(step)
         source.append(STEP_TEMPLATE % smap)
-    last_step = (x for x in [parse_step[name][-1]] if len(parse_step[name]) > 1)
+    last_step = (x for x in [json.parser[name].parse_step[-1]] if len(json.parser[name].parse_step) > 1)
     for step in last_step:
         smap = reset_smap()
-        smap['carry_in'] = carry_in.format('internal_fifo_{}'.format(parse_step[name][-2]))
+        smap['carry_in'] = carry_in.format('internal_fifo_{}'.format(json.parser[name].parse_step[-2]))
         smap['concat'] = concat.format(step, ', data_last_cycle')
         smap['unpack'] = unpack.format(step)
         smap['extract'] = extract.format(CamelCase(header))
         smap['carry_out'] = carry_out.format(0, 0)
-        smap['next_state'] = apply_comp_next_state(node, getmap)
+        smap['next_state'] = apply_comp_next_state(node, json.parser[name].intf_get)
         source.append(STEP_TEMPLATE % smap)
     pmap['parse_step'] = "\n".join(source)
     return FSM_TEMPLATE % pmap
@@ -311,11 +312,11 @@ def generate_parse_state(node, structmap, json):
     pmap['name'] = CamelCase(node.name)
 
     tput = "  interface Put#(Bit#({})) {};"
-    tputmap = json.putmap[node.name] if node.name in json.putmap else {}
+    tputmap = json.parser[node.name].intf_put# if json.parser[node.name].putmap else {}
     pmap['intf_put'] = "\n".join([tput.format(v, x) for x, v in tputmap.items()])
 
     tget = "  interface Get#(Bit#({})) {};"
-    tgetmap = json.getmap[node.name] if node.name in json.getmap else {}
+    tgetmap = json.parser[node.name].intf_get# if json.parser[node.name].getmap else {}
     pmap['intf_get'] = "\n".join([tget.format(v, x) for x, v in tgetmap.items()])
 
     tfifo_in = "  FIFOF#(Bit#({})) unparsed_{}_fifo <- mkBypassFIFOF;"
@@ -325,8 +326,7 @@ def generate_parse_state(node, structmap, json):
 
     # internal fifos
     tinternal = '  FIFOF#(Bit#({})) internal_fifo_{} <- mkSizedFIFOF(1);'
-    print 'xxx', json.parse_step
-    pmap['internal_fifo'] = "\n".join([tinternal.format(x, x) for x in json.parse_step[node.name][:-1]])
+    pmap['internal_fifo'] = "\n".join([tinternal.format(x, x) for x in json.parser[node.name].parse_step[:-1]])
 
     # only if output is required
     tout = "  FIFOF#(Bit#({})) parsed_{}_fifo <- mkFIFOF;"
@@ -336,7 +336,7 @@ def generate_parse_state(node, structmap, json):
     # next state
     pmap['n'] = 4
     pmap['compute_next_state'] = func_comp_next_state(structmap, node)
-    pmap['stmt'] = gen_parse_stmt(node, json.parse_step, json.getmap, json.putmap)
+    pmap['stmt'] = gen_parse_stmt(node, json)
     tunparse = "  interface {} = toGet(unparsed_{}_fifo);"
     pmap['intf_unparsed'] = "\n".join([tunparse.format(x, x) for x in tgetmap])
     pmap['intf_parsed_out'] = ""
@@ -391,7 +391,7 @@ module mkParser(Parser);
   interface meta = toGet(metadata_out_fifo);
 endmodule
 '''
-def generate_parse_epilog(states, putmap):
+def generate_parse_epilog(states, json):
     ''' TODO '''
     pmap = {}
     tstates = '  {} {} <- mkState{}(curr_state, data_in_fifo);'
@@ -399,8 +399,8 @@ def generate_parse_epilog(states, putmap):
                                 for x in states])
     tconn = '  mkConnection({a}.{b}, {b}.{a});'
     conn = []
-    for start, endp in putmap.items():
-        for end, _ in endp.items():
+    for start, item in json.parser.items():
+        for end, _ in item.intf_put.items():
             conn.append(tconn.format(a=start, b=end))
     pmap['connections'] = "\n".join(conn)
     tstart = '      {}.start;'

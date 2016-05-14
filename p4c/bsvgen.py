@@ -114,7 +114,6 @@ class BirInstance(MetaIRInstance):
 
     def serialize_json(self):
         global verbose
-        jfile = open(tempFilename, 'w')
         toplevel = DotMap()
 
         for item in self.bir_tables.values():
@@ -131,6 +130,11 @@ class BirInstance(MetaIRInstance):
             if key.startswith('bb_'):
                 toplevel.basicblock[key] = item.serialize_json_basicblock()
 
+        return toplevel
+
+    def dump_json(self, toplevel):
+        ''' dump json configuration '''
+        jfile = open(tempFilename, 'w')
         try:
             print json.dump(toplevel, jfile, sort_keys=False, indent=4)
             jfile.close()
@@ -138,8 +142,6 @@ class BirInstance(MetaIRInstance):
             toplevelnew = json.loads(j2file)
         except TypeError as e:
             print 'Unabled to encode json file: {0} {1}'.format(tempFilename, e)
-
-        return toplevel
 
     def generatebsv(self, serializer, noisyFlag, jsondata):
         # jsondata with datatype
@@ -173,6 +175,9 @@ def main():
     jsondata = bir.serialize_json()
     noisyFlag = os.environ.get('D') == '1'
     bir.generatebsv(serializer, noisyFlag, jsondata)
+
+    if options.yaml:
+        bir.dump_json(jsondata)
 
     if os.path.dirname(options.output) and \
         not os.path.exists(os.path.dirname(options.output)):
