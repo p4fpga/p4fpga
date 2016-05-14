@@ -112,19 +112,21 @@ COMPUTE_NEXT_STATE = '''
     return nextState;
   endfunction
 '''
-def func_comp_next_state(structmap, node):
-    ''' TODO '''
-    pmap = {}
-    fmap = structmap[node.local_header.name].fields
+def expand_next_state(json):
+    ''' cases, width '''
+    def process(tpl):
+        cond = str.split(tpl[0], '==')
+        value = cond[1].strip().replace("0x", "'h")
+        state = CamelCase(tpl[1])
+        return (value, state)
+
+    if not json.has_key('compute_next_state'):
+        return '' #empty line
     tcase = "      {}: begin\n        nextState = State{};\n      end"
-    bbcase = [x for x in node.control_state.basic_block if type(x) is not str]
-    if len(bbcase) == 0:
-        return ""
-    pmap['cases'] = "\n".join([tcase.format(str.split(x[0], '==')[1].strip().replace("0x", "'h"),
-                                            CamelCase(x[1])) for x in bbcase])
-    field = str.split(bbcase[0][0], '==')[0].strip()
-    width = fmap[field]
-    pmap['width'] = width
+    pmap = {}
+    # NOTE: *tuple to unpack tuple
+    pmap['cases'] = "\n".join([tcase.format(*process(x)) for x in json.compute_next_state.cases])
+    pmap['width'] = json.compute_next_state.width
     return COMPUTE_NEXT_STATE % pmap
 
 FSM_TEMPLATE = '''
@@ -180,6 +182,7 @@ def reset_smap():
     smap['next_state'] = ""
     return smap
 def gen_parse_stmt(node, json):
+    ''' expand parser state machine into bluespec '''
     pmap = {}
     name = node.name
     header = node.local_header.name
@@ -296,27 +299,25 @@ module mkState%(name)s#(Reg#(ParserState) state, FIFOF#(EtherData) datain)(%(nam
     packet_in_wire <= data_current.data;
   endrule
 %(stmt)s
-  method Action start();
-    start_wire.send();
-  endmethod
-  method Action stop();
-    clear_wire.send();
-  endmethod
+  method start = start_wire.send;
+  method stop = clear_wire.send;
 %(intf_unparsed)s
 %(intf_parsed_out)s
 endmodule
 '''
 def generate_parse_state(node, structmap, json):
-    ''' generate one parse state '''
+    ''' expand json configuration into bluespec
+    TODO: break down to smaller pieces
+    '''
     pmap = {}
     pmap['name'] = CamelCase(node.name)
 
     tput = "  interface Put#(Bit#({})) {};"
-    tputmap = json.parser[node.name].intf_put# if json.parser[node.name].putmap else {}
+    tputmap = json.parser[node.name].intf_put
     pmap['intf_put'] = "\n".join([tput.format(v, x) for x, v in tputmap.items()])
 
     tget = "  interface Get#(Bit#({})) {};"
-    tgetmap = json.parser[node.name].intf_get# if json.parser[node.name].getmap else {}
+    tgetmap = json.parser[node.name].intf_get
     pmap['intf_get'] = "\n".join([tget.format(v, x) for x, v in tgetmap.items()])
 
     tfifo_in = "  FIFOF#(Bit#({})) unparsed_{}_fifo <- mkBypassFIFOF;"
@@ -335,7 +336,7 @@ def generate_parse_state(node, structmap, json):
 
     # next state
     pmap['n'] = 4
-    pmap['compute_next_state'] = func_comp_next_state(structmap, node)
+    pmap['compute_next_state'] = expand_next_state(json.parser[node.name])
     pmap['stmt'] = gen_parse_stmt(node, json)
     tunparse = "  interface {} = toGet(unparsed_{}_fifo);"
     pmap['intf_unparsed'] = "\n".join([tunparse.format(x, x) for x in tgetmap])
@@ -409,6 +410,95 @@ def generate_parse_epilog(states, json):
     pmap['stop_states'] = "\n".join([tstop.format(x) for x in states])
     return PARSE_EPILOG_TEMPLATE % (pmap)
 
+#FIXME: need to encapsulate to deparser
+
+def apply(temp, json):
+    return [temp.format(v, x) for x, v in json.items()]
+
+def expand_intf_put(json):
+    tput = "interface Put#(Bit#({})) {};"
+    return "\n".join(apply(tput, json))
+
+def expand_intf_get(json):
+    tget = "interface Get#(Bit#({})) {};"
+    return "\n".join(apply(tget, json))
+
+def expand_data_in(json):
+    tdin = "FIFOF#(Bit#({})) last_{}_fifo <- mkBypassFIFOF;"
+    return "\n".join(apply(tdin, json))
+
+def expand_data_out(json):
+    tdout = "FIFO#(EtherData) next_{}_fifo <- mkFIFO;"
+    return "\n".join(apply(tdout, json))
+
+def expand_let_meta(json):
+    temp = "let meta = {}.first;"
+    return "\n".join(apply(temp, json))
+
+def expand_let_mask(json):
+    temp = "let mask = {}.first;"
+    return "\n".join(apply(temp, json))
+
+def expand_unpack(json):
+    temp = "{} {} = unpack(pack(hdr));"
+    return "\n".join(apply(temp, json))
+
+def expand_pack(json):
+    temp = "data_this_cycle.data = {{}};"
+    return "\n".join(apply(temp, json))
+
+def expand_modify(json):
+    temp = ""
+    return "\n".join(apply(temp, json))
+
+def expand_next_state(json):
+    temp = ""
+    return "\n".join(apply(temp, json))
+
+def expand_fifo_dequeue(json):
+    temp = "{}.deq;"
+    return "\n".join(apply(temp, json))
+
+DEPARSE_STEP='''\
+  action
+    let data_this_cycle = packet_in_wire;
+%(meta)s
+%(mask)s
+%(unpack)s
+%(modify)s
+%(pack)s
+%(next_state)s
+    state <= nextState;
+%(dequeue)s
+  endaction
+'''
+def expand_deparse_step(json):
+    pmap = {}
+    pmap['meta'] = expand_let_meta(json)
+    pmap['mask'] = expand_let_mask(json)
+    pmap['unpack'] = expand_unpack(json)
+    pmap['pack'] = expand_pack(json)
+    pmap['modify'] = expand_modify(json)
+    pmap['next_state'] = expand_next_state(json)
+    pmap['dequeue'] = expand_fifo_dequeue(json)
+    return DEPARSE_STEP % pmap
+
+DEPARSE_STMT='''\
+  Stmt stmt_%(name)s =
+  seq
+%(parse_step)s
+  endseq;
+'''
+def expand_statement(json):
+    pmap = {}
+    pmap['name'] = json.name
+    for x in json.deparse_step:
+        print 'xxx', x
+    #FIXME: improve deparse_step
+    #pmap['parse_step'] = "\n".join([expand_deparse_step(x) for x in json.deparse_step])
+    pmap['parse_step'] = ""
+    return DEPARSE_STMT % pmap
+
 DEPARSE_STATE_TEMPLATE= '''
 interface %(name)s;
 %(intf_put)s
@@ -445,7 +535,17 @@ endmodule
 def generate_deparse_state(serializer, json):
     ''' generate one deparse state '''
     assert isinstance(json, DotMap)
-    serializer.append(DEPARSE_STATE_TEMPLATE % (json))
+    pmap = {}
+    pmap['name'] = json.name
+    pmap['intf_put'] = expand_intf_put(json.intf_put)
+    pmap['intf_get'] = expand_intf_get(json.intf_get)
+    pmap['data_in_fifo'] = expand_data_in(json.data_in_fifo)
+    pmap['data_out_fifo'] = expand_data_out(json.data_out_fifo)
+    pmap['compute_next_state'] = expand_next_state(json)
+    pmap['statement'] = expand_statement(json)
+    pmap['intf_data_out'] = ""
+    pmap['intf_ctrl_out'] = ""
+    serializer.append(DEPARSE_STATE_TEMPLATE % pmap)
 
 DEPARSE_TOP_TEMPLATE = '''
 interface Deparser;

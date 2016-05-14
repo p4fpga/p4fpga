@@ -11,8 +11,23 @@ from bsvgen_common import generate_parse_epilog,\
                           generate_deparse_state, generate_deparse_top
 import pprint
 
+
+def json_parser_compute_next_state(structmap, node, json):
+    ''' populate json with next state info '''
+    fmap = structmap[node.local_header.name].fields
+    bbcase = [x for x in node.control_state.basic_block if type(x) is not str]
+    print bbcase
+    if len(bbcase) == 0:
+        return
+    print 'init'
+    json.parser[node.name].compute_next_state['cases'] = bbcase
+    field = str.split(bbcase[0][0], '==')[0].strip()
+    width = fmap[field]
+    json.parser[node.name].compute_next_state['width'] = width
+
 def parse_dfs(bbmap, structmap, node, stack, prev_bits, visited, json):
     '''
+    should run during json_serialize stage.
     DFS to fill codegen data struct
     walk parse tree to collect required info for bsv
     '''
@@ -24,6 +39,8 @@ def parse_dfs(bbmap, structmap, node, stack, prev_bits, visited, json):
 
     header = node.local_header.name
     width = sum([x for _, x in structmap[header].fields.items()])
+
+    json_parser_compute_next_state(structmap, node, json)
 
     if not json.parser[node.name].parse_step:
         json.parser[node.name].parse_step = []
@@ -62,8 +79,20 @@ def generate_parse_body(serializer, json, bbmap, structmap, node, stack, visited
             generate_parse_body(serializer, json, bbmap, structmap, bbmap[block[1]], stack, visited)
     stack.pop()
 
+def json_deparser_compute_next_state(structmap, node, json):
+    ''' populate json with next state info '''
+    fmap = structmap[node.local_header.name].fields
+    bbcase = [x for x in node.control_state.basic_block if type(x) is not str]
+    if len(bbcase) == 0:
+        return
+    json.deparser[node.name].compute_next_state['cases'] = bbcase
+    field = str.split(bbcase[0][0], '==')[0].strip()
+    width = fmap[field]
+    json.deparser[node.name].compute_next_state['width'] = width
+
 def deparse_dfs(bbmap, structmap, node, stack, prev_bits, visited, json):
     '''
+    should run during serialize_json stage.
     DFS to fill codegen data struct
     walk parse tree to collect required info for bsv
     '''
@@ -78,6 +107,8 @@ def deparse_dfs(bbmap, structmap, node, stack, prev_bits, visited, json):
 
     header = node.local_header.name
     width = sum([x for _, x in structmap[header].fields.items()])
+
+    json_deparser_compute_next_state(structmap, node, json)
 
     while curr_bits < width:
         curr_bits += 128
@@ -115,22 +146,23 @@ def generate_deparse_body(serializer, json, bbmap, node, stack, visited=None):
 class BSVControlFlow(ControlFlow):
     ''' TODO '''
     def __init__(self, name, control_flow_attrs, basic_blocks, structs, bir_parser):
-        super(BSVControlFlow, self).__init__(name, control_flow_attrs,
-                                             basic_blocks, bir_parser)
+        super(BSVControlFlow, self).__init__(name, control_flow_attrs, basic_blocks, bir_parser)
         cf = control_flow_attrs['start_control_state']
         check_control_state(self.name, cf)
         self.control_state = BSVControlState(cf, None, bir_parser)
         self.structs = structs
 
     def generate_deparser(self, serializer, json):
+        ''' TODO: move dfs to serialize '''
         stack = []
         visited = set()
         start_block = self.basic_blocks[self.control_state.basic_block[0]]
         deparse_dfs(self.basic_blocks, self.structs, start_block, stack, 0, visited, json)
-        generate_deparse_body(serializer, json, self.basic_blocks, start_block, stack, visited)
+        generate_deparse_body(serializer, json, self.basic_blocks, start_block, [], set())
         serializer.append(generate_deparse_top())
 
     def generate_parser(self, serializer, json):
+        ''' TODO: move dfs to serialize '''
         stack = []
         visited = set()
         start_block = self.basic_blocks[self.control_state.basic_block[0]]

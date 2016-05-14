@@ -53,23 +53,18 @@ class BSVBasicBlock(BasicBlock):
         ''' jsondata for deparse state '''
         d = DotMap()
         d.name = CamelCase(self.name)
-        d.data_in_fifo = []
-        d.data_out_fifo = []
-        d.compute_next_state = []
         d.intf_data_out = []
         d.intf_ctrl_out = []
-        d.statement = []
         return d
 
     def serialize_json_parse(self):
         ''' jsondata for parse state '''
         p = DotMap()
         p.name = CamelCase(self.name)
-        p.unparsed_in_fifo = []
-        p.unparsed_out_fifo = []
-        p.internal_fifo = []
+        p.interface = []
+        p.interface.append('method Action start;')
+        p.interface.append('method Action stop;')
         p.parsed_out_fifo = []
-        p.compute_next_state = []
         p.stmt = []
         p.intf_data_out = []
         p.intf_ctrl_out = []

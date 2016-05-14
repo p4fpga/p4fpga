@@ -523,12 +523,8 @@ module mkStateParseEthernet#(Reg#(ParserState) state, FIFOF#(EtherData) datain)(
     fsm_parse_ethernet.abort;
   endrule
 
-  method Action start();
-    start_wire.send();
-  endmethod
-  method Action stop();
-    clear_wire.send();
-  endmethod
+  method start = start_wire.send;
+  method stop = clear_wire.send;
   interface parse_ipv4 = toGet(unparsed_parse_ipv4_fifo);
   interface parsedOut_ethernet_etherType = toGet(parsed_etherType_fifo);
 endmodule
@@ -597,12 +593,8 @@ module mkStateParseIpv4#(Reg#(ParserState) state, FIFOF#(EtherData) datain, FIFO
     fsm_parse_ipv4.abort;
   endrule
 
-  method Action start();
-    start_wire.send();
-  endmethod
-  method Action stop();
-    clear_wire.send();
-  endmethod
+  method start = start_wire.send;
+  method stop = clear_wire.send;
   interface parse_ethernet = toPut(unparsed_parse_ethernet_fifo);
   interface parsedOut_ipv4_protocol = toGet(parsed_ipv4_protocol_fifo);
 endmodule
@@ -743,9 +735,6 @@ module mkStateDeparseEthernet#(Reg#(DeparserState) state,
    function DeparserState compute_next_state(Bit#(16) etherType);
        DeparserState nextState = StateDeparseIdle;
        case (byteSwap(etherType)) matches
-           'h806: begin
-               nextState=StateDeparseArp;
-           end
            'h800: begin
                nextState=StateDeparseIpv4;
            end
