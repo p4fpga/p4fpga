@@ -47,6 +47,7 @@ class BSVBasicBlock(BasicBlock):
         d = DotMap()
         d.name = self.name
         d.headertype = self.local_header.name
+        d.compute_next_state.branch = []
         return d
 
     def serialize_json_parse(self):

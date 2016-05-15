@@ -12,6 +12,7 @@ from bsvgen_common import generate_parse_epilog,\
                           generate_deparse_state_enum, \
                           generate_deparse_state, generate_deparse_top, \
                           generate_deparse_idle
+from dotmap import DotMap
 import pprint
 
 
@@ -19,10 +20,8 @@ def json_parser_compute_next_state(structmap, node, json):
     ''' populate json with next state info '''
     fmap = structmap[node.local_header.name].fields
     bbcase = [x for x in node.control_state.basic_block if type(x) is not str]
-    print bbcase
     if len(bbcase) == 0:
         return
-    print 'init'
     json.parser[node.name].compute_next_state['cases'] = bbcase
     field = str.split(bbcase[0][0], '==')[0].strip()
     width = fmap[field]
@@ -88,12 +87,28 @@ def json_deparser_compute_next_state(structmap, node, json):
     bbcase = [x for x in node.control_state.basic_block if type(x) is not str]
     if len(bbcase) == 0:
         return
-    json.deparser[node.name].compute_next_state['cases'] = bbcase
     field = str.split(bbcase[0][0], '==')[0].strip()
+    value = str.split(bbcase[0][0], '==')[1].strip()
+    next_state = str.split(bbcase[0][1])[0].strip()
+    json.deparser[node.name].compute_next_state.field = field
+    branch_case = DotMap()
+    branch_case.value = value
+    branch_case.next_state = next_state
+    json.deparser[node.name].compute_next_state.branch.append(branch_case)
     width = fmap[field]
-    json.deparser[node.name].compute_next_state['width'] = width
+    json.deparser[node.name].compute_next_state.width = width
 
-def deparse_dfs(bbmap, structmap, node, stack, prev_bits, visited, json):
+def next_deparse_step(width, curr_bits):
+    if (width < 128):
+        deparse_bits = width
+    else:
+        if (curr_bits + 128 > width):
+            deparse_bits = width - curr_bits
+        else:
+            deparse_bits = 128
+    return deparse_bits
+
+def deparse_dfs(bbmap, structmap, node, stack, prev_bits, first_step, visited, json):
     '''
     should run during serialize_json stage.
     DFS to fill codegen data struct
@@ -102,21 +117,42 @@ def deparse_dfs(bbmap, structmap, node, stack, prev_bits, visited, json):
     visited.add(node.name)
     stack.append(node.name)
 
+    header = node.local_header.name
+    width = sum([x for _, x in structmap[header].fields.items()])
+    last_step = False
+
     curr_bits = prev_bits
     if not json.deparser[node.name].deparse_step:
         json.deparser[node.name].deparse_step = []
     if curr_bits != 0:
-        json.deparser[node.name].deparse_step.append(curr_bits)
-
-    header = node.local_header.name
-    width = sum([x for _, x in structmap[header].fields.items()])
+        deparse_step = DotMap()
+        deparse_step.extract_len = curr_bits
+        deparse_step.pkt_offset = 128 - curr_bits
+        deparse_step.meta_offset = 0
+        deparse_step.first_step = first_step
+        if first_step:
+            first_step = False
+        if (curr_bits + 128 > width or width < 128):
+            last_step = True
+        deparse_step.last_step = last_step
+        json.deparser[node.name].deparse_step.append(deparse_step)
 
     json_deparser_compute_next_state(structmap, node, json)
 
     while curr_bits < width:
+        deparse_bits = next_deparse_step(width, curr_bits)
+        deparse_step = DotMap()
+        deparse_step.extract_len = deparse_bits
+        deparse_step.pkt_offset = 0
+        deparse_step.meta_offset = curr_bits
+        deparse_step.first_step = first_step
+        if first_step:
+            first_step = False
+        if (curr_bits + 128 > width or width < 128):
+            last_step = True
+        deparse_step.last_step = last_step
+        json.deparser[node.name].deparse_step.append(deparse_step)
         curr_bits += 128
-        json.deparser[node.name].deparse_step.append(128) #FIXME
-        #print 'nnn', node.name, curr_bits, width
 
     for block in node.control_state.basic_block:
         if type(block) == str:
@@ -124,10 +160,10 @@ def deparse_dfs(bbmap, structmap, node, stack, prev_bits, visited, json):
         next_header = bbmap[block[1]].name
         if next_header not in visited:
             next_bits = curr_bits - width
-            #print 'next_bits', next_header, stack[-1], next_bits
+            print 'next_bits', next_header, stack[-1], next_bits
             json.deparser[next_header].intf_put[stack[-1]] = next_bits
             json.deparser[stack[-1]].intf_get[next_header] = next_bits
-            deparse_dfs(bbmap, structmap, bbmap[block[1]], stack, next_bits, visited, json)
+            deparse_dfs(bbmap, structmap, bbmap[block[1]], stack, next_bits, True, visited, json)
     stack.pop()
 
 def generate_deparse_body(serializer, json, bbmap, node, stack, visited=None):
@@ -160,7 +196,7 @@ class BSVControlFlow(ControlFlow):
         stack = []
         visited = set()
         start_block = self.basic_blocks[self.control_state.basic_block[0]]
-        deparse_dfs(self.basic_blocks, self.structs, start_block, stack, 0, visited, json)
+        deparse_dfs(self.basic_blocks, self.structs, start_block, stack, 0, True, visited, json)
         serializer.append(generate_deparse_state_enum(json))
         generate_deparse_idle(serializer)
         generate_deparse_body(serializer, json, self.basic_blocks, start_block, [], set())

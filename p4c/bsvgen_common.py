@@ -27,6 +27,32 @@ def CamelCase(name):
     output = ''.join(x for x in name.title() if x.isalnum())
     return output
 
+LICENSE ='''\
+// Copyright (c) 2016 Cornell University
+
+// Permission is hereby granted, free of charge, to any person
+// obtaining a copy of this software and associated documentation
+// files (the "Software"), to deal in the Software without
+// restriction, including without limitation the rights to use, copy,
+// modify, merge, publish, distribute, sublicense, and/or sell copies
+// of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+
+// The above copyright notice and this permission notice shall be
+// included in all copies or substantial portions of the Software.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+// BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+// ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+// CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+'''
+def generate_license(serializer):
+    serializer.append(LICENSE)
+
 IMPORT_TEMPLATE = '''
 %(imports)s
 '''
@@ -104,7 +130,7 @@ COMPUTE_NEXT_STATE = '''
   function %(state)s compute_next_state(Bit#(%(width)s) v);
     %(state)s nextState = %(init_state)s;
     case (byteSwap(v)) matches
-%(cases)s
+%(branch)s
       default: begin
         nextState = %(init_state)s;
       end
@@ -114,18 +140,19 @@ COMPUTE_NEXT_STATE = '''
 '''
 def expand_next_state(indent, state, json):
     ''' cases, width '''
-    def process(tpl):
-        cond = str.split(tpl[0], '==')
-        value = cond[1].strip().replace("0x", "'h")
-        state = CamelCase(tpl[1])
+    def process(branch):
+        value = branch.value.replace("0x", "'h")
+        state = CamelCase(branch.next_state)
+        print value, state
         return (value, state)
 
     if not json.has_key('compute_next_state'):
         return '' #empty line
+    if json.compute_next_state.branch == []:
+        return ""
     tcase = "      {}: begin\n        nextState = State{};\n      end"
     pmap = {}
-    # NOTE: *tuple to unpack tuple
-    pmap['cases'] = "\n".join([tcase.format(*process(x)) for x in json.compute_next_state.cases])
+    pmap['branch'] = "\n".join([tcase.format(*process(x)) for x in json.compute_next_state.branch])
     pmap['width'] = json.compute_next_state.width
     pmap['state'] = "ParserState" if (state == 'Parser') else "DeparserState"
     pmap['init_state'] = "StateParseStart" if (state == 'Parser') else "StateDeparseIdle"
@@ -159,7 +186,7 @@ def apply_comp_next_state(node, intf_get):
     name = node.name
     bbcase = [x for x in node.control_state.basic_block if type(x) is not str]
     if len(bbcase) == 0:
-        return "    next_state_wire[0] <= tagged Valid StateStart;"
+        return "    next_state_wire[0] <= tagged Valid StateParseStart;"
     field = str.split(bbcase[0][0], '==')[0].strip()
     smap['field'] = field
     source = []
@@ -278,8 +305,8 @@ def generate_parse_state_enum(json):
     return PARSE_STATE_ENUM % pmap
 
 PARSE_STATE_INIT='''\
-module mkStateStart#(Reg#(ParserState) state, FIFOF#(EtherData) datain, Wire#(Bool) start_fsm)(Empty);
-  rule load_packet if (state == StateStart);
+module mkStateParseStart#(Reg#(ParserState) state, FIFOF#(EtherData) datain, Wire#(Bool) start_fsm)(Empty);
+  rule load_packet if (state == StateParseStart);
     let v = datain.first;
     if (v.sop) begin
       state <= State%(init_state)s;
@@ -385,7 +412,7 @@ endinterface
 typedef 4 PortMax;
 (* synthesize *)
 module mkParser(Parser);
-  Reg#(ParserState) curr_state <- mkReg(StateStart);
+  Reg#(ParserState) curr_state <- mkReg(StateParseStart);
   Reg#(Bool) started <- mkReg(False);
   FIFOF#(EtherData) data_in_fifo <- mkFIFOF;
   Wire#(Bool) start_fsm <- mkDWire(False);
@@ -406,7 +433,7 @@ module mkParser(Parser);
     end
   endrule
 
-  Empty init_state <- mkStateStart(curr_state, data_in_fifo, start_fsm);
+  Empty init_state <- mkStateParseStart(curr_state, data_in_fifo, start_fsm);
 %(states)s
 %(connections)s
   rule start if (start_fsm);
@@ -416,7 +443,7 @@ module mkParser(Parser);
     end
   endrule
 
-  rule clear if (!start_fsm && curr_state == StateStart);
+  rule clear if (!start_fsm && curr_state == StateParseStart);
     if (started) begin
 %(stop_states)s
       started <= False;
@@ -461,60 +488,108 @@ def expand_intf_get(indent, json):
     return "\n".join([temp.format(x) for x, _ in json.items()])
 
 def expand_data_in(indent, json):
-    temp = spaces(indent) + "FIFO#(EtherData) {}_fifo <- mkFIFO;"
+    temp = spaces(indent) + "FIFOF#(EtherData) {}_fifo <- mkBypassFIFOF;"
     return "\n".join([temp.format(x) for x, _ in json.items()])
 
 def expand_data_out(indent, json):
     temp = spaces(indent) + "FIFO#(EtherData) {}_fifo <- mkFIFO;"
     return "\n".join([temp.format(x) for x, _ in json.items()])
 
-def expand_unpack(indent, json):
-    temp = spaces(indent) + "{} {} = unpack(pack(hdr));"
-    # EthernetT ethernet
-    return "\n".join([temp.format(x) for x in json])
+UNPACKED_DATA='''\
+Vector#({}, Bit#(1)) data = takeAt({}, unpack(data_this_cycle.data));\
+'''
+UNPACKED_UNUSED='''\
+Vector#({}, Bit#(1)) unused = takeAt({}, unpack(data_this_cycle.data));\
+'''
+UNPACKED_META='''\
+Vector#({}, Bit#(1)) curr_meta = takeAt({}, unpack(byteSwap(pack(meta_fifo.first))));\
+'''
+UNPACKED_MASK='''\
+Vector#({}, Bit#(1)) curr_mask = takeAt({}, unpack(byteSwap(pack(mask_fifo.first))));\
+'''
+def expand_unpack(indent, step, json):
+    temp = []
+    if step.first_step and step.pkt_offset:
+        temp.append(spaces(indent) + "let data_this_cycle <- toGet({}_fifo).get;".format(json.intf_put.keys()[0]))
+    else:
+        temp.append(spaces(indent) + "let data_this_cycle = packet_in_wire;")
 
-def expand_pack(indent, json):
-    temp = spaces(indent) + "data_this_cycle.data = {{}};"
-    return "\n".join(apply(temp, json))
+    if step.pkt_offset:
+        temp.append(spaces(indent) + UNPACKED_UNUSED.format(step.pkt_offset, 0))
+    else:
+        if step.last_step:
+            temp.append(spaces(indent) + UNPACKED_UNUSED.format(128 - step.extract_len, step.extract_len))
+
+    temp.append(spaces(indent) + UNPACKED_DATA.format(step.extract_len, step.pkt_offset))
+    temp.append(spaces(indent) + UNPACKED_META.format(step.extract_len, step.meta_offset))
+    temp.append(spaces(indent) + UNPACKED_MASK.format(step.extract_len, step.meta_offset))
+    return "\n".join(temp)
+
+def expand_pack(indent, step, json):
+    temp = []
+    if step.last_step:
+        temp.append(spaces(indent) + "{} {} = unpack(pack(masked_data));".format(CamelCase(json.headertype), json.headertype))
+    if step.pkt_offset:
+        temp.append(spaces(indent) + "data_this_cycle.data = {pack(curr_data), pack(unused)};")
+    else:
+        if step.last_step:
+            temp.append(spaces(indent) + "data_this_cycle.data = {pack(unused), pack(curr_data)};")
+        else:
+            temp.append(spaces(indent) + "data_this_cycle.data = {pack(curr_data)};")
+    return "\n".join(temp)
 
 def expand_modify(indent, json):
-    temp = spaces(indent) + ""
-    return "\n".join(apply(temp, json))
+    temp = []
+    temp.append(spaces(indent) + "let masked_data = pack(data) & pack(curr_mask);")
+    temp.append(spaces(indent) + "let curr_data = masked_data | pack(curr_meta);")
+    return "\n".join(temp)
 
-def expand_compute_next_state(indent, json):
-    temp = spaces(indent) + "let nextState = compute_next_state({})"
-    return "\n".join([temp.format(x) for x, _ in json.items()])
+def expand_next_deparse_state(indent, step, json):
+    temp = []
+    if step.last_step:
+        if len(json.compute_next_state.branch):
+            temp.append(spaces(indent) + "let nextState = compute_next_state({}.{});".format(json.headertype, json.compute_next_state.field))
+            temp.append(spaces(indent) + "state <= nextState;")
+            for x in json.compute_next_state.branch:
+                temp.append(spaces(indent) + "if (nextState == State{}) begin".format(CamelCase(x.next_state)))
+                temp.append(spaces(indent+1) + "{}_fifo.enq(data_this_cycle);".format(x.next_state))
+                temp.append(spaces(indent) + "end")
+        else:
+            temp.append(spaces(indent) + "dataout.enq(data_this_cycle);")
+            temp.append(spaces(indent) + "state <= StateDeparseIdle;")
 
-DEPARSE_IF_NEXT_STATE='''\
-{sp}if (nextState == {}) begin
-{sp}  {}_fifo.enq(data_this_cycle);
-{sp}end
-'''
-def expand_branch(indent, json):
-    return DEPARSE_IF_NEXT_STATE.format(spaces(indent), "test")
+    return "\n".join(temp)
 
-def expand_fifo_dequeue(indent, json):
-    temp = spaces(indent) + "{}.deq;"
-    return "\n".join(apply(temp, json))
+def expand_output(indent, step, json):
+    temp = []
+    if (step.extract_len + step.pkt_offset == 128):
+        temp.append(spaces(indent) + "dataout.enq(data_this_cycle);")
+    return "\n".join(temp)
+
+def expand_fifo_dequeue(indent, step, json):
+    temp = []
+    if step.last_step:
+        temp.append(spaces(indent) + "meta_fifo.deq;")
+        temp.append(spaces(indent) + "mask_fifo.deq;")
+    return "\n".join(temp)
 
 DEPARSE_STEP='''\
   action
-    let data_this_cycle = packet_in_wire;
-    let meta = meta_fifo.first;
-    let mask = mask_fifo.first;
 %(unpack)s
 %(modify)s
 %(pack)s
-    state <= nextState;
+%(output)s
+%(next_state)s
 %(dequeue)s
-  endaction
-'''
-def expand_deparse_step(indent, json):
+  endaction'''
+def expand_deparse_step(indent, step, json):
     pmap = {}
-    pmap['unpack'] = "" #expand_unpack([json.name])
-    pmap['pack'] = ""#expand_pack([json.name])
-    pmap['modify'] = expand_modify(indent, json)
-    pmap['dequeue'] = expand_fifo_dequeue(indent, json.intf_data_out)
+    pmap['unpack']     = expand_unpack(indent, step, json)
+    pmap['pack']       = expand_pack(indent, step, json)
+    pmap['modify']     = expand_modify(indent, json)
+    pmap['output']     = expand_output(indent, step, json)
+    pmap['next_state'] = expand_next_deparse_state(indent, step, json)
+    pmap['dequeue']    = expand_fifo_dequeue(indent, step, json)
     return DEPARSE_STEP % pmap
 
 DEPARSE_STMT='''\
@@ -526,7 +601,7 @@ DEPARSE_STMT='''\
 def expand_statement(indent, json):
     pmap = {}
     pmap['name'] = json.name
-    pmap['parse_step'] = "\n".join([expand_deparse_step(indent + 1, json) for x in json.deparse_step])
+    pmap['parse_step'] = "\n".join([expand_deparse_step(indent + 1, step, json) for step in json.deparse_step])
     return DEPARSE_STMT % pmap
 
 DEPARSE_STATE_ENUM='''\
@@ -583,8 +658,8 @@ def generate_deparse_state(serializer, json):
     pmap['CamelCaseName'] = CamelCase(json.name)
     pmap['intf_put'] = expand_intf_put(1, json.intf_put)
     pmap['intf_get'] = expand_intf_get(1, json.intf_get)
-    pmap['data_in_fifo'] = expand_data_in(1, json.intf_get)
-    pmap['data_out_fifo'] = expand_data_out(1, json.intf_put)
+    pmap['data_in_fifo'] = expand_data_in(1, json.intf_put)
+    pmap['data_out_fifo'] = expand_data_out(1, json.intf_get)
     pmap['compute_next_state'] = expand_next_state(1, "Deparser", json)
     pmap['statement'] = expand_statement(1, json)
     pmap['intf_data_out'] = ""
