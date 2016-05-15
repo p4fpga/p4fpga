@@ -49,7 +49,7 @@ instance DefaultValue#(RoutingRespT);
   defaultValue = unpack(0);
 endinstance
 instance DefaultMask#(RoutingRespT);
-  defaultMask= unpack(maxBound);
+  defaultMask = unpack(maxBound);
 endinstance
 
 instance FShow#(RoutingRespT);
@@ -418,28 +418,22 @@ module mkIngress0#(Vector#(numClients, MetadataClient) mdc)(Ingress0);
 endmodule
 
 typedef enum {
-   StateStart,
+   StateParseStart,
    StateParseEthernet,
    StateParseIpv4
 } ParserState deriving (Bits, Eq);
-instance FShow#(ParserState);
-    function Fmt fshow (ParserState state);
-        return $format(" State %x", state);
-    endfunction
-endinstance
-
-module mkStateStart#(Reg#(ParserState) state, FIFOF#(EtherData) datain, Wire#(Bool) start_fsm)(Empty);
-    rule load_packet if (state==StateStart);
-        let v = datain.first;
-        if (v.sop) begin
-            state <= StateParseEthernet;
-            start_fsm <= True;
-        end
-        else begin
-            datain.deq;
-            start_fsm <= False;
-        end
-    endrule
+module mkStateParseStart#(Reg#(ParserState) state, FIFOF#(EtherData) datain, Wire#(Bool) start_fsm)(Empty);
+  rule load_packet if (state == StateParseStart);
+    let v = datain.first;
+    if (v.sop) begin
+      state <= StateParseEthernet;
+      start_fsm <= True;
+    end
+    else begin
+      datain.deq;
+      start_fsm <= False;
+    end
+  endrule
 endmodule
 
 interface ParseEthernet;
@@ -474,13 +468,13 @@ module mkStateParseEthernet#(Reg#(ParserState) state, FIFOF#(EtherData) datain)(
   endrule
 
   function ParserState compute_next_state(Bit#(16) v);
-    ParserState nextState = StateStart;
+    ParserState nextState = StateParseStart;
     case (byteSwap(v)) matches
       'h800: begin
         nextState = StateParseIpv4;
       end
       default: begin
-        nextState = StateStart;
+        nextState = StateParseStart;
       end
     endcase
     return nextState;
@@ -575,7 +569,7 @@ module mkStateParseIpv4#(Reg#(ParserState) state, FIFOF#(EtherData) datain, FIFO
     $display(fshow(hdr));
     parseStateFifo.enq(StateParseIpv4);
     parsed_ipv4_protocol_fifo.enq(hdr.protocol);
-    next_state_wire[0] <= tagged Valid StateStart;
+    next_state_wire[0] <= tagged Valid StateParseStart;
   endaction
   endseq;
   FSM fsm_parse_ipv4 <- mkFSM(stmt_parse_ipv4);
@@ -600,7 +594,7 @@ endinterface
 typedef 4 PortMax;
 (* synthesize *)
 module mkParser(Parser);
-  Reg#(ParserState) curr_state <- mkReg(StateStart);
+  Reg#(ParserState) curr_state <- mkReg(StateParseStart);
   Reg#(Bool) started <- mkReg(False);
   FIFOF#(EtherData) data_in_fifo <- mkFIFOF;
   Wire#(Bool) start_fsm <- mkDWire(False);
@@ -621,7 +615,7 @@ module mkParser(Parser);
     end
   endrule
 
-  Empty init_state <- mkStateStart(curr_state, data_in_fifo, start_fsm);
+  Empty init_state <- mkStateParseStart(curr_state, data_in_fifo, start_fsm);
   ParseIpv4 parse_ipv4 <- mkStateParseIpv4(curr_state, data_in_fifo, parse_state_in_fifo[0]);
   ParseEthernet parse_ethernet <- mkStateParseEthernet(curr_state, data_in_fifo);
   mkConnection(parse_ipv4.parse_ethernet, parse_ethernet.parse_ipv4);
@@ -633,7 +627,7 @@ module mkParser(Parser);
     end
   endrule
 
-  rule clear if (!start_fsm && curr_state == StateStart);
+  rule clear if (!start_fsm && curr_state == StateParseStart);
     if (started) begin
       parse_ipv4.stop;
       parse_ethernet.stop;
@@ -763,7 +757,7 @@ module mkStateDeparseEthernet#(Reg#(DeparserState) state, FIFOF#(EtherData) data
   endrule
   method start = start_wire.send;
   method clear = clear_wire.send;
-  interface deparse_ipv4 = toGet(parse_ipv4_fifo);
+  interface deparse_ipv4 = toGet(deparse_ipv4_fifo);
 endmodule
 
 interface DeparseIpv4;
@@ -772,11 +766,11 @@ interface DeparseIpv4;
   method Action clear;
 endinterface
 module mkStateDeparseIpv4#(Reg#(DeparserState) state, FIFOF#(EtherData) datain, FIFOF#(EtherData) dataout, FIFOF#(Ipv4T) meta_fifo, FIFOF#(Ipv4T) mask_fifo)(DeparseIpv4);
-   let verbose = False;
-   Wire#(EtherData) packet_in_wire <- mkDWire(defaultValue);
-   FIFOF#(EtherData) deparse_ethernet_fifo <- mkBypassFIFOF;
-   PulseWire start_wire <- mkPulseWire;
-   PulseWire clear_wire <- mkPulseWire;
+  let verbose = False;
+  Wire#(EtherData) packet_in_wire <- mkDWire(defaultValue);
+  FIFOF#(EtherData) deparse_ethernet_fifo <- mkBypassFIFOF;
+  PulseWire start_wire <- mkPulseWire;
+  PulseWire clear_wire <- mkPulseWire;
 
    function DeparserState compute_next_state(Bit#(8) protocol);
        DeparserState nextState = StateDeparseIdle;
