@@ -850,12 +850,10 @@ module mkDeparser(Deparser);
 
   Vector#(PortMax, FIFOF#(DeparserState)) deparse_state_in_fifo <- replicateM(mkGFIFOF(False, True));
   FIFOF#(DeparserState) deparse_state_out_fifo <- mkFIFOF;
-
-  FIFOF#(EthernetT) ethernet_meta_fifo <- mkFIFOF;
-  FIFOF#(Ipv4T) ipv4_meta_fifo <- mkFIFOF;
-
-  FIFOF#(EthernetT) ethernet_mask_fifo <- mkFIFOF;
-  FIFOF#(Ipv4T) ipv4_mask_fifo <- mkFIFOF;
+  FIFOF#(EthernetT) deparse_ethernet_meta_fifo <- mkFIFOF;
+  FIFOF#(Ipv4T) deparse_ipv4_meta_fifo <- mkFIFOF;
+  FIFOF#(EthernetT) deparse_ethernet_mask_fifo <- mkFIFOF;
+  FIFOF#(Ipv4T) deparse_ipv4_mask_fifo <- mkFIFOF;
 
   Reg#(Bit#(32)) clk_cnt <- mkReg(0);
   Reg#(Bit#(32)) deparser_start_time <- mkReg(0);
@@ -881,19 +879,19 @@ module mkDeparser(Deparser);
      let v <- toGet(metadata_in_fifo).get;
      let ethernet = toEthernet(v);
      match {.data, .mask} = ethernet;
-     ethernet_meta_fifo.enq(data);
-     ethernet_mask_fifo.enq(mask);
+     deparse_ethernet_meta_fifo.enq(data);
+     deparse_ethernet_mask_fifo.enq(mask);
 
      let ipv4 = toIpv4(v);
      match {.ipv4_data, .ipv4_mask} = ipv4;
      if (verbose) $display("(%0d) ipv4 meta", $time, fshow(ipv4));
-     ipv4_meta_fifo.enq(ipv4_data);
-     ipv4_mask_fifo.enq(ipv4_mask);
+     deparse_ipv4_meta_fifo.enq(ipv4_data);
+     deparse_ipv4_mask_fifo.enq(ipv4_mask);
   endrule
 
   Empty init_state <- mkStateDeparseIdle(curr_state, data_in_fifo, data_out_fifo, start_fsm);
-  DeparseEthernet deparse_ethernet <- mkStateDeparseEthernet(curr_state, data_in_fifo, data_out_fifo, ethernet_meta_fifo, ethernet_mask_fifo);
-  DeparseIpv4 deparse_ipv4 <- mkStateDeparseIpv4(curr_state, data_in_fifo, data_out_fifo, ipv4_meta_fifo, ipv4_mask_fifo);
+  DeparseEthernet deparse_ethernet <- mkStateDeparseEthernet(curr_state, data_in_fifo, data_out_fifo, deparse_ethernet_meta_fifo, deparse_ethernet_mask_fifo);
+  DeparseIpv4 deparse_ipv4 <- mkStateDeparseIpv4(curr_state, data_in_fifo, data_out_fifo, deparse_ipv4_meta_fifo, deparse_ipv4_mask_fifo);
   mkConnection(deparse_ethernet.deparse_ipv4,deparse_ipv4.deparse_ethernet);
 
   rule start if (start_fsm);
