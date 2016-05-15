@@ -483,9 +483,17 @@ def expand_intf_put(indent, json):
     temp = spaces(indent) + "interface Put#(EtherData) {};"
     return "\n".join([temp.format(x) for x, _ in json.items()])
 
-def expand_intf_get(indent, json):
+def expand_intf_put_defs(indent, json):
+    temp = spaces(indent) + "interface {} = toPut({}_fifo);"
+    return "\n".join([temp.format(x, x) for x, _ in json.items()])
+
+def expand_intf_get_decl(indent, json):
     temp = spaces(indent) + "interface Get#(EtherData) {};"
     return "\n".join([temp.format(x) for x, _ in json.items()])
+
+def expand_intf_get_defs(indent, json):
+    temp = spaces(indent) + "interface {} = toGet({}_fifo);"
+    return "\n".join([temp.format(x, x) for x, _ in json.items()])
 
 def expand_data_in(indent, json):
     temp = spaces(indent) + "FIFOF#(EtherData) {}_fifo <- mkBypassFIFOF;"
@@ -657,13 +665,13 @@ def generate_deparse_state(serializer, json):
     pmap['name'] = json.name
     pmap['CamelCaseName'] = CamelCase(json.name)
     pmap['intf_put'] = expand_intf_put(1, json.intf_put)
-    pmap['intf_get'] = expand_intf_get(1, json.intf_get)
+    pmap['intf_get'] = expand_intf_get_decl(1, json.intf_get)
     pmap['data_in_fifo'] = expand_data_in(1, json.intf_put)
     pmap['data_out_fifo'] = expand_data_out(1, json.intf_get)
     pmap['compute_next_state'] = expand_next_state(1, "Deparser", json)
     pmap['statement'] = expand_statement(1, json)
-    pmap['intf_data_out'] = ""
-    pmap['intf_ctrl_out'] = ""
+    pmap['intf_data_out'] = expand_intf_get_defs(1, json.intf_get);
+    pmap['intf_ctrl_out'] = expand_intf_put_defs(1, json.intf_put);
     pmap['headertype'] = CamelCase(json.headertype)
     serializer.append(DEPARSE_STATE_TEMPLATE % pmap)
 
@@ -689,10 +697,21 @@ endmodule
 def generate_deparse_idle(serializer):
     serializer.append(DEPARSE_STATE_INIT)
 
+def expand_meta_fifo(indent, json):
+    temp = []
+    for k, v in json.items():
+        temp.append(spaces(indent) + "FIFOF#({}) {}_meta_fifo <- mkFIFOF;".format(CamelCase(v.headertype), k))
+    return "\n".join(temp)
+
+def expand_mask_fifo(indent, json):
+    temp = []
+    for k, v in json.items():
+        temp.append(spaces(indent) + "FIFOF#({}) {}_mask_fifo <- mkFIFOF;".format(CamelCase(v.headertype), k))
+    return "\n".join(temp)
+
 def expand_deparse_state(indent, json):
     temp = spaces(indent) + "{C} {c} <- mkState{C}(curr_state, data_in_fifo, data_out_fifo, {c}_meta_fifo, {c}_mask_fifo);"
     return "\n".join([temp.format(C=CamelCase(x), c=x) for x, _ in json.items()])
-
 def expand_connect_deparse_state(indent, json):
     connections = []
     temp = spaces(indent) + "mkConnection({a}.{b}, {b}.{a});"
@@ -772,8 +791,8 @@ endmodule
 def generate_deparse_top(indent, json):
     ''' generate deparser top module '''
     pmap = {}
-    pmap["meta_in_fifo"] = ""
-    pmap["mask_in_fifo"] = ""
+    pmap["meta_in_fifo"] = expand_meta_fifo(indent + 1, json.deparser)
+    pmap["mask_in_fifo"] = expand_mask_fifo(indent + 1, json.deparser)
     pmap["metadata_func"] = ""
     pmap["deparse_state"] = expand_deparse_state(indent + 1, json.deparser)
     pmap["connect_state"] = expand_connect_deparse_state(indent + 1, json.deparser)
