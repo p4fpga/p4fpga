@@ -101,18 +101,18 @@ def generate_typedef(struct):
     return TYPEDEF_TEMPLATE % (pmap)
 
 COMPUTE_NEXT_STATE = '''
-  function ParserState compute_next_state(Bit#(%(width)s) v);
-    ParserState nextState = StateStart;
+  function %(state)s compute_next_state(Bit#(%(width)s) v);
+    %(state)s nextState = %(init_state)s;
     case (byteSwap(v)) matches
 %(cases)s
       default: begin
-        nextState = StateStart;
+        nextState = %(init_state)s;
       end
     endcase
     return nextState;
   endfunction
 '''
-def expand_next_state(json):
+def expand_next_state(indent, state, json):
     ''' cases, width '''
     def process(tpl):
         cond = str.split(tpl[0], '==')
@@ -127,6 +127,8 @@ def expand_next_state(json):
     # NOTE: *tuple to unpack tuple
     pmap['cases'] = "\n".join([tcase.format(*process(x)) for x in json.compute_next_state.cases])
     pmap['width'] = json.compute_next_state.width
+    pmap['state'] = "ParserState" if (state == 'Parser') else "DeparserState"
+    pmap['init_state'] = "StateParseStart" if (state == 'Parser') else "StateDeparseIdle"
     return COMPUTE_NEXT_STATE % pmap
 
 FSM_TEMPLATE = '''
@@ -263,6 +265,38 @@ class.Module
 -- provisos
 """
 
+PARSE_STATE_ENUM='''\
+typedef enum {
+%(enum)s
+} ParserState deriving (Bits, Eq, FShow);
+'''
+def generate_parse_state_enum(json):
+    temp ="  State{}"
+    pmap = {}
+    enums = ["  StateParseStart"] + [temp.format(CamelCase(x)) for x in json.parser]
+    pmap['enum'] = ',\n'.join(enums)
+    return PARSE_STATE_ENUM % pmap
+
+PARSE_STATE_INIT='''\
+module mkStateStart#(Reg#(ParserState) state, FIFOF#(EtherData) datain, Wire#(Bool) start_fsm)(Empty);
+  rule load_packet if (state == StateStart);
+    let v = datain.first;
+    if (v.sop) begin
+      state <= State%(init_state)s;
+      start_fsm <= True;
+    end
+    else begin
+      datain.deq;
+      start_fsm <= False;
+    end
+  endrule
+endmodule
+'''
+def generate_parse_state_init(json):
+    pmap = {}
+    pmap['init_state'] = CamelCase(json.control_flow.parser.start)
+    return PARSE_STATE_INIT % (pmap)
+
 PARSE_STATE_TEMPLATE = '''
 interface %(name)s;
 %(intf_put)s
@@ -336,7 +370,7 @@ def generate_parse_state(node, structmap, json):
 
     # next state
     pmap['n'] = 4
-    pmap['compute_next_state'] = expand_next_state(json.parser[node.name])
+    pmap['compute_next_state'] = expand_next_state(0, 'Parser', json.parser[node.name])
     pmap['stmt'] = gen_parse_stmt(node, json)
     tunparse = "  interface {} = toGet(unparsed_{}_fifo);"
     pmap['intf_unparsed'] = "\n".join([tunparse.format(x, x) for x in tgetmap])
@@ -415,111 +449,120 @@ def generate_parse_epilog(states, json):
 def apply(temp, json):
     return [temp.format(v, x) for x, v in json.items()]
 
-def expand_intf_put(json):
-    tput = "interface Put#(Bit#({})) {};"
-    return "\n".join(apply(tput, json))
+def spaces(indent):
+    return ' ' * 2 * indent
 
-def expand_intf_get(json):
-    tget = "interface Get#(Bit#({})) {};"
-    return "\n".join(apply(tget, json))
+def expand_intf_put(indent, json):
+    temp = spaces(indent) + "interface Put#(EtherData) {};"
+    return "\n".join([temp.format(x) for x, _ in json.items()])
 
-def expand_data_in(json):
-    tdin = "FIFOF#(Bit#({})) last_{}_fifo <- mkBypassFIFOF;"
-    return "\n".join(apply(tdin, json))
+def expand_intf_get(indent, json):
+    temp = spaces(indent) + "interface Get#(EtherData) {};"
+    return "\n".join([temp.format(x) for x, _ in json.items()])
 
-def expand_data_out(json):
-    tdout = "FIFO#(EtherData) next_{}_fifo <- mkFIFO;"
-    return "\n".join(apply(tdout, json))
+def expand_data_in(indent, json):
+    temp = spaces(indent) + "FIFO#(EtherData) {}_fifo <- mkFIFO;"
+    return "\n".join([temp.format(x) for x, _ in json.items()])
 
-def expand_let_meta(json):
-    temp = "let meta = {}.first;"
+def expand_data_out(indent, json):
+    temp = spaces(indent) + "FIFO#(EtherData) {}_fifo <- mkFIFO;"
+    return "\n".join([temp.format(x) for x, _ in json.items()])
+
+def expand_unpack(indent, json):
+    temp = spaces(indent) + "{} {} = unpack(pack(hdr));"
+    # EthernetT ethernet
+    return "\n".join([temp.format(x) for x in json])
+
+def expand_pack(indent, json):
+    temp = spaces(indent) + "data_this_cycle.data = {{}};"
     return "\n".join(apply(temp, json))
 
-def expand_let_mask(json):
-    temp = "let mask = {}.first;"
+def expand_modify(indent, json):
+    temp = spaces(indent) + ""
     return "\n".join(apply(temp, json))
 
-def expand_unpack(json):
-    temp = "{} {} = unpack(pack(hdr));"
-    return "\n".join(apply(temp, json))
+def expand_compute_next_state(indent, json):
+    temp = spaces(indent) + "let nextState = compute_next_state({})"
+    return "\n".join([temp.format(x) for x, _ in json.items()])
 
-def expand_pack(json):
-    temp = "data_this_cycle.data = {{}};"
-    return "\n".join(apply(temp, json))
+DEPARSE_IF_NEXT_STATE='''\
+{sp}if (nextState == {}) begin
+{sp}  {}_fifo.enq(data_this_cycle);
+{sp}end
+'''
+def expand_branch(indent, json):
+    return DEPARSE_IF_NEXT_STATE.format(spaces(indent), "test")
 
-def expand_modify(json):
-    temp = ""
-    return "\n".join(apply(temp, json))
-
-def expand_next_state(json):
-    temp = ""
-    return "\n".join(apply(temp, json))
-
-def expand_fifo_dequeue(json):
-    temp = "{}.deq;"
+def expand_fifo_dequeue(indent, json):
+    temp = spaces(indent) + "{}.deq;"
     return "\n".join(apply(temp, json))
 
 DEPARSE_STEP='''\
   action
     let data_this_cycle = packet_in_wire;
-%(meta)s
-%(mask)s
+    let meta = meta_fifo.first;
+    let mask = mask_fifo.first;
 %(unpack)s
 %(modify)s
 %(pack)s
-%(next_state)s
     state <= nextState;
 %(dequeue)s
   endaction
 '''
-def expand_deparse_step(json):
+def expand_deparse_step(indent, json):
     pmap = {}
-    pmap['meta'] = expand_let_meta(json)
-    pmap['mask'] = expand_let_mask(json)
-    pmap['unpack'] = expand_unpack(json)
-    pmap['pack'] = expand_pack(json)
-    pmap['modify'] = expand_modify(json)
-    pmap['next_state'] = expand_next_state(json)
-    pmap['dequeue'] = expand_fifo_dequeue(json)
+    pmap['unpack'] = "" #expand_unpack([json.name])
+    pmap['pack'] = ""#expand_pack([json.name])
+    pmap['modify'] = expand_modify(indent, json)
+    pmap['dequeue'] = expand_fifo_dequeue(indent, json.intf_data_out)
     return DEPARSE_STEP % pmap
 
 DEPARSE_STMT='''\
-  Stmt stmt_%(name)s =
+  Stmt %(name)s =
   seq
 %(parse_step)s
   endseq;
 '''
-def expand_statement(json):
+def expand_statement(indent, json):
     pmap = {}
     pmap['name'] = json.name
-    for x in json.deparse_step:
-        print 'xxx', x
-    #FIXME: improve deparse_step
-    #pmap['parse_step'] = "\n".join([expand_deparse_step(x) for x in json.deparse_step])
-    pmap['parse_step'] = ""
+    pmap['parse_step'] = "\n".join([expand_deparse_step(indent + 1, json) for x in json.deparse_step])
     return DEPARSE_STMT % pmap
 
+DEPARSE_STATE_ENUM='''\
+typedef enum {
+%(enum)s
+} DeparserState deriving (Bits, Eq, FShow);
+'''
+def generate_deparse_state_enum (json):
+    temp = "  State{}"
+    pmap = {}
+    enums = ["  StateDeparseIdle"] + [temp.format(CamelCase(x)) for x in json.deparser]
+    pmap['enum'] = ',\n'.join(enums)
+    return DEPARSE_STATE_ENUM % pmap
+
+
 DEPARSE_STATE_TEMPLATE= '''
-interface %(name)s;
+interface %(CamelCaseName)s;
 %(intf_put)s
 %(intf_get)s
   method Action start;
   method Action clear;
 endinterface
-module mkState%(name)s#(Reg#(DeparserState) state, FIFOF#(EtherData) datain, FIFOF#(EtherData) dataout)(%(name)s);
+module mkState%(CamelCaseName)s#(Reg#(DeparserState) state, FIFOF#(EtherData) datain, FIFOF#(EtherData) dataout, FIFOF#(%(headertype)s) meta_fifo, FIFOF#(%(headertype)s) mask_fifo)(%(CamelCaseName)s);
+  let verbose = False;
+  Wire#(EtherData) packet_in_wire <- mkDWire(defaultValue);
 %(data_in_fifo)s
 %(data_out_fifo)s
-  let verbose = False;
-  Wire#(Bit#(128)) packet_in_wire <- mkDWire(defaultValue);
-  PulseWire start_wire <- mkPulseWire();
-  PulseWire clear_wire <- mkPulseWire();
+  PulseWire start_wire <- mkPulseWire;
+  PulseWire clear_wire <- mkPulseWire;
 %(compute_next_state)s
-  rule load_packet if (state == State%(name)s);
+  rule load_packet if (state == State%(CamelCaseName)s);
     let data_current <- toGet(datain).get;
     packet_in_wire <= data_current;
   endrule
 %(statement)s
-  FSM fsm_%(name)s <- mkFSM(stmt_%(name)s);
+  FSM fsm_%(name)s <- mkFSM(%(name)s);
   rule start_fsm if (start_wire);
     fsm_%(name)s.start;
   endrule
@@ -527,9 +570,9 @@ module mkState%(name)s#(Reg#(DeparserState) state, FIFOF#(EtherData) datain, FIF
     fsm_%(name)s.abort;
   endrule
   method start = start_wire.send;
-  method stop = clear_wire.send;
-%(intf_data_out)s;
-%(intf_ctrl_out)s;
+  method clear = clear_wire.send;
+%(intf_data_out)s
+%(intf_ctrl_out)s
 endmodule
 '''
 def generate_deparse_state(serializer, json):
@@ -537,15 +580,59 @@ def generate_deparse_state(serializer, json):
     assert isinstance(json, DotMap)
     pmap = {}
     pmap['name'] = json.name
-    pmap['intf_put'] = expand_intf_put(json.intf_put)
-    pmap['intf_get'] = expand_intf_get(json.intf_get)
-    pmap['data_in_fifo'] = expand_data_in(json.data_in_fifo)
-    pmap['data_out_fifo'] = expand_data_out(json.data_out_fifo)
-    pmap['compute_next_state'] = expand_next_state(json)
-    pmap['statement'] = expand_statement(json)
+    pmap['CamelCaseName'] = CamelCase(json.name)
+    pmap['intf_put'] = expand_intf_put(1, json.intf_put)
+    pmap['intf_get'] = expand_intf_get(1, json.intf_get)
+    pmap['data_in_fifo'] = expand_data_in(1, json.intf_get)
+    pmap['data_out_fifo'] = expand_data_out(1, json.intf_put)
+    pmap['compute_next_state'] = expand_next_state(1, "Deparser", json)
+    pmap['statement'] = expand_statement(1, json)
     pmap['intf_data_out'] = ""
     pmap['intf_ctrl_out'] = ""
+    pmap['headertype'] = CamelCase(json.headertype)
     serializer.append(DEPARSE_STATE_TEMPLATE % pmap)
+
+DEPARSE_STATE_INIT='''
+module mkStateDeparseIdle#(Reg#(DeparserState) state, FIFOF#(EtherData) datain, FIFOF#(EtherData) dataout, Wire#(Bool) start_fsm)(Empty);
+
+   rule load_packet if (state == StateDeparseIdle);
+      let v = datain.first;
+      if (v.sop) begin
+         state <= StateDeparseEthernet;
+         start_fsm <= True;
+         $display("(%0d) Deparse Ethernet Start", $time);
+      end
+      else begin
+         datain.deq;
+         dataout.enq(v);
+         $display("(%0d) payload ", $time, fshow(v));
+         start_fsm <= False;
+      end
+   endrule
+endmodule
+'''
+def generate_deparse_idle(serializer):
+    serializer.append(DEPARSE_STATE_INIT)
+
+def expand_deparse_state(indent, json):
+    temp = spaces(indent) + "{C} {c} <- mkState{C}(curr_state, data_in_fifo, data_out_fifo, {c}_meta_fifo, {c}_mask_fifo);"
+    return "\n".join([temp.format(C=CamelCase(x), c=x) for x, _ in json.items()])
+
+def expand_connect_deparse_state(indent, json):
+    connections = []
+    temp = spaces(indent) + "mkConnection({a}.{b}, {b}.{a});"
+    for state, values in json.items():
+        for conn in values.intf_get.keys():
+            connections.append(temp.format(a=state, b=conn))
+    return "\n".join(connections)
+
+def expand_deparse_state_start(indent, json):
+    temp = spaces(indent) + "{}.start;"
+    return "\n".join([temp.format(x) for x, _ in json.items()])
+
+def expand_deparse_state_stop(indent, json):
+    temp = spaces(indent) + "{}.clear;"
+    return "\n".join([temp.format(x) for x, _ in json.items()])
 
 DEPARSE_TOP_TEMPLATE = '''
 interface Deparser;
@@ -585,15 +672,16 @@ module mkDeparser(Deparser);
   endrule
   Empty init_state <- mkStateDeparseIdle(curr_state, data_in_fifo, data_out_fifo, start_fsm);
 %(deparse_state)s
+%(connect_state)s
   rule start if (start_fsm);
     if (!started) begin
-%(deparse_state)s
+%(deparse_state_start)s
       started <= True;
     end
   endrule
   rule clear if (!start_fsm && curr_state == StateDeparseIdle);
     if (started) begin
-%(deparse_state)s
+%(deparse_state_stop)s
       started <= False;
     end
   endrule
@@ -606,13 +694,16 @@ module mkDeparser(Deparser);
   interface metadata = toPipeIn(metadata_in_fifo);
 endmodule
 '''
-def generate_deparse_top():
+def generate_deparse_top(indent, json):
     ''' generate deparser top module '''
     pmap = {}
     pmap["meta_in_fifo"] = ""
     pmap["mask_in_fifo"] = ""
     pmap["metadata_func"] = ""
-    pmap["deparse_state"] = ""
+    pmap["deparse_state"] = expand_deparse_state(indent + 1, json.deparser)
+    pmap["connect_state"] = expand_connect_deparse_state(indent + 1, json.deparser)
+    pmap["deparse_state_start"] = expand_deparse_state_start(indent + 3, json.deparser)
+    pmap["deparse_state_stop"] = expand_deparse_state_stop(indent + 3, json.deparser)
     return DEPARSE_TOP_TEMPLATE % (pmap)
 
 TABLE_TEMPLATE = '''

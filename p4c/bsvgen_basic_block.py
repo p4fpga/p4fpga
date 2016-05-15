@@ -42,19 +42,11 @@ class BSVBasicBlock(BasicBlock):
         # reg_read, reg_read, reg_read, reg_write
         # create Module instance
 
-    def build_rule(self, inp, outp):
-        ''' TODO '''
-        rule = {}
-        rule['get'] = inp
-        rule['put'] = outp
-        return rule
-
     def serialize_json_deparse(self):
         ''' jsondata for deparse state '''
         d = DotMap()
-        d.name = CamelCase(self.name)
-        d.intf_data_out = []
-        d.intf_ctrl_out = []
+        d.name = self.name
+        d.headertype = self.local_header.name
         return d
 
     def serialize_json_parse(self):

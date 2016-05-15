@@ -8,7 +8,10 @@ from bsvgen_control_state import BSVControlState
 from programSerializer import ProgramSerializer
 from bsvgen_common import generate_parse_epilog,\
                           generate_parse_state, generate_control_flow, \
-                          generate_deparse_state, generate_deparse_top
+                          generate_parse_state_enum, generate_parse_state_init, \
+                          generate_deparse_state_enum, \
+                          generate_deparse_state, generate_deparse_top, \
+                          generate_deparse_idle
 import pprint
 
 
@@ -158,15 +161,20 @@ class BSVControlFlow(ControlFlow):
         visited = set()
         start_block = self.basic_blocks[self.control_state.basic_block[0]]
         deparse_dfs(self.basic_blocks, self.structs, start_block, stack, 0, visited, json)
+        serializer.append(generate_deparse_state_enum(json))
+        generate_deparse_idle(serializer)
         generate_deparse_body(serializer, json, self.basic_blocks, start_block, [], set())
-        serializer.append(generate_deparse_top())
+        serializer.append(generate_deparse_top(0, json))
 
     def generate_parser(self, serializer, json):
         ''' TODO: move dfs to serialize '''
         stack = []
         visited = set()
         start_block = self.basic_blocks[self.control_state.basic_block[0]]
+        json.control_flow.parser.start = start_block.name
         parse_dfs(self.basic_blocks, self.structs, start_block, stack, 0, visited, json)
+        serializer.append(generate_parse_state_enum(json))
+        serializer.append(generate_parse_state_init(json))
         generate_parse_body(serializer, json, self.basic_blocks, self.structs, start_block, [])
         serializer.append(generate_parse_epilog(visited, json))
 

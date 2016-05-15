@@ -5,6 +5,12 @@ Struct with bsv backend
 from pif_ir.bir.objects.bir_struct import BIRStruct
 from programSerializer import ProgramSerializer
 from bsvgen_common import generate_typedef
+from dotmap import DotMap
+
+def CamelCase(name):
+    ''' CamelCase '''
+    output = ''.join(x for x in name.title() if x.isalnum())
+    return output
 
 class BSVBIRStruct(BIRStruct):
     '''
@@ -15,7 +21,9 @@ class BSVBIRStruct(BIRStruct):
 
     def serialize(self):
         ''' Serialize struct to JSON '''
-        json = {}
+        json = DotMap()
+        for k, v in self.fields.items():
+            json.field[k] = v
         return json
 
     def bsvgen(self, serializer):
