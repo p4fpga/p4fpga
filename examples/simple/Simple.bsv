@@ -235,7 +235,7 @@ instance FShow#(Ipv4T);
   endfunction
 endinstance
 
-function Ipv4T extract_Ipv4T(Bit#(160) data);
+function Ipv4T extract_ipv4_t(Bit#(160) data);
   Vector#(160, Bit#(1)) dataVec = unpack(data);
   Vector#(4, Bit#(1)) version = takeAt(0, dataVec);
   Vector#(4, Bit#(1)) ihl = takeAt(4, dataVec);
@@ -284,7 +284,7 @@ instance FShow#(EthernetT);
   endfunction
 endinstance
 
-function EthernetT extract_EthernetT(Bit#(112) data);
+function EthernetT extract_ethernet_t(Bit#(112) data);
   Vector#(112, Bit#(1)) dataVec = unpack(data);
   Vector#(48, Bit#(1)) dstAddr = takeAt(0, dataVec);
   Vector#(48, Bit#(1)) srcAddr = takeAt(48, dataVec);
@@ -444,15 +444,13 @@ interface ParseEthernet;
   method Action stop;
 endinterface
 module mkStateParseEthernet#(Reg#(ParserState) state, FIFOF#(EtherData) datain)(ParseEthernet);
-  let verbose = True;
-  FIFOF#(Bit#(16)) unparsed_parse_ipv4_fifo <- mkSizedFIFOF(1);
-
+  let verbose = False;
+  FIFO#(Bit#(16)) unparsed_parse_ipv4_fifo <- mkFIFO;
   FIFOF#(Bit#(16)) parsed_etherType_fifo <- mkFIFOF;
-
   Wire#(Bit#(128)) packet_in_wire <- mkDWire(0);
   Vector#(4, Wire#(Maybe#(ParserState))) next_state_wire <- replicateM(mkDWire(tagged Invalid));
   PulseWire start_wire <- mkPulseWire();
-  PulseWire clear_wire <- mkPulseWire();
+  PulseWire stop_wire <- mkPulseWire();
   (* fire_when_enabled *)
   rule arbitrate_outgoing_state if (state == StateParseEthernet);
     Vector#(4, Bool) next_state_valid = replicate(False);
@@ -485,15 +483,14 @@ module mkStateParseEthernet#(Reg#(ParserState) state, FIFOF#(EtherData) datain)(
     packet_in_wire <= data_current.data;
   endrule
 
-  Stmt stmt_parse_ethernet =
+  Stmt parse_ethernet =
   seq
   action
     let data_this_cycle = packet_in_wire;
     Vector#(128, Bit#(1)) dataVec = unpack(data_this_cycle);
-    let hdr = extract_EthernetT(pack(takeAt(0, dataVec)));
-    $display(fshow(hdr));
-    Vector#(16, Bit#(1)) unparsed = takeAt(0, dataVec);
-    let nextState = compute_next_state(hdr.etherType);
+    Vector#(16, Bit#(1)) unparsed = takeAt(112, dataVec);
+    let ethernet_t = extract_ethernet_t(pack(takeAt(0, dataVec)));
+    let nextState = compute_next_state(ethernet_t.etherType);
     if (verbose) $display("Goto state ", nextState);
     if (nextState == StateParseIpv4) begin
       unparsed_parse_ipv4_fifo.enq(pack(unparsed));
@@ -502,16 +499,16 @@ module mkStateParseEthernet#(Reg#(ParserState) state, FIFOF#(EtherData) datain)(
     next_state_wire[0] <= tagged Valid nextState;
   endaction
   endseq;
-  FSM fsm_parse_ethernet <- mkFSM(stmt_parse_ethernet);
+  FSM fsm_parse_ethernet <- mkFSM(parse_ethernet);
   rule start_fsm if (start_wire);
     fsm_parse_ethernet.start;
   endrule
-  rule clear_fsm if (clear_wire);
+  rule stop_fsm if (stop_wire);
     fsm_parse_ethernet.abort;
   endrule
 
   method start = start_wire.send;
-  method stop = clear_wire.send;
+  method stop = stop_wire.send;
   interface parse_ipv4 = toGet(unparsed_parse_ipv4_fifo);
   interface parsedOut_ethernet_etherType = toGet(parsed_etherType_fifo);
 endmodule
@@ -532,7 +529,7 @@ module mkStateParseIpv4#(Reg#(ParserState) state, FIFOF#(EtherData) datain, FIFO
   Wire#(Bit#(128)) packet_in_wire <- mkDWire(0);
   Vector#(4, Wire#(Maybe#(ParserState))) next_state_wire <- replicateM(mkDWire(tagged Invalid));
   PulseWire start_wire <- mkPulseWire();
-  PulseWire clear_wire <- mkPulseWire();
+  PulseWire stop_wire <- mkPulseWire();
   (* fire_when_enabled *)
   rule arbitrate_outgoing_state if (state == StateParseIpv4);
     Vector#(4, Bool) next_state_valid = replicate(False);
@@ -551,8 +548,7 @@ module mkStateParseIpv4#(Reg#(ParserState) state, FIFOF#(EtherData) datain, FIFO
     let data_current <- toGet(datain).get;
     packet_in_wire <= data_current.data;
   endrule
-
-  Stmt stmt_parse_ipv4 =
+  Stmt parse_ipv4 =
   seq
   action
     let data_this_cycle = packet_in_wire;
@@ -565,23 +561,21 @@ module mkStateParseIpv4#(Reg#(ParserState) state, FIFOF#(EtherData) datain, FIFO
     let data_last_cycle <- toGet(internal_fifo_144).get;
     Bit#(272) data = {data_this_cycle, data_last_cycle};
     Vector#(272, Bit#(1)) dataVec = unpack(data);
-    let hdr = extract_Ipv4T(pack(takeAt(0, dataVec)));
-    $display(fshow(hdr));
+    let ipv4_t = extract_ipv4_t(pack(takeAt(0, dataVec)));
     parseStateFifo.enq(StateParseIpv4);
-    parsed_ipv4_protocol_fifo.enq(hdr.protocol);
+    parsed_ipv4_protocol_fifo.enq(ipv4_t.protocol);
     next_state_wire[0] <= tagged Valid StateParseStart;
   endaction
   endseq;
-  FSM fsm_parse_ipv4 <- mkFSM(stmt_parse_ipv4);
+  FSM fsm_parse_ipv4 <- mkFSM(parse_ipv4);
   rule start_fsm if (start_wire);
     fsm_parse_ipv4.start;
   endrule
-  rule clear_fsm if (clear_wire);
+  rule stop_fsm if (stop_wire);
     fsm_parse_ipv4.abort;
   endrule
-
   method start = start_wire.send;
-  method stop = clear_wire.send;
+  method stop = stop_wire.send;
   interface parse_ethernet = toPut(unparsed_parse_ethernet_fifo);
   interface parsedOut_ipv4_protocol = toGet(parsed_ipv4_protocol_fifo);
 endmodule
@@ -627,7 +621,7 @@ module mkParser(Parser);
     end
   endrule
 
-  rule clear if (!start_fsm && curr_state == StateParseStart);
+  rule stop if (!start_fsm && curr_state == StateParseStart);
     if (started) begin
       parse_ipv4.stop;
       parse_ethernet.stop;
@@ -698,7 +692,7 @@ endmodule
 interface DeparseEthernet;
   interface Get#(EtherData) deparse_ipv4;
   method Action start;
-  method Action clear;
+  method Action stop;
 endinterface
 module mkStateDeparseEthernet#(Reg#(DeparserState) state, FIFOF#(EtherData) datain, FIFOF#(EtherData) dataout, FIFOF#(EthernetT) meta_fifo, FIFOF#(EthernetT) mask_fifo)(DeparseEthernet);
   let verbose = False;
@@ -706,7 +700,7 @@ module mkStateDeparseEthernet#(Reg#(DeparserState) state, FIFOF#(EtherData) data
 
   FIFO#(EtherData) deparse_ipv4_fifo <- mkFIFO;
   PulseWire start_wire <- mkPulseWire;
-  PulseWire clear_wire <- mkPulseWire;
+  PulseWire stop_wire <- mkPulseWire;
 
   function DeparserState compute_next_state(Bit#(16) v);
     DeparserState nextState = StateDeparseIdle;
@@ -751,25 +745,25 @@ module mkStateDeparseEthernet#(Reg#(DeparserState) state, FIFOF#(EtherData) data
   rule start_fsm if (start_wire);
     fsm_deparse_ethernet.start;
   endrule
-  rule clear_fsm if (clear_wire);
+  rule stop_fsm if (stop_wire);
     fsm_deparse_ethernet.abort;
   endrule
   method start = start_wire.send;
-  method clear = clear_wire.send;
+  method stop = stop_wire.send;
   interface deparse_ipv4 = toGet(deparse_ipv4_fifo);
 endmodule
 
 interface DeparseIpv4;
   interface Put#(EtherData) deparse_ethernet;
   method Action start;
-  method Action clear;
+  method Action stop;
 endinterface
 module mkStateDeparseIpv4#(Reg#(DeparserState) state, FIFOF#(EtherData) datain, FIFOF#(EtherData) dataout, FIFOF#(Ipv4T) meta_fifo, FIFOF#(Ipv4T) mask_fifo)(DeparseIpv4);
   let verbose = False;
   Wire#(EtherData) packet_in_wire <- mkDWire(defaultValue);
   FIFOF#(EtherData) deparse_ethernet_fifo <- mkBypassFIFOF;
   PulseWire start_wire <- mkPulseWire;
-  PulseWire clear_wire <- mkPulseWire;
+  PulseWire stop_wire <- mkPulseWire;
 
   rule load_packet if (state == StateDeparseIpv4 && !deparse_ethernet_fifo.notEmpty());
     let data_current <- toGet(datain).get;
@@ -824,11 +818,11 @@ module mkStateDeparseIpv4#(Reg#(DeparserState) state, FIFOF#(EtherData) datain, 
   rule start_fsm if (start_wire);
     fsm_deparse_ipv4.start;
   endrule
-  rule clear_fsm if (clear_wire);
+  rule stop_fsm if (stop_wire);
     fsm_deparse_ipv4.abort;
   endrule
   method start = start_wire.send;
-  method clear = clear_wire.send;
+  method stop = stop_wire.send;
   interface deparse_ethernet = toPut(deparse_ethernet_fifo);
 endmodule
 
@@ -902,10 +896,10 @@ module mkDeparser(Deparser);
       deparser_start_time <= clk_cnt;
     end
   endrule
-  rule clear if (!start_fsm && curr_state == StateDeparseIdle);
+  rule stop if (!start_fsm && curr_state == StateDeparseIdle);
     if (started) begin
-      deparse_ethernet.clear;
-      deparse_ipv4.clear;
+      deparse_ethernet.stop;
+      deparse_ipv4.stop;
       started <= False;
       deparser_end_time <= clk_cnt;
     end
