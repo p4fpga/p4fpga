@@ -47,20 +47,14 @@ class BSVBasicBlock(BasicBlock):
         d = DotMap()
         d.name = self.name
         d.headertype = self.local_header.name
-        d.compute_next_state.branch = []
+        #d.compute_next_state.branch = []
         return d
 
     def serialize_json_parse(self):
         ''' jsondata for parse state '''
         p = DotMap()
-        p.name = CamelCase(self.name)
-        p.interface = []
-        p.interface.append('method Action start;')
-        p.interface.append('method Action stop;')
-        p.parsed_out_fifo = []
-        p.stmt = []
-        p.intf_data_out = []
-        p.intf_ctrl_out = []
+        p.name = self.name
+        p.headertype = self.local_header.name
         return p
 
     def serialize_json_basicblock(self):

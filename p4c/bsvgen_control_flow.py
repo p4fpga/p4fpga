@@ -6,7 +6,7 @@ from pif_ir.bir.objects.control_flow import ControlFlow
 from pif_ir.bir.utils.validate import check_control_state
 from bsvgen_control_state import BSVControlState
 from programSerializer import ProgramSerializer
-from bsvgen_common import generate_parse_epilog,\
+from bsvgen_common import generate_parse_top,\
                           generate_parse_state, generate_control_flow, \
                           generate_parse_state_enum, generate_parse_state_init, \
                           generate_deparse_state_enum, \
@@ -20,14 +20,21 @@ def json_parser_compute_next_state(structmap, node, json):
     ''' populate json with next state info '''
     fmap = structmap[node.local_header.name].fields
     bbcase = [x for x in node.control_state.basic_block if type(x) is not str]
-    if len(bbcase) == 0:
-        return
-    json.parser[node.name].compute_next_state['cases'] = bbcase
-    field = str.split(bbcase[0][0], '==')[0].strip()
-    width = fmap[field]
-    json.parser[node.name].compute_next_state['width'] = width
+    for case in bbcase:
+        field = str.split(case[0], '==')[0].strip()
+        value = str.split(case[0], '==')[1].strip()
+        next_state = str.split(case[1])[0].strip()
+        json.parser[node.name].compute_next_state.field = field
+        branch_case = DotMap()
+        branch_case.value = value
+        branch_case.next_state = next_state
+        if not json.parser[node.name].compute_next_state.branch:
+            json.parser[node.name].compute_next_state.branch = []
+        json.parser[node.name].compute_next_state.branch.append(branch_case)
+        width = fmap[field]
+        json.parser[node.name].compute_next_state.width = width
 
-def parse_dfs(bbmap, structmap, node, stack, prev_bits, visited, json):
+def parse_dfs(bbmap, structmap, node, stack, prev_bits, first_step, visited, json):
     '''
     should run during json_serialize stage.
     DFS to fill codegen data struct
@@ -41,6 +48,7 @@ def parse_dfs(bbmap, structmap, node, stack, prev_bits, visited, json):
 
     header = node.local_header.name
     width = sum([x for _, x in structmap[header].fields.items()])
+    last_step = False
 
     json_parser_compute_next_state(structmap, node, json)
 
@@ -48,9 +56,26 @@ def parse_dfs(bbmap, structmap, node, stack, prev_bits, visited, json):
         json.parser[node.name].parse_step = []
 
     while curr_bits < width:
-        json.parser[node.name].parse_step.append(curr_bits)
+        parse_step = DotMap()
+        parse_step.carry_len = curr_bits - 128
+        parse_step.curr_len = curr_bits
+        if curr_bits > width:
+            parse_step.carry_out_len = curr_bits - width
+        parse_step.first_step = first_step
+        if first_step:
+            first_step = False
+        parse_step.last_step = last_step
+        json.parser[node.name].parse_step.append(parse_step)
         curr_bits += 128
-    json.parser[node.name].parse_step.append(curr_bits)
+
+    parse_step = DotMap()
+    parse_step.carry_len = curr_bits - 128
+    parse_step.curr_len = curr_bits
+    parse_step.carry_out_len = curr_bits - width
+    parse_step.carry_out_offset = width
+    parse_step.first_step = first_step
+    parse_step.last_step = True
+    json.parser[node.name].parse_step.append(parse_step)
 
     for block in node.control_state.basic_block:
         if type(block) == str:
@@ -63,7 +88,7 @@ def parse_dfs(bbmap, structmap, node, stack, prev_bits, visited, json):
                 json.parser[stack[-1]].intf_get = {}
             json.parser[next_header].intf_put[stack[-1]] = next_bits
             json.parser[stack[-1]].intf_get[next_header] = next_bits
-            parse_dfs(bbmap, structmap, bbmap[block[1]], stack, next_bits, visited, json)
+            parse_dfs(bbmap, structmap, bbmap[block[1]], stack, next_bits, True, visited, json)
     stack.pop()
 
 def generate_parse_body(serializer, json, bbmap, structmap, node, stack, visited=None):
@@ -72,7 +97,7 @@ def generate_parse_body(serializer, json, bbmap, structmap, node, stack, visited
         visited = set()
     visited.add(node.name)
     stack.append(node.name)
-    serializer.append(generate_parse_state(node, structmap, json))
+    generate_parse_state(serializer, node, structmap, json.parser[node.name])
     for block in node.control_state.basic_block:
         if type(block) == str:
             continue
@@ -87,16 +112,19 @@ def json_deparser_compute_next_state(structmap, node, json):
     bbcase = [x for x in node.control_state.basic_block if type(x) is not str]
     if len(bbcase) == 0:
         return
-    field = str.split(bbcase[0][0], '==')[0].strip()
-    value = str.split(bbcase[0][0], '==')[1].strip()
-    next_state = str.split(bbcase[0][1])[0].strip()
-    json.deparser[node.name].compute_next_state.field = field
-    branch_case = DotMap()
-    branch_case.value = value
-    branch_case.next_state = next_state
-    json.deparser[node.name].compute_next_state.branch.append(branch_case)
-    width = fmap[field]
-    json.deparser[node.name].compute_next_state.width = width
+    for case in bbcase:
+        field = str.split(case[0], '==')[0].strip()
+        value = str.split(case[0], '==')[1].strip()
+        next_state = str.split(case[1])[0].strip()
+        json.deparser[node.name].compute_next_state.field = field
+        branch_case = DotMap()
+        branch_case.value = value
+        branch_case.next_state = next_state
+        if not json.deparser[node.name].compute_next_state.branch:
+            json.deparser[node.name].compute_next_state.branch = []
+        json.deparser[node.name].compute_next_state.branch.append(branch_case)
+        width = fmap[field]
+        json.deparser[node.name].compute_next_state.width = width
 
 def next_deparse_step(width, curr_bits):
     if (width < 128):
@@ -208,11 +236,11 @@ class BSVControlFlow(ControlFlow):
         visited = set()
         start_block = self.basic_blocks[self.control_state.basic_block[0]]
         json.control_flow.parser.start = start_block.name
-        parse_dfs(self.basic_blocks, self.structs, start_block, stack, 0, visited, json)
+        parse_dfs(self.basic_blocks, self.structs, start_block, stack, 0, True, visited, json)
         serializer.append(generate_parse_state_enum(json))
         serializer.append(generate_parse_state_init(json))
         generate_parse_body(serializer, json, self.basic_blocks, self.structs, start_block, [])
-        serializer.append(generate_parse_epilog(visited, json))
+        serializer.append(generate_parse_top(visited, json))
 
     def bsvgen(self, serializer, json):
         ''' generate control flow from json '''

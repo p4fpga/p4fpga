@@ -143,7 +143,6 @@ def expand_next_state(indent, state, json):
     def process(branch):
         value = branch.value.replace("0x", "'h")
         state = CamelCase(branch.next_state)
-        print value, state
         return (value, state)
 
     if not json.has_key('compute_next_state'):
@@ -158,139 +157,97 @@ def expand_next_state(indent, state, json):
     pmap['init_state'] = "StateParseStart" if (state == 'Parser') else "StateDeparseIdle"
     return COMPUTE_NEXT_STATE % pmap
 
-FSM_TEMPLATE = '''
-  Stmt stmt_%(name)s =
+def expand_parse_carry_in(indent, step, json):
+    temp = []
+    if step.first_step:
+        for x, _ in json.items():
+            temp.append(spaces(indent) + "let data_last_cycle <- toGet(unparsed_{}_fifo).get;".format(x))
+    else:
+        temp.append(spaces(indent) + "let data_last_cycle <- toGet(internal_fifo_{}).get;".format(step.carry_len))
+    return "\n".join(temp)
+
+def expand_parse_concat(indent, step, json):
+    temp = []
+    if step.first_step and step.carry_len != 0:
+        temp.append(spaces(indent) + "Bit#({}) data = {{data_this_cycle, data_last_cycle}};".format(step.curr_len))
+    elif not step.first_step:
+        temp.append(spaces(indent) + "Bit#({}) data = {{data_this_cycle, data_last_cycle}};".format(step.curr_len))
+    return "\n".join(temp)
+
+def expand_parse_carry_out(indent, step, json):
+    temp = []
+    if step.last_step:
+        temp.append(spaces(indent) + "Vector#({}, Bit#(1)) unparsed = takeAt({}, dataVec);".format(step.carry_out_len, step.carry_out_offset))
+    return "\n".join(temp)
+
+def expand_parse_internal(indent, step, json):
+    temp = []
+    if not step.last_step:
+        temp.append(spaces(indent) + "internal_fifo_{}.enq(data);".format(step.curr_len))
+    return "\n".join(temp)
+
+def expand_parse_unpack(indent, step, json):
+    temp = []
+    if step.first_step and step.last_step:
+        temp.append(spaces(indent) + "Vector#({}, Bit#(1)) dataVec = unpack(data_this_cycle);".format(step.curr_len))
+    elif step.last_step:
+        temp.append(spaces(indent) + "Vector#({}, Bit#(1)) dataVec = unpack(data);".format(step.curr_len))
+    return "\n".join(temp)
+
+def expand_parse_extract(indent, step, json):
+    temp = []
+    if step.last_step:
+        temp.append(spaces(indent) + "let {hdr} = extract_{hdr}(pack(takeAt(0, dataVec)));".format(hdr=json.headertype))
+    return "\n".join(temp)
+
+def expand_parse_next_state(indent, step, json):
+    temp = []
+    if step.last_step:
+        if len(json.compute_next_state.branch):
+            temp.append(spaces(indent) + "let nextState = compute_next_state({}.{});".format(json.headertype, json.compute_next_state.field))
+            for x in json.compute_next_state.branch:
+                temp.append(spaces(indent) + "if (nextState == State{}) begin".format(CamelCase(x.next_state)))
+                temp.append(spaces(indent+1) + "unparsed_{}_fifo.enq(pack(unparsed));".format(x.next_state))
+                temp.append(spaces(indent) + "end")
+            temp.append(spaces(indent) + "state <= nextState;")
+        else:
+            temp.append(spaces(indent) + "state <= StateParseStart;")
+    return "\n".join(temp)
+
+PARSE_STEP='''\
+  action
+    let data_this_cycle = packet_in_wire;
+%(carry_in)s
+%(concat)s
+%(internal)s
+%(unpack)s
+%(carry_out)s
+%(extract)s
+%(next_state)s
+  endaction'''
+'''
+'''
+def expand_parse_step(indent, step, json):
+    pmap = {}
+    pmap['carry_in'] = expand_parse_carry_in(indent, step, json.intf_put)
+    pmap['concat'] = expand_parse_concat(indent, step, json)
+    pmap['internal'] = expand_parse_internal(indent, step, json)
+    pmap['unpack'] = expand_parse_unpack(indent, step, json)
+    pmap['extract'] = expand_parse_extract(indent, step, json)
+    pmap['carry_out'] = expand_parse_carry_out(indent, step, json.intf_put)
+    pmap['next_state'] = expand_parse_next_state(indent, step, json)
+    return PARSE_STEP % pmap
+
+PARSE_STMT='''\
+  Stmt %(name)s =
   seq
 %(parse_step)s
-  endseq;
-  FSM fsm_%(name)s <- mkFSM(stmt_%(name)s);
-  rule start_fsm if (start_wire);
-    fsm_%(name)s.start;
-  endrule
-  rule clear_fsm if (clear_wire);
-    fsm_%(name)s.abort;
-  endrule
-'''
-IF_NEXT_STATE_TEMPLATE = '''\
-    if (nextState == State%(next_state)s) begin
-      unparsed_%(parse_state)s_fifo.enq(pack(unparsed));
-    end'''
-NEXT_STATE_TEMPLATE = '''\
-    let nextState = compute_next_state(hdr.%(field)s);
-    if (verbose) $display("Goto state ", nextState);
-%(ifnext)s
-    next_state_wire[0] <= tagged Valid nextState;'''
-def apply_comp_next_state(node, intf_get):
-    ''' TODO '''
-    smap = {}
-    name = node.name
-    bbcase = [x for x in node.control_state.basic_block if type(x) is not str]
-    if len(bbcase) == 0:
-        return "    next_state_wire[0] <= tagged Valid StateParseStart;"
-    field = str.split(bbcase[0][0], '==')[0].strip()
-    smap['field'] = field
-    source = []
-    if name in intf_get:
-        for state in intf_get[name]:
-            source.append(IF_NEXT_STATE_TEMPLATE % {'next_state': CamelCase(state),
-                                                    'parse_state': state})
-    smap['ifnext'] = "\n".join(source)
-    return NEXT_STATE_TEMPLATE % smap
-STEP_TEMPLATE = '''  action
-    let data_this_cycle = packet_in_wire;
-%(carry_in)s%(concat)s%(internal)s%(unpack)s%(extract)s%(carry_out)s%(next_state)s
-  endaction'''
-def reset_smap():
-    smap = {}
-    smap['carry_in'] = ""
-    smap['concat'] = ""
-    smap['internal'] = ""
-    smap['unpack'] = ""
-    smap['extract'] = ""
-    smap['carry_out'] = ""
-    smap['next_state'] = ""
-    return smap
-def gen_parse_stmt(node, json):
-    ''' expand parser state machine into bluespec '''
+  endseq;'''
+def expand_parse_statement(indent, json):
     pmap = {}
-    name = node.name
-    header = node.local_header.name
-    pmap['name'] = name
-    source = []
-    carry_in = '    let data_last_cycle <- toGet({}).get;\n'
-    concat = '    Bit#({}) data = {{data_this_cycle{}}};\n'
-    internal = '    internal_fifo_{}.enq(data);\n'
-    unpack = '    Vector#({}, Bit#(1)) dataVec = unpack(data);\n'
-    extract = '    let hdr = extract_{}(pack(takeAt(0, dataVec)));\n    $display(fshow(hdr));\n'
-    carry_out = '    Vector#({}, Bit#(1)) unparsed = takeAt({}, dataVec);\n'
-    print 'xxx', json.parser[name].parse_step
-    for index, step in enumerate(json.parser[name].parse_step):
-        smap = reset_smap()
-        if name in json.parser[name].intf_put:
-            for cname, clen in json.parser[name].intf_put.items():
-                smap['carry_in'] = carry_in.format('unparsed_'+cname+'_fifo')
-            smap['concat'] = concat.format(step, ", data_last_cycle")
-            smap['internal'] = internal.format(step)
-        if len(json.parser[name].parse_step) == 1:
-            smap['unpack'] = unpack.format(step)
-            smap['extract'] = extract.format(CamelCase(header))
-            carry_out_width = json.parser[name].intf_get.items()[0][1]
-            smap['carry_out'] = carry_out.format(carry_out_width, 0)
-            smap['next_state'] = apply_comp_next_state(node, json.parser[name].intf_get)
-        source.append(STEP_TEMPLATE % smap)
-    for index, step in enumerate(json.parser[name].parse_step[1:-1]):
-        smap = reset_smap()
-        smap['carry_in'] = carry_in.format('internal_fifo_{}'.format(json.parser[name].parse_step[index]))
-        smap['concat'] = concat.format(step, ', data_last_cycle')
-        smap['internal'] = internal.format(step)
-        source.append(STEP_TEMPLATE % smap)
-    last_step = (x for x in [json.parser[name].parse_step[-1]] if len(json.parser[name].parse_step) > 1)
-    for step in last_step:
-        smap = reset_smap()
-        smap['carry_in'] = carry_in.format('internal_fifo_{}'.format(json.parser[name].parse_step[-2]))
-        smap['concat'] = concat.format(step, ', data_last_cycle')
-        smap['unpack'] = unpack.format(step)
-        smap['extract'] = extract.format(CamelCase(header))
-        smap['carry_out'] = carry_out.format(0, 0)
-        smap['next_state'] = apply_comp_next_state(node, json.parser[name].intf_get)
-        source.append(STEP_TEMPLATE % smap)
-    pmap['parse_step'] = "\n".join(source)
-    return FSM_TEMPLATE % pmap
-
-"""
-class.Interface
--- name
--- methods, decls
--- subinterfacename
-subinterfacename = [Put#(Bit#(112)), Get#(Bit#(176)), Get#(Bit#(16))]
-decls = [method start, method clear]
-Interface(name, [], decls, subinterfacename, packagename)
-
-functions = []
-class.Function
--- name
--- return_type
--- params
-
-class.Type: FIFO
--- name = unparsed_0
--- params = Bit#(16)
-
-class.Type: Wire
--- name = packet_in_wire
--- params = Bit#(128)
-
-fifos = []
-wires = []
-rules = []
-methods = []
-
-class.Module
--- name
--- params = [Reg#(ParserState), FIFO#(EtherData)]
--- decls = [FIFO, Wire, rule, method, interface]
--- provisos
-"""
+    pmap['name'] = json.name
+    pmap['parse_step'] = "\n".join([expand_parse_step(indent + 1, step, json) for step in json.parse_step])
+    return PARSE_STMT % pmap
 
 PARSE_STATE_ENUM='''\
 typedef enum {
@@ -324,28 +281,51 @@ def generate_parse_state_init(json):
     pmap['init_state'] = CamelCase(json.control_flow.parser.start)
     return PARSE_STATE_INIT % (pmap)
 
+def expand_parse_intf_put_decl(indent, json):
+    temp = spaces(indent) + "interface Put#(Bit#({})) {};"
+    return "\n".join([temp.format(v, x) for x, v in json.items()])
+
+def expand_parse_intf_put_defs(indent, json):
+    temp = spaces(indent) + "interface {} = toPut(unparsed_{}_fifo);"
+    return "\n".join([temp.format(x, x) for x, _ in json.items()])
+
+def expand_parse_intf_get_decl(indent, json):
+    temp = spaces(indent) + "interface Get#(Bit#({})) {};"
+    return "\n".join([temp.format(v, x) for x, v in json.items()])
+
+def expand_parse_intf_get_defs(indent, json):
+    temp = spaces(indent) + "interface {} = toGet(unparsed_{}_fifo);"
+    return "\n".join([temp.format(x, x) for x, _ in json.items()])
+
+def expand_parse_data_in(indent, json):
+    temp = spaces(indent) + "FIFOF#(Bit#({})) unparsed_{}_fifo <- mkBypassFIFOF;"
+    return "\n".join([temp.format(v, x) for x, v in json.items()])
+
+def expand_parse_data_out(indent, json):
+    temp = spaces(indent) + "FIFO#(Bit#({})) unparsed_{}_fifo <- mkFIFO;"
+    return "\n".join([temp.format(v, x) for x, v in json.items()])
+
+
 PARSE_STATE_TEMPLATE = '''
-interface %(name)s;
+interface %(CamelCaseName)s;
 %(intf_put)s
 %(intf_get)s
   method Action start;
   method Action stop;
 endinterface
-module mkState%(name)s#(Reg#(ParserState) state, FIFOF#(EtherData) datain)(%(name)s);
+module mkState%(CamelCaseName)s#(Reg#(ParserState) state, FIFOF#(EtherData) datain, FIFOF#(ParserState) parseStateFifo)(%(CamelCaseName)s);
   let verbose = False;
-%(unparsed_in_fifo)s
-%(unparsed_out_fifo)s
-%(internal_fifo)s
-%(parsed_out_fifo)s
+%(data_in_fifo)s
+%(data_out_fifo)s
   Wire#(Bit#(128)) packet_in_wire <- mkDWire(0);
-  Vector#(%(n)s, Wire#(Maybe#(ParserState))) next_state_wire <- replicateM(mkDWire(tagged Invalid));
+  Vector#(4, Wire#(Maybe#(ParserState))) next_state_wire <- replicateM(mkDWire(tagged Invalid));
   PulseWire start_wire <- mkPulseWire();
-  PulseWire clear_wire <- mkPulseWire();
+  PulseWire stop_wire <- mkPulseWire();
   (* fire_when_enabled *)
-  rule arbitrate_outgoing_state if (state == State%(name)s);
-    Vector#(%(n)s, Bool) next_state_valid = replicate(False);
+  rule arbitrate_outgoing_state if (state == State%(CamelCaseName)s);
+    Vector#(4, Bool) next_state_valid = replicate(False);
     Bool stateSet = False;
-    for (Integer port=0; port<%(n)s; port=port+1) begin
+    for (Integer port=0; port<4; port=port+1) begin
       next_state_valid[port] = isValid(next_state_wire[port]);
       if (!stateSet && next_state_valid[port]) begin
         stateSet = True;
@@ -355,56 +335,40 @@ module mkState%(name)s#(Reg#(ParserState) state, FIFOF#(EtherData) datain)(%(nam
     end
   endrule
 %(compute_next_state)s
-  rule load_packet if (state == State%(name)s);
+  rule load_packet if (state == State%(CamelCaseName)s);
     let data_current <- toGet(datain).get;
     packet_in_wire <= data_current.data;
   endrule
-%(stmt)s
+%(statement)s
+  FSM fsm_%(name)s <- mkFSM(%(name)s);
+  rule start_fsm if (start_wire);
+    fsm_%(name)s.start;
+  endrule
+  rule stop_fsm if (stop_wire);
+    fsm_%(name)s.abort;
+  endrule
   method start = start_wire.send;
-  method stop = clear_wire.send;
-%(intf_unparsed)s
-%(intf_parsed_out)s
+  method stop = stop_wire.send;
+%(intf_data_out)s
+%(intf_ctrl_out)s
 endmodule
 '''
-def generate_parse_state(node, structmap, json):
-    ''' expand json configuration into bluespec
-    TODO: break down to smaller pieces
-    '''
+def generate_parse_state(serializer, node, structmap, json):
+    ''' expand json configuration into bluespec '''
     pmap = {}
-    pmap['name'] = CamelCase(node.name)
+    pmap['name'] = json.name
+    pmap['CamelCaseName'] = CamelCase(json.name)
+    pmap['intf_put'] = expand_parse_intf_put_decl(1, json.intf_put)
+    pmap['intf_get'] = expand_parse_intf_get_decl(1, json.intf_get)
+    pmap['data_in_fifo'] = expand_parse_data_in(1, json.intf_put)
+    pmap['data_out_fifo'] = expand_parse_data_out(1, json.intf_get)
+    pmap['compute_next_state'] = expand_next_state(1, 'Parser', json)
+    pmap['statement'] = expand_parse_statement(1, json)
+    pmap['intf_data_out'] = expand_parse_intf_get_defs(1, json.intf_get)
+    pmap['intf_ctrl_out'] = expand_parse_intf_put_defs(1, json.intf_put)
+    serializer.append(PARSE_STATE_TEMPLATE % (pmap))
 
-    tput = "  interface Put#(Bit#({})) {};"
-    tputmap = json.parser[node.name].intf_put
-    pmap['intf_put'] = "\n".join([tput.format(v, x) for x, v in tputmap.items()])
-
-    tget = "  interface Get#(Bit#({})) {};"
-    tgetmap = json.parser[node.name].intf_get
-    pmap['intf_get'] = "\n".join([tget.format(v, x) for x, v in tgetmap.items()])
-
-    tfifo_in = "  FIFOF#(Bit#({})) unparsed_{}_fifo <- mkBypassFIFOF;"
-    tfifo_out = "  FIFOF#(Bit#({})) unparsed_{}_fifo <- mkSizedFIFOF(1);"
-    pmap['unparsed_in_fifo'] = "\n".join([tfifo_in.format(v, x) for x, v in tputmap.items()])
-    pmap['unparsed_out_fifo'] = "\n".join([tfifo_out.format(v, x) for x, v in tgetmap.items()])
-
-    # internal fifos
-    tinternal = '  FIFOF#(Bit#({})) internal_fifo_{} <- mkSizedFIFOF(1);'
-    pmap['internal_fifo'] = "\n".join([tinternal.format(x, x) for x in json.parser[node.name].parse_step[:-1]])
-
-    # only if output is required
-    tout = "  FIFOF#(Bit#({})) parsed_{}_fifo <- mkFIFOF;"
-    outfield = []
-    pmap['parsed_out_fifo'] = "\n".join([tout.format(x, x) for x in outfield])
-
-    # next state
-    pmap['n'] = 4
-    pmap['compute_next_state'] = expand_next_state(0, 'Parser', json.parser[node.name])
-    pmap['stmt'] = gen_parse_stmt(node, json)
-    tunparse = "  interface {} = toGet(unparsed_{}_fifo);"
-    pmap['intf_unparsed'] = "\n".join([tunparse.format(x, x) for x in tgetmap])
-    pmap['intf_parsed_out'] = ""
-    return PARSE_STATE_TEMPLATE % (pmap)
-
-PARSE_EPILOG_TEMPLATE = '''
+PARSE_TOP_TEMPLATE = '''
 interface Parser;
   interface Put#(EtherData) frameIn;
   interface Get#(MetadataT) meta;
@@ -434,18 +398,18 @@ module mkParser(Parser);
   endrule
 
   Empty init_state <- mkStateParseStart(curr_state, data_in_fifo, start_fsm);
-%(states)s
-%(connections)s
+%(parse_state)s
+%(connect_state)s
   rule start if (start_fsm);
     if (!started) begin
-%(start_states)s
+%(parse_start_states)s
       started <= True;
     end
   endrule
 
-  rule clear if (!start_fsm && curr_state == StateParseStart);
+  rule stop if (!start_fsm && curr_state == StateParseStart);
     if (started) begin
-%(stop_states)s
+%(parse_stop_states)s
       started <= False;
     end
   endrule
@@ -453,53 +417,43 @@ module mkParser(Parser);
   interface meta = toGet(metadata_out_fifo);
 endmodule
 '''
-def generate_parse_epilog(states, json):
-    ''' TODO '''
+def generate_parse_top(states, json):
+    ''' generate parser top module '''
     pmap = {}
-    tstates = '  {} {} <- mkState{}(curr_state, data_in_fifo);'
-    pmap['states'] = "\n".join([tstates.format(CamelCase(x), x, CamelCase(x))
-                                for x in states])
-    tconn = '  mkConnection({a}.{b}, {b}.{a});'
-    conn = []
-    for start, item in json.parser.items():
-        for end, _ in item.intf_put.items():
-            conn.append(tconn.format(a=start, b=end))
-    pmap['connections'] = "\n".join(conn)
-    tstart = '      {}.start;'
-    pmap['start_states'] = "\n".join([tstart.format(x) for x in states])
-    tstop = '      {}.stop;'
-    pmap['stop_states'] = "\n".join([tstop.format(x) for x in states])
-    return PARSE_EPILOG_TEMPLATE % (pmap)
+    pmap['parse_state'] = expand_parse_state(1, json.parser)
+    pmap['connect_state'] = expand_state_connection(1, json.parser)
+    pmap['parse_start_states'] = expand_state_start(3, json.parser)
+    pmap['parse_stop_states'] = expand_state_stop(3, json.parser)
+    return PARSE_TOP_TEMPLATE % (pmap)
 
-#FIXME: need to encapsulate to deparser
-
+# Deparser
 def apply(temp, json):
     return [temp.format(v, x) for x, v in json.items()]
 
 def spaces(indent):
     return ' ' * 2 * indent
 
-def expand_intf_put(indent, json):
+def expand_deparse_intf_put_decl(indent, json):
     temp = spaces(indent) + "interface Put#(EtherData) {};"
     return "\n".join([temp.format(x) for x, _ in json.items()])
 
-def expand_intf_put_defs(indent, json):
+def expand_deparse_intf_put_defs(indent, json):
     temp = spaces(indent) + "interface {} = toPut({}_fifo);"
     return "\n".join([temp.format(x, x) for x, _ in json.items()])
 
-def expand_intf_get_decl(indent, json):
+def expand_deparse_intf_get_decl(indent, json):
     temp = spaces(indent) + "interface Get#(EtherData) {};"
     return "\n".join([temp.format(x) for x, _ in json.items()])
 
-def expand_intf_get_defs(indent, json):
+def expand_deparse_intf_get_defs(indent, json):
     temp = spaces(indent) + "interface {} = toGet({}_fifo);"
     return "\n".join([temp.format(x, x) for x, _ in json.items()])
 
-def expand_data_in(indent, json):
+def expand_deparse_data_in(indent, json):
     temp = spaces(indent) + "FIFOF#(EtherData) {}_fifo <- mkBypassFIFOF;"
     return "\n".join([temp.format(x) for x, _ in json.items()])
 
-def expand_data_out(indent, json):
+def expand_deparse_data_out(indent, json):
     temp = spaces(indent) + "FIFO#(EtherData) {}_fifo <- mkFIFO;"
     return "\n".join([temp.format(x) for x, _ in json.items()])
 
@@ -606,7 +560,7 @@ DEPARSE_STMT='''\
 %(parse_step)s
   endseq;
 '''
-def expand_statement(indent, json):
+def expand_deparse_statement(indent, json):
     pmap = {}
     pmap['name'] = json.name
     pmap['parse_step'] = "\n".join([expand_deparse_step(indent + 1, step, json) for step in json.deparse_step])
@@ -630,7 +584,7 @@ interface %(CamelCaseName)s;
 %(intf_put)s
 %(intf_get)s
   method Action start;
-  method Action clear;
+  method Action stop;
 endinterface
 module mkState%(CamelCaseName)s#(Reg#(DeparserState) state, FIFOF#(EtherData) datain, FIFOF#(EtherData) dataout, FIFOF#(%(headertype)s) meta_fifo, FIFOF#(%(headertype)s) mask_fifo)(%(CamelCaseName)s);
   let verbose = False;
@@ -638,7 +592,7 @@ module mkState%(CamelCaseName)s#(Reg#(DeparserState) state, FIFOF#(EtherData) da
 %(data_in_fifo)s
 %(data_out_fifo)s
   PulseWire start_wire <- mkPulseWire;
-  PulseWire clear_wire <- mkPulseWire;
+  PulseWire stop_wire <- mkPulseWire;
 %(compute_next_state)s
   rule load_packet if (state == State%(CamelCaseName)s);
     let data_current <- toGet(datain).get;
@@ -649,11 +603,11 @@ module mkState%(CamelCaseName)s#(Reg#(DeparserState) state, FIFOF#(EtherData) da
   rule start_fsm if (start_wire);
     fsm_%(name)s.start;
   endrule
-  rule clear_fsm if (clear_wire);
+  rule stop_fsm if (stop_wire);
     fsm_%(name)s.abort;
   endrule
   method start = start_wire.send;
-  method clear = clear_wire.send;
+  method stop = stop_wire.send;
 %(intf_data_out)s
 %(intf_ctrl_out)s
 endmodule
@@ -664,14 +618,14 @@ def generate_deparse_state(serializer, json):
     pmap = {}
     pmap['name'] = json.name
     pmap['CamelCaseName'] = CamelCase(json.name)
-    pmap['intf_put'] = expand_intf_put(1, json.intf_put)
-    pmap['intf_get'] = expand_intf_get_decl(1, json.intf_get)
-    pmap['data_in_fifo'] = expand_data_in(1, json.intf_put)
-    pmap['data_out_fifo'] = expand_data_out(1, json.intf_get)
+    pmap['intf_put'] = expand_deparse_intf_put_decl(1, json.intf_put)
+    pmap['intf_get'] = expand_deparse_intf_get_decl(1, json.intf_get)
+    pmap['data_in_fifo'] = expand_deparse_data_in(1, json.intf_put)
+    pmap['data_out_fifo'] = expand_deparse_data_out(1, json.intf_get)
     pmap['compute_next_state'] = expand_next_state(1, "Deparser", json)
-    pmap['statement'] = expand_statement(1, json)
-    pmap['intf_data_out'] = expand_intf_get_defs(1, json.intf_get);
-    pmap['intf_ctrl_out'] = expand_intf_put_defs(1, json.intf_put);
+    pmap['statement'] = expand_deparse_statement(1, json)
+    pmap['intf_data_out'] = expand_deparse_intf_get_defs(1, json.intf_get);
+    pmap['intf_ctrl_out'] = expand_deparse_intf_put_defs(1, json.intf_put);
     pmap['headertype'] = CamelCase(json.headertype)
     serializer.append(DEPARSE_STATE_TEMPLATE % pmap)
 
@@ -712,20 +666,24 @@ def expand_mask_fifo(indent, json):
 def expand_deparse_state(indent, json):
     temp = spaces(indent) + "{C} {c} <- mkState{C}(curr_state, data_in_fifo, data_out_fifo, {c}_meta_fifo, {c}_mask_fifo);"
     return "\n".join([temp.format(C=CamelCase(x), c=x) for x, _ in json.items()])
-def expand_connect_deparse_state(indent, json):
+def expand_parse_state(indent, json):
+    temp = spaces(indent) + "{C} {c} <- mkState{C}(curr_state, data_in_fifo);"
+    return "\n".join([temp.format(C=CamelCase(x), c=x) for x, _ in json.items()])
+
+def expand_state_connection(indent, json):
     connections = []
     temp = spaces(indent) + "mkConnection({a}.{b}, {b}.{a});"
-    for state, values in json.items():
-        for conn in values.intf_get.keys():
-            connections.append(temp.format(a=state, b=conn))
+    for start, values in json.items():
+        for end in values.intf_get.keys():
+            connections.append(temp.format(a=start, b=end))
     return "\n".join(connections)
 
-def expand_deparse_state_start(indent, json):
+def expand_state_start(indent, json):
     temp = spaces(indent) + "{}.start;"
     return "\n".join([temp.format(x) for x, _ in json.items()])
 
-def expand_deparse_state_stop(indent, json):
-    temp = spaces(indent) + "{}.clear;"
+def expand_state_stop(indent, json):
+    temp = spaces(indent) + "{}.stop;"
     return "\n".join([temp.format(x) for x, _ in json.items()])
 
 DEPARSE_TOP_TEMPLATE = '''
@@ -773,7 +731,7 @@ module mkDeparser(Deparser);
       started <= True;
     end
   endrule
-  rule clear if (!start_fsm && curr_state == StateDeparseIdle);
+  rule stop if (!start_fsm && curr_state == StateDeparseIdle);
     if (started) begin
 %(deparse_state_stop)s
       started <= False;
@@ -795,9 +753,9 @@ def generate_deparse_top(indent, json):
     pmap["mask_in_fifo"] = expand_mask_fifo(indent + 1, json.deparser)
     pmap["metadata_func"] = ""
     pmap["deparse_state"] = expand_deparse_state(indent + 1, json.deparser)
-    pmap["connect_state"] = expand_connect_deparse_state(indent + 1, json.deparser)
-    pmap["deparse_state_start"] = expand_deparse_state_start(indent + 3, json.deparser)
-    pmap["deparse_state_stop"] = expand_deparse_state_stop(indent + 3, json.deparser)
+    pmap["connect_state"] = expand_state_connection(indent + 1, json.deparser)
+    pmap["deparse_state_start"] = expand_state_start(indent + 3, json.deparser)
+    pmap["deparse_state_stop"] = expand_state_stop(indent + 3, json.deparser)
     return DEPARSE_TOP_TEMPLATE % (pmap)
 
 TABLE_TEMPLATE = '''
@@ -1080,4 +1038,40 @@ def generate_basic_block (block):
                                         'rule': "",
                                         'intf': ""}
     return BASIC_BLOCK_TEMPLATE % pmap
+
+"""
+class.Interface
+-- name
+-- methods, decls
+-- subinterfacename
+subinterfacename = [Put#(Bit#(112)), Get#(Bit#(176)), Get#(Bit#(16))]
+decls = [method start, method stop]
+Interface(name, [], decls, subinterfacename, packagename)
+
+functions = []
+class.Function
+-- name
+-- return_type
+-- params
+
+class.Type: FIFO
+-- name = unparsed_0
+-- params = Bit#(16)
+
+class.Type: Wire
+-- name = packet_in_wire
+-- params = Bit#(128)
+
+fifos = []
+wires = []
+rules = []
+methods = []
+
+class.Module
+-- name
+-- params = [Reg#(ParserState), FIFO#(EtherData)]
+-- decls = [FIFO, Wire, rule, method, interface]
+-- provisos
+"""
+
 
