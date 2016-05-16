@@ -153,7 +153,7 @@ instance FShow#(RoutingReqT);
   endfunction
 endinstance
 
-function RoutingReqT extract_RoutingReqT(Bit#(32) data);
+function RoutingReqT extract_routing_req_t(Bit#(32) data);
   Vector#(32, Bit#(1)) dataVec = unpack(data);
   Vector#(32, Bit#(1)) dstAddr = takeAt(0, dataVec);
   RoutingReqT hdr = defaultValue;
@@ -185,7 +185,7 @@ instance FShow#(StandardMetadata);
   endfunction
 endinstance
 
-function StandardMetadata extract_StandardMetadata(Bit#(160) data);
+function StandardMetadata extract_standard_metadata(Bit#(160) data);
   Vector#(160, Bit#(1)) dataVec = unpack(data);
   Vector#(9, Bit#(1)) ingress_port = takeAt(0, dataVec);
   Vector#(32, Bit#(1)) packet_length = takeAt(9, dataVec);
@@ -314,7 +314,7 @@ instance FShow#(MetaT);
   endfunction
 endinstance
 
-function MetaT extract_MetaT(Bit#(48) data);
+function MetaT extract_meta_t(Bit#(48) data);
   Vector#(48, Bit#(1)) dataVec = unpack(data);
   Vector#(32, Bit#(1)) dstAddr = takeAt(0, dataVec);
   Vector#(16, Bit#(1)) etherType = takeAt(32, dataVec);
