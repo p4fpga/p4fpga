@@ -70,25 +70,25 @@ def generate_import_statements(serializer):
 TYPEDEF_TEMPLATE = '''
 typedef struct {
 %(field)s
-} %(name)s deriving (Bits, Eq);
+} %(CamelCaseName)s deriving (Bits, Eq);
 
-instance DefaultValue#(%(name)s);
+instance DefaultValue#(%(CamelCaseName)s);
   defaultValue = unpack(0);
 endinstance
-instance DefaultMask#(%(name)s);
+instance DefaultMask#(%(CamelCaseName)s);
   defaultMask = unpack(maxBound);
 endinstance
 
-instance FShow#(%(name)s);
-  function Fmt fshow(%(name)s p);
-    return $format("%(name)s: %(printf)s", %(printv)s);
+instance FShow#(%(CamelCaseName)s);
+  function Fmt fshow(%(CamelCaseName)s p);
+    return $format("%(CamelCaseName)s: %(printf)s", %(printv)s);
   endfunction
 endinstance
 
-function %(name)s extract_%(name)s(Bit#(%(width)s) data);
+function %(CamelCaseName)s extract_%(name)s(Bit#(%(width)s) data);
   Vector#(%(width)s, Bit#(1)) dataVec = unpack(data);
 %(extract)s
-  %(name)s hdr = defaultValue;
+  %(CamelCaseName)s hdr = defaultValue;
 %(pack)s
   return hdr;
 endfunction
@@ -117,7 +117,8 @@ def generate_typedef(struct):
         pack.append('  hdr.{f} = pack({f});'.format(f=field))
         offset += size
 
-    pmap = {'name': CamelCase(struct.name),
+    pmap = {'name': struct.name,
+            'CamelCaseName': CamelCase(struct.name),
             'field': '\n'.join(typedef_fields),
             'printf': ', '.join(printf),
             'printv': ', '.join(printv),
