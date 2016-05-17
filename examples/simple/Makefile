@@ -19,7 +19,7 @@ PYPATH?=PYTHONPATH=${BIRDIR}:${OFTESTDIR}
 ###########################################
 S2H_INTERFACES=MainRequest:Main.request
 H2S_INTERFACES=Main:MainIndication,MemServerIndication
-BSVFILES=Main.bsv MainAPI.bsv
+BSVFILES=Main.bsv MainAPI.bsv MainDefs.bsv
 CPPFILES=main.cpp
 CPPFILES += $(SONICDIR)/sw/lpcap.c
 CONNECTALFLAGS += -I $(SONICDIR)/sw/

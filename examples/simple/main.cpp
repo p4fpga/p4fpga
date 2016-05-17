@@ -113,6 +113,7 @@ int main(int argc, char **argv)
     parse_options(argc, argv, &pcap_file, 0);
     device->read_version();
 
+    device->routingTable_add_entry(0x0200000a, FORWARD, 1);
     if (pcap_file) {
         fprintf(stderr, "Attempts to read pcap file %s\n", pcap_file);
         load_pcap_file(pcap_file, &pcap_info);

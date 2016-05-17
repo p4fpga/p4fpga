@@ -39,10 +39,7 @@ import StmtFSM::*;
 import Utils::*;
 import Vector::*;
 
-typedef enum {
-  NOP,
-  FORWARD
-} RouteActionT deriving (Bits, Eq);
+import MainDefs::*;
 
 typedef struct {
   RouteActionT p4_action;
@@ -69,6 +66,7 @@ typedef struct {
    Maybe#(Bool) valid_ethernet;
    Maybe#(Bool) valid_ipv4;
    Maybe#(RouteActionT) routingtable$route;
+   Maybe#(Bit#(9)) egress_port;
 } MetadataT deriving (Bits, Eq);
 
 instance DefaultValue#(MetadataT);
@@ -77,6 +75,7 @@ MetadataT {
    dstAddr: tagged Invalid,
    etherType: tagged Invalid,
    protocol: tagged Invalid,
+   egress_port: tagged Invalid,
    valid_ethernet: tagged Invalid,
    valid_ipv4: tagged Invalid
 };
@@ -86,7 +85,8 @@ instance FShow#(MetadataT);
    function Fmt fshow(MetadataT p);
       return $format("dstAddr=", fshow(p.dstAddr), ",")+
              $format("etherType=", fshow(p.etherType), ",")+
-             $format("protocol=", fshow(p.protocol), ",");
+             $format("protocol=", fshow(p.protocol), ",")+
+             $format("egress_port=", fshow(p.egress_port), ",");
    endfunction
 endinstance
 
@@ -124,6 +124,7 @@ typedef Server#(MetadataRequest, MetadataResponse) MetadataServer;
 typedef union tagged {
    struct {
       PacketInstance pkt;
+      Bit#(9) egress_port;
    } BBForwardRequest;
    struct {
       PacketInstance pkt;
@@ -136,6 +137,7 @@ typedef union tagged {
    } BBNopResponse;
    struct {
       PacketInstance pkt;
+      Bit#(9) egress_port;
    } BBForwardResponse;
 } BBResponse deriving (Bits, Eq, FShow);
 
@@ -384,7 +386,15 @@ module mkBasicBlockForward(BasicBlockForward);
    FIFO#(PacketInstance) curr_packet_fifo <- mkSizedFIFO(1);
 
    rule bb_handle_forward;
-
+      let req <- toGet(bb_forward_request_fifo).get;
+      case (req) matches
+         tagged BBForwardRequest {pkt: .pkt, egress_port: .egress_port}: begin
+            BBResponse resp;
+            resp = tagged BBForwardResponse {pkt: pkt, egress_port: egress_port};
+            bb_forward_response_fifo.enq(resp);
+            $display("(%0d) handle forward", $time);
+         end
+      endcase
    endrule
 
    interface prev_control_state = (interface BBServer;
@@ -419,7 +429,7 @@ endmodule
 interface RoutingTable;
    interface BBClient next_control_state_0;
    interface BBClient next_control_state_1;
-   method Action add_entry(Bit#(32) dstAddr, RouteActionT action_);
+   method Action add_entry(Bit#(32) dstAddr, RouteActionT action_, Bit#(9) port_);
 endinterface
 module mkRoutingTable#(MetadataClient md)(RoutingTable);
    let verbose = True;
@@ -462,8 +472,21 @@ module mkRoutingTable#(MetadataClient md)(RoutingTable);
 
       if (v matches tagged Valid .data) begin
          RoutingRespT resp = unpack(data);
-         // basic block request
-         $display("(%0d) routing response", $time);
+         case (resp.p4_action) matches
+            NOP: begin
+               BBRequest req;
+               req = tagged BBNopRequest {pkt: pkt};
+               bbReqFifo[0].enq(req);
+            end
+            FORWARD: begin
+               Bit#(9) egress_port = resp.action_1_arg0;
+               BBRequest req;
+               req = tagged BBForwardRequest {pkt: pkt, egress_port: egress_port};
+               bbReqFifo[1].enq(req);
+               $display("(%0d) routing response", $time);
+            end
+         endcase
+         bbMetadataFifo.enq(meta);
       end
       else begin
          $display("(%0d) missed, drop packet");
@@ -478,15 +501,13 @@ module mkRoutingTable#(MetadataClient md)(RoutingTable);
             MetadataResponse resp = tagged RoutingTableResponse {pkt: pkt, meta: meta};
             md.response.put(resp);
          end
-         tagged BBForwardResponse {pkt: .pkt}: begin
+         tagged BBForwardResponse {pkt: .pkt, egress_port: .egress_port}: begin
+            meta.egress_port = tagged Valid egress_port;
             MetadataResponse resp = tagged RoutingTableResponse {pkt: pkt, meta: meta};
             md.response.put(resp);
+            $display("(%0d) forward response", $time);
          end
       endcase
-   endrule
-
-   rule bb_drop_packet;
-
    endrule
 
    interface next_control_state_0 = (interface BBClient;
@@ -497,9 +518,9 @@ module mkRoutingTable#(MetadataClient md)(RoutingTable);
       interface request = toGet(bbReqFifo[1]);
       interface response = toPut(bbRespFifo[1]);
    endinterface);
-   method Action add_entry(Bit#(32) dstAddr, RouteActionT action_);
+   method Action add_entry(Bit#(32) dstAddr, RouteActionT action_, Bit#(9) port_);
       RoutingReqT req = RoutingReqT {dstAddr: dstAddr, padding: 0};
-      RoutingRespT resp = RoutingRespT {p4_action: action_};
+      RoutingRespT resp = RoutingRespT {p4_action: action_, action_1_arg0: port_};
       if (verbose) $display("(%0d) routing table resp=%h", $time, pack(resp));
       matchTable.add_entry.put(tuple2(pack(req), pack(resp)));
    endmethod
@@ -507,6 +528,7 @@ endmodule
 
 interface Ingress0;
    interface PipeOut#(MetadataRequest) eventPktSend;
+   method Action routingTable_add_entry(Bit#(32) dstAddr, RouteActionT act, Bit#(9) port_);
 endinterface
 
 module mkIngress0#(Vector#(numClients, MetadataClient) mdc)(Ingress0);
@@ -544,8 +566,8 @@ module mkIngress0#(Vector#(numClients, MetadataClient) mdc)(Ingress0);
   BasicBlockNop bb_drop <- mkBasicBlockNop();
 
   // Connect Table width BasicBlock
-  mkConnection(routingTable.next_control_state_0, bb_fwd.prev_control_state);
-  mkConnection(routingTable.next_control_state_1, bb_drop.prev_control_state);
+  mkConnection(routingTable.next_control_state_0, bb_drop.prev_control_state);
+  mkConnection(routingTable.next_control_state_1, bb_fwd.prev_control_state);
 
   rule default_next_control_state if (defaultReqFifo.first matches tagged DefaultRequest {pkt: .pkt, meta: .meta});
     defaultReqFifo.deq;
@@ -571,6 +593,7 @@ module mkIngress0#(Vector#(numClients, MetadataClient) mdc)(Ingress0);
   endrule
 
   interface eventPktSend = toPipeOut(currPacketFifo);
+  method routingTable_add_entry = routingTable.add_entry;
 endmodule
 
 typedef enum {
@@ -672,6 +695,7 @@ endmodule
 interface ParseIpv4;
   interface Put#(Bit#(16)) parse_ethernet;
   interface Get#(Bit#(8)) parsedOut_ipv4_protocol;
+  interface Get#(Bit#(32)) parsedOut_ipv4_dstAddr;
   method Action start;
   method Action stop;
 endinterface
@@ -680,6 +704,7 @@ module mkStateParseIpv4#(Reg#(ParserState) state, FIFOF#(EtherData) datain, FIFO
   FIFOF#(Bit#(16)) unparsed_parse_ethernet_fifo <- mkBypassFIFOF;
 
   FIFOF#(Bit#(8)) parsed_ipv4_protocol_fifo <- mkFIFOF;
+  FIFOF#(Bit#(32)) parsed_ipv4_dstAddr_fifo <- mkFIFOF;
   FIFOF#(Bit#(144)) internal_fifo_144 <- mkSizedFIFOF(1);
 
   Wire#(Bit#(128)) packet_in_wire <- mkDWire(0);
@@ -720,6 +745,7 @@ module mkStateParseIpv4#(Reg#(ParserState) state, FIFOF#(EtherData) datain, FIFO
     let ipv4_t = extract_ipv4_t(pack(takeAt(0, dataVec)));
     parseStateFifo.enq(StateParseIpv4);
     parsed_ipv4_protocol_fifo.enq(ipv4_t.protocol);
+    parsed_ipv4_dstAddr_fifo.enq(ipv4_t.dstAddr);
     next_state_wire[0] <= tagged Valid StateParseStart;
   endaction
   endseq;
@@ -734,6 +760,7 @@ module mkStateParseIpv4#(Reg#(ParserState) state, FIFOF#(EtherData) datain, FIFO
   method stop = stop_wire.send;
   interface parse_ethernet = toPut(unparsed_parse_ethernet_fifo);
   interface parsedOut_ipv4_protocol = toGet(parsed_ipv4_protocol_fifo);
+  interface parsedOut_ipv4_dstAddr = toGet(parsed_ipv4_dstAddr_fifo);
 endmodule
 
 interface Parser;
@@ -790,10 +817,12 @@ module mkParser(Parser);
     parse_state_out_fifo.deq;
     let protocol <- toGet(parse_ipv4.parsedOut_ipv4_protocol).get;
     let etherType <- toGet(parse_ethernet.parsedOut_ethernet_etherType).get;
+    let dstAddr <- toGet(parse_ipv4.parsedOut_ipv4_dstAddr).get;
     $display("(%0d) handle ipv4", $time);
     MetadataT meta = defaultValue;
     meta.protocol = tagged Valid protocol;
     meta.etherType = tagged Valid etherType;
+    meta.dstAddr = tagged Valid dstAddr;
     meta.valid_ipv4 = tagged Valid True;
     meta.valid_ethernet = tagged Valid True;
     metadata_out_fifo.enq(meta);
@@ -832,7 +861,7 @@ module mkStateDeparseIdle#(Reg#(DeparserState) state, FIFOF#(EtherData) datain, 
       if (v.sop) begin
          state <= StateDeparseEthernet;
          start_fsm <= True;
-         $display("(%0d) Deparse Ethernet Start", $time);
+         $display("(%0d) Deparse Ethernet Start", $time, fshow(v));
       end
       else begin
          datain.deq;
@@ -849,7 +878,7 @@ interface DeparseEthernet;
   method Action stop;
 endinterface
 module mkStateDeparseEthernet#(Reg#(DeparserState) state, FIFOF#(EtherData) datain, FIFOF#(EtherData) dataout, FIFOF#(EthernetT) meta_fifo, FIFOF#(EthernetT) mask_fifo)(DeparseEthernet);
-  let verbose = False;
+  let verbose = True;
   Wire#(EtherData) packet_in_wire <- mkDWire(defaultValue);
 
   FIFO#(EtherData) deparse_ipv4_fifo <- mkFIFO;
@@ -872,6 +901,7 @@ module mkStateDeparseEthernet#(Reg#(DeparserState) state, FIFOF#(EtherData) data
   rule load_packet if (state == StateDeparseEthernet);
     let data_current <- toGet(datain).get;
     packet_in_wire <= data_current;
+    $display("(%0d) Ether: ", $time, fshow(data_current));
   endrule
   Stmt deparse_ethernet =
   seq
@@ -885,8 +915,11 @@ module mkStateDeparseEthernet#(Reg#(DeparserState) state, FIFOF#(EtherData) data
     let curr_data = masked_data | pack(curr_meta);
     EthernetT ethernet_t = unpack(pack(masked_data));
     data_this_cycle.data = {pack(unused), pack(curr_data)};
-    let nextState = compute_next_state(ethernet_t.etherType);
+    let nextState = compute_next_state(meta_fifo.first.etherType);
+    if (verbose) $display("(%0d) etherType", $time, meta_fifo.first.etherType);
+    if (verbose) $display("(%0d) Goto state ", $time, nextState);
     state <= nextState;
+    $display("(%0d) deparse ethernet ", $time, fshow(nextState), fshow(data_this_cycle));
     if (nextState == StateDeparseIpv4) begin
       deparse_ipv4_fifo.enq(data_this_cycle);
     end
@@ -902,8 +935,12 @@ module mkStateDeparseEthernet#(Reg#(DeparserState) state, FIFOF#(EtherData) data
   rule stop_fsm if (stop_wire);
     fsm_deparse_ethernet.abort;
   endrule
-  method start = start_wire.send;
-  method stop = stop_wire.send;
+  method Action start();
+     start_wire.send();
+  endmethod
+  method Action stop();
+     stop_wire.send();
+  endmethod
   interface deparse_ipv4 = toGet(deparse_ipv4_fifo);
 endmodule
 
@@ -913,7 +950,7 @@ interface DeparseIpv4;
   method Action stop;
 endinterface
 module mkStateDeparseIpv4#(Reg#(DeparserState) state, FIFOF#(EtherData) datain, FIFOF#(EtherData) dataout, FIFOF#(Ipv4T) meta_fifo, FIFOF#(Ipv4T) mask_fifo)(DeparseIpv4);
-  let verbose = False;
+  let verbose = True;
   Wire#(EtherData) packet_in_wire <- mkDWire(defaultValue);
   FIFOF#(EtherData) deparse_ethernet_fifo <- mkBypassFIFOF;
   PulseWire start_wire <- mkPulseWire;
@@ -974,8 +1011,12 @@ module mkStateDeparseIpv4#(Reg#(DeparserState) state, FIFOF#(EtherData) datain, 
   rule stop_fsm if (stop_wire);
     fsm_deparse_ipv4.abort;
   endrule
-  method start = start_wire.send;
-  method stop = stop_wire.send;
+  method Action start();
+     start_wire.send();
+  endmethod
+  method Action stop();
+     stop_wire.send();
+  endmethod
   interface deparse_ethernet = toPut(deparse_ethernet_fifo);
 endmodule
 
@@ -1043,6 +1084,7 @@ module mkDeparser(Deparser);
 
   rule start if (start_fsm);
     if (!started) begin
+      $display("(%0d) start deparser", $time);
       deparse_ethernet.start;
       deparse_ipv4.start;
       started <= True;
@@ -1051,6 +1093,7 @@ module mkDeparser(Deparser);
   endrule
   rule stop if (!start_fsm && curr_state == StateDeparseIdle);
     if (started) begin
+      $display("(%0d) stop deparser", $time);
       deparse_ethernet.stop;
       deparse_ipv4.stop;
       started <= False;

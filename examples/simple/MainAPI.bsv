@@ -27,6 +27,8 @@ import GetPut::*;
 import HostChannel::*;
 import PacketBuffer::*;
 import Vector::*;
+import MainDefs::*;
+import Simple::*;
 
 interface MainIndication;
    method Action read_version_resp(Bit#(32) version);
@@ -35,13 +37,14 @@ endinterface
 interface MainRequest;
    method Action read_version();
    method Action writePacketData(Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
+   method Action routingTable_add_entry(Bit#(32) dstAddr, RouteActionT act, Bit#(9) port_);
 endinterface
 
 interface MainAPI;
    interface MainRequest request;
 endinterface
 
-module mkMainAPI#(MainIndication indication, HostChannel hostchan)(MainAPI);
+module mkMainAPI#(MainIndication indication, HostChannel hostchan, Ingress0 ingress)(MainAPI);
 
    interface MainRequest request;
       method Action read_version();
@@ -56,5 +59,6 @@ module mkMainAPI#(MainIndication indication, HostChannel hostchan)(MainAPI);
          beat.eop = unpack(eop);
          hostchan.writeServer.writeData.put(beat);
       endmethod
+      method routingTable_add_entry = ingress.routingTable_add_entry;
    endinterface
 endmodule

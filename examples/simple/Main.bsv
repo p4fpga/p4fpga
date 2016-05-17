@@ -75,6 +75,6 @@ module mkMain#(MainIndication indication
    endrule
 `endif
 
-   MainAPI api <- mkMainAPI(indication, hostchan);
+   MainAPI api <- mkMainAPI(indication, hostchan, ingress);
    interface request = api.request;
 endmodule
