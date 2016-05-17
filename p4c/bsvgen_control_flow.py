@@ -7,7 +7,7 @@ from pif_ir.bir.utils.validate import check_control_state
 from bsvgen_control_state import BSVControlState
 from programSerializer import ProgramSerializer
 from bsvgen_common import generate_parse_top,\
-                          generate_parse_state, generate_control_flow, \
+                          generate_parse_state, generate_control_flow_top, \
                           generate_parse_state_enum, generate_parse_state_init, \
                           generate_deparse_state_enum, \
                           generate_deparse_state, generate_deparse_top, \
@@ -113,7 +113,9 @@ def json_deparser_compute_next_state(structmap, node, json):
     if len(bbcase) == 0:
         return
     for case in bbcase:
-        field = str.split(case[0], '==')[0].strip()
+        metadata = str.split(case[0], '==')[0].strip()
+        instance = str.split(metadata, "$")[0].strip()
+        field = str.split(metadata, "$")[1].strip()
         value = str.split(case[0], '==')[1].strip()
         next_state = str.split(case[1])[0].strip()
         json.deparser[node.name].compute_next_state.field = field
@@ -242,6 +244,10 @@ class BSVControlFlow(ControlFlow):
         generate_parse_body(serializer, json, self.basic_blocks, self.structs, start_block, [])
         serializer.append(generate_parse_top(visited, json))
 
+    def generate_control_flow(self, serializer, json):
+        ''' buidl control flow json '''
+        serializer.append(generate_control_flow_top(self))
+
     def bsvgen(self, serializer, json):
         ''' generate control flow from json '''
         assert isinstance(serializer, ProgramSerializer)
@@ -250,6 +256,6 @@ class BSVControlFlow(ControlFlow):
         elif self.name == 'deparser':
             self.generate_deparser(serializer, json)
         else:
-            serializer.append(generate_control_flow(self))
+            self.generate_control_flow(serializer, json)
             #self.next_processor.bsvgen()
 

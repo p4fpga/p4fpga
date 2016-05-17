@@ -1,5 +1,5 @@
 
-ROOT_DIR=~/dev/p4c-bluespec/pif_ir
+ROOT_DIR=~/dev/p4fpga/pif_ir
 P4PAXOS:=~/dev/p4paxos/p4src
 PYPATH=PYTHONPATH=${ROOT_DIR}
 

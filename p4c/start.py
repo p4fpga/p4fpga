@@ -10,10 +10,14 @@ import os
 import yaml
 from collections import OrderedDict
 from p4_hlir.main import HLIR
+from p4_hlir.hlir import p4
 from p4_hlir.hlir import p4_parse_state, p4_action, p4_table, p4_header_instance
 from p4_hlir.hlir import p4_parse_state_keywords, p4_conditional_node
 from p4_hlir.hlir import p4_control_flow, p4_expression
+from p4_hlir.hlir.analysis_utils import retrieve_from_one_action, get_all_subfields
 from compilationException import CompilationException
+
+_include_valid = False
 
 # Print OrderedDict() to standard yaml
 # from http://blog.elsdoerfer.name/2012/07/26/make-pyyaml-output-an-ordereddict/
@@ -198,8 +202,7 @@ class BasicBlock(object):
         self.instructions = []
         for branch in parse_state.branch_on:
             #if type extract/set_metadata
-            dst = 'meta.{}'.format(branch.name)
-            print 'meta.', branch.name
+            dst = 'meta.{}${}'.format(branch.instance, branch.name)
             inst = ['V', dst, branch.name]
             self.instructions.append(inst)
         branch_to = parse_state.branch_to.items()
@@ -216,7 +219,7 @@ class BasicBlock(object):
     def build_deparser_state(self, deparse_state):
         ''' build deparser basic block '''
         self.local_header = deparse_state.latest_extraction.header_type.name
-        branch_on = map(lambda v: v.name, deparse_state.branch_on)
+        branch_on = map(lambda v: "{}${}".format(v.instance, v.name), deparse_state.branch_on)
         self.instructions = []
         branch_to = deparse_state.branch_to.items()
         next_offset = "$offset$ + {}".format(
@@ -235,15 +238,12 @@ class BasicBlock(object):
             ''' add field to meta '''
             if isinstance(field, int):
                 return field
-            print 'xxx meta action',field
             return 'meta.{}'.format(str(field).replace(".", "_")) if field else None
 
         def print_cond(cond):
             if cond.op == 'valid':
-                print 'xxx meta valid', cond.op, cond.right
                 return 'meta.{}_{} == 1'.format(cond.op, cond.right)
             else:
-                print 'xxx meta cond', cond
                 left = meta(cond.left)
                 right = meta(cond.right)
                 return ("("+(str(left)+" " if left else "")+
@@ -260,15 +260,24 @@ class BasicBlock(object):
                     if isinstance(cond, p4_conditional_node):
                         get_next_control_state(cond, next_control_state)
 
-        def print_instruction(inst, instructions):
+        def print_instruction(inst):
+            instructions = []
+            primitive = inst[0]
+            args = inst[1]
             if inst[0].name in ['register_read', 'register_write']:
                 params=[]
                 for param in inst[1]:
                     params.append(str(param))
                 instructions.append(['O', inst[0].name, params])
             elif inst[0].name in ['modify_field', 'modify_field_rng_uniform']:
-                print 'xxx', inst[1], inst[2]
-                instructions.append(['V', inst[0].name])
+                #if type(inst[1]) == list:
+                #    for x in inst[1]:
+                #        print 'yyy', type(x), x
+                #if type(inst[2]) == list:
+                #    for x in inst[2]:
+                #        print 'zzz', type(x), x
+                #instructions.append(['V', inst[1][0].name, inst[2][0][1]])
+                pass
             elif inst[0].name in ['add_to_field', 'subtract_from_field']:
                 pass
             elif inst[0].name in ['add', 'subtract']:
@@ -285,6 +294,7 @@ class BasicBlock(object):
             elif inst[0].name in ['modify_field_with_hash_based_offset']:
                 pass
             elif inst[0].name in ['no_op']:
+                print 'nop'
                 pass
             elif inst[0].name in ['drop']:
                 pass
@@ -300,11 +310,12 @@ class BasicBlock(object):
                 pass
             elif inst[0].name in ['add_header', 'remove_header', 'copy_header']:
                 raise NotImplementedError
+            return instructions
 
         # instructions
         instructions = []
         for inst in action.flat_call_sequence:
-            print_instruction(inst, instructions)
+            instructions.extend(print_instruction(inst))
         self.instructions = instructions
 
         # next_control_state
@@ -498,14 +509,22 @@ class MetaIR(object):
         # metadata from match table key
         for tbl in self.hlir.p4_tables.values():
             for field, _, _ in tbl.match_fields:
-                inst['fields'][field.name] = field.width
-                print 'meta.',field.name
+                key = "{}${}".format(field.instance, field.name)
+                inst['fields'][key] = field.width
         # metadata from parser
         for state in self.hlir.p4_parse_states.values():
             for branch_on in state.branch_on:
-                inst['fields'][branch_on.name] = branch_on.width
-                print 'meta.',branch_on.name
-        # more metadata?
+                key = "{}${}".format(branch_on.instance, branch_on.name)
+                inst['fields'][key] = branch_on.width
+        # metadata from action
+        for tbl in self.hlir.p4_tables.values():
+            for action, next_ in tbl.next_.items():
+                if isinstance(action, p4_action):
+                    _, _, fields = retrieve_from_one_action(action)
+                    for field in fields:
+                        key = "{}${}".format(field.instance, field.name)
+                        inst['fields'][key] = field.width
+
         self.structs[inst['name']] = Meta(inst)
 
     def build_tables(self):

@@ -862,10 +862,9 @@ module mk%(name)s#(Vector#(numClients, MetadataClient) mdc)(%(name)s);
 %(control_state)s
 endmodule
 '''
-def generate_control_flow(control_flow):
-    ''' TODO '''
+def generate_control_flow_top(control_flow):
+    ''' generate control flow from json '''
     def generate_control_state(cond_list, control_states, moduleName=None, request=False):
-        print 'controlstate', moduleName
         cond = []
         for item in cond_list:
             name = item[1][3:] #remove leading 'bb_'
