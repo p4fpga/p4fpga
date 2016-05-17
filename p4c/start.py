@@ -14,6 +14,7 @@ from p4_hlir.hlir import p4
 from p4_hlir.hlir import p4_parse_state, p4_action, p4_table, p4_header_instance
 from p4_hlir.hlir import p4_parse_state_keywords, p4_conditional_node
 from p4_hlir.hlir import p4_control_flow, p4_expression
+from p4_hlir.hlir.p4_imperatives import p4_signature_ref
 from p4_hlir.hlir.analysis_utils import retrieve_from_one_action, get_all_subfields
 from compilationException import CompilationException
 
@@ -95,10 +96,14 @@ class TableResponse(Struct):
         if num_action != 0:
             self.fields.append({'p4_action': num_action})
         for idx, action in enumerate(tbl.actions):
-            if sum(action.signature_widths) == 0:
-                continue
-            name = 'action_{}_arg{}'.format(idx, 0)
-            self.fields.append({name: sum(action.signature_widths)})
+            for inst in action.flat_call_sequence:
+                primitive = inst[0]
+                args = inst[1]
+                for index, arg in enumerate(args):
+                    if isinstance(arg, p4_signature_ref):
+                        name = action.signature[arg.idx]
+                        width = action.signature_widths[arg.idx]
+                        self.fields.append({name: width})
 
 class StructInstance(object):
     def __init__(self, struct):
@@ -269,18 +274,19 @@ class BasicBlock(object):
                 for param in inst[1]:
                     params.append(str(param))
                 instructions.append(['O', inst[0].name, params])
-            elif inst[0].name in ['modify_field', 'modify_field_rng_uniform']:
-                #if type(inst[1]) == list:
-                #    for x in inst[1]:
-                #        print 'yyy', type(x), x
-                #if type(inst[2]) == list:
-                #    for x in inst[2]:
-                #        print 'zzz', type(x), x
-                #instructions.append(['V', inst[1][0].name, inst[2][0][1]])
-                pass
+            elif inst[0].name in ['modify_field']:
+                dst = "{}${}".format(args[0].instance.name, args[0].name)
+                for index, arg in enumerate(args):
+                    if isinstance(arg, p4_signature_ref):
+                        instructions.append(['V', dst, action.signature[arg.idx]])
+                    elif isinstance(arg, int):
+                        instructions.append(['V', dst, hex(arg)])
             elif inst[0].name in ['add_to_field', 'subtract_from_field']:
                 pass
             elif inst[0].name in ['add', 'subtract']:
+                # v1.0/v1.1 takes three arguments:
+                # add: field, value1, value2
+                # subtract: field: value1, value2
                 pass
             elif inst[0].name in ['clone_ingress_pkt_to_egress',
                                   'clone_egress_pkt_to_egress']:
