@@ -39,9 +39,13 @@ import StmtFSM::*;
 import Utils::*;
 import Vector::*;
 
+typedef enum {
+  NOP,
+  FORWARD
+} RouteActionT deriving (Bits, Eq);
+
 typedef struct {
-  Bit#(1) hit;
-  Bit#(1) p4_action;
+  RouteActionT p4_action;
   Bit#(9) action_1_arg0;
 } RoutingRespT deriving (Bits, Eq);
 
@@ -54,46 +58,35 @@ endinstance
 
 instance FShow#(RoutingRespT);
   function Fmt fshow(RoutingRespT p);
-    return $format("RoutingRespT: hit=%h, p4_action=%h, action_1_arg0=%h", p.hit, p.p4_action, p.action_1_arg0);
+    return $format("RoutingRespT: p4_action=%h, action_1_arg0=%h", p.p4_action, p.action_1_arg0);
   endfunction
 endinstance
 
 typedef struct {
-   Maybe#(Bit#(16)) msgtype; // ethernet$msgtype
-   Maybe#(Bit#(48)) dstAddr; // ethernet$dstAddr
+   Maybe#(Bit#(32)) dstAddr; // ethernet$dstAddr
    Maybe#(Bit#(16)) etherType; // ethernet$etherType
    Maybe#(Bit#(8))  protocol; // ipv4$protocol
-   Maybe#(Bit#(16)) dstPort; // ipv4$dstPort
    Maybe#(Bool) valid_ethernet;
-   Maybe#(Bool) valid_arp;
    Maybe#(Bool) valid_ipv4;
-   Maybe#(Bool) valid_ipv6;
-   Maybe#(Bool) valid_udp;
+   Maybe#(RouteActionT) routingtable$route;
 } MetadataT deriving (Bits, Eq);
 
 instance DefaultValue#(MetadataT);
 defaultValue =
 MetadataT {
-   msgtype: tagged Invalid,
    dstAddr: tagged Invalid,
    etherType: tagged Invalid,
    protocol: tagged Invalid,
-   dstPort: tagged Invalid,
    valid_ethernet: tagged Invalid,
-   valid_arp: tagged Invalid,
-   valid_ipv4: tagged Invalid,
-   valid_ipv6: tagged Invalid,
-   valid_udp: tagged Invalid
+   valid_ipv4: tagged Invalid
 };
 endinstance
 
 instance FShow#(MetadataT);
    function Fmt fshow(MetadataT p);
-      return $format("msgtype=", fshow(p.msgtype), ",")+
-             $format("dstAddr=", fshow(p.dstAddr), ",")+
+      return $format("dstAddr=", fshow(p.dstAddr), ",")+
              $format("etherType=", fshow(p.etherType), ",")+
-             $format("protocol=", fshow(p.protocol), ",")+
-             $format("dstPort=", fshow(p.dstPort), ",");
+             $format("protocol=", fshow(p.protocol), ",");
    endfunction
 endinstance
 
@@ -101,6 +94,11 @@ typedef union tagged {
    struct {
       PacketInstance pkt;
    } PacketMemRequest;
+
+   struct {
+      PacketInstance pkt;
+      MetadataT meta;
+   } RoutingTableRequest;
 
    struct {
       PacketInstance pkt;
@@ -117,20 +115,40 @@ typedef union tagged {
    struct {
       PacketInstance pkt;
       MetadataT meta;
-   } DstMacResponse;
+   } RoutingTableResponse;
 } MetadataResponse deriving (Bits, Eq, FShow);
 
 typedef Client#(MetadataRequest, MetadataResponse) MetadataClient;
 typedef Server#(MetadataRequest, MetadataResponse) MetadataServer;
 
-function RoutingRespT extract_RoutingRespT(Bit#(11) data);
-  Vector#(11, Bit#(1)) dataVec = unpack(data);
-  Vector#(1, Bit#(1)) hit = takeAt(0, dataVec);
+typedef union tagged {
+   struct {
+      PacketInstance pkt;
+   } BBForwardRequest;
+   struct {
+      PacketInstance pkt;
+   } BBNopRequest;
+} BBRequest deriving (Bits, Eq, FShow);
+
+typedef union tagged {
+   struct {
+      PacketInstance pkt;
+   } BBNopResponse;
+   struct {
+      PacketInstance pkt;
+   } BBForwardResponse;
+} BBResponse deriving (Bits, Eq, FShow);
+
+
+typedef Client#(BBRequest, BBResponse) BBClient;
+typedef Server#(BBRequest, BBResponse) BBServer;
+
+function RoutingRespT extract_RoutingRespT(Bit#(10) data);
+  Vector#(10, Bit#(1)) dataVec = unpack(data);
   Vector#(1, Bit#(1)) p4_action = takeAt(1, dataVec);
   Vector#(9, Bit#(1)) action_1_arg0 = takeAt(2, dataVec);
   RoutingRespT hdr = defaultValue;
-  hdr.hit = pack(hit);
-  hdr.p4_action = pack(p4_action);
+  hdr.p4_action = unpack(pack(p4_action));
   hdr.action_1_arg0 = pack(action_1_arg0);
   return hdr;
 endfunction
@@ -340,13 +358,14 @@ module mkRouting#(Client#(MetadataRequest, MetadataResponse) md)(Routing);
     let v <- md.request.get;
     case (v) matches
       default: begin
-         
+         // Lookup
       end
     endcase
   endrule
 
   rule handleResponse;
-
+    // response action
+    // build tagged response: forward, drop
   endrule
 
   interface next = (interface Client#(MetadataRequest, MetadataResponse);
@@ -356,28 +375,135 @@ module mkRouting#(Client#(MetadataRequest, MetadataResponse) md)(Routing);
 endmodule
 
 
-interface BbForward;
+interface BasicBlockForward;
+   interface BBServer prev_control_state;
 endinterface
+module mkBasicBlockForward(BasicBlockForward);
+   FIFO#(BBRequest) bb_forward_request_fifo <- mkSizedFIFO(1);
+   FIFO#(BBResponse) bb_forward_response_fifo <- mkSizedFIFO(1);
+   FIFO#(PacketInstance) curr_packet_fifo <- mkSizedFIFO(1);
 
+   rule bb_handle_forward;
 
-module mkBbForward(BbForward);
+   endrule
 
-
-
+   interface prev_control_state = (interface BBServer;
+      interface request = toPut(bb_forward_request_fifo);
+      interface response = toGet(bb_forward_response_fifo);
+   endinterface);
 endmodule
 
-
-
-interface BbNop;
+interface BasicBlockNop;
+   interface BBServer prev_control_state;
 endinterface
+module mkBasicBlockNop(BasicBlockNop);
+   FIFO#(BBRequest) bb_nop_request_fifo <- mkSizedFIFO(1);
+   FIFO#(BBResponse) bb_nop_response_fifo <- mkSizedFIFO(1);
 
+   rule bb_handle_nop;
 
-module mkBbNop(BbNop);
+   endrule
 
-
-
+   interface prev_control_state = (interface BBServer;
+      interface request = toPut(bb_nop_request_fifo);
+      interface response = toGet(bb_nop_response_fifo);
+   endinterface);
 endmodule
 
+(* synthesize *)
+module mkMatchTable_256_routingTable(MatchTable#(256, SizeOf#(RoutingReqT), SizeOf#(RoutingRespT)));
+   MatchTable#(256, SizeOf#(RoutingReqT), SizeOf#(RoutingRespT)) ifc <- mkMatchTable();
+   return ifc;
+endmodule
+
+interface RoutingTable;
+   interface BBClient next_control_state_0;
+   interface BBClient next_control_state_1;
+   method Action add_entry(Bit#(32) dstAddr, RouteActionT action_);
+endinterface
+module mkRoutingTable#(MetadataClient md)(RoutingTable);
+   let verbose = True;
+
+   MatchTable#(256, SizeOf#(RoutingReqT), SizeOf#(RoutingRespT)) matchTable <- mkMatchTable_256_routingTable();
+   Vector#(2, FIFOF#(BBRequest)) bbReqFifo <- replicateM(mkFIFOF());
+   Vector#(2, FIFOF#(BBResponse)) bbRespFifo <- replicateM(mkFIFOF());
+   Vector#(2, Bool) readyBits = map(fifoNotEmpty, bbRespFifo);
+   Bool interruptStatus = False;
+   Bit#(16) readyChannel = -1;
+
+   for (Integer i = 1; i>=0; i=i-1) begin
+      if (readyBits[i]) begin
+         interruptStatus = True;
+         readyChannel = fromInteger(i);
+      end
+   end
+
+   FIFO#(PacketInstance) currPacketFifo <- mkFIFO;
+   FIFO#(MetadataT) currMetadataFifo <- mkFIFO;
+   FIFO#(MetadataT) bbMetadataFifo <- mkFIFO;
+
+   rule routing_request;
+      let v <- md.request.get;
+      case (v) matches
+         tagged RoutingTableRequest {pkt: .pkt, meta: .meta}: begin
+            RoutingReqT req = RoutingReqT {padding: 0, dstAddr: fromMaybe(?, meta.dstAddr)};
+            matchTable.lookupPort.request.put(pack(req));
+            currPacketFifo.enq(pkt);
+            currMetadataFifo.enq(meta);
+            $display("(%0d) forward routing request", $time);
+         end
+      endcase
+   endrule
+
+   rule routing_response;
+      let v <- matchTable.lookupPort.response.get;
+      let pkt <- toGet(currPacketFifo).get;
+      let meta <- toGet(currMetadataFifo).get;
+
+      if (v matches tagged Valid .data) begin
+         RoutingRespT resp = unpack(data);
+         // basic block request
+         $display("(%0d) routing response", $time);
+      end
+      else begin
+         $display("(%0d) missed, drop packet");
+      end
+   endrule
+
+   rule bb_handle_resp if (interruptStatus);
+      let v <- toGet(bbRespFifo[readyChannel]).get;
+      let meta <- toGet(bbMetadataFifo).get;
+      case (v) matches
+         tagged BBNopResponse {pkt: .pkt}: begin
+            MetadataResponse resp = tagged RoutingTableResponse {pkt: pkt, meta: meta};
+            md.response.put(resp);
+         end
+         tagged BBForwardResponse {pkt: .pkt}: begin
+            MetadataResponse resp = tagged RoutingTableResponse {pkt: pkt, meta: meta};
+            md.response.put(resp);
+         end
+      endcase
+   endrule
+
+   rule bb_drop_packet;
+
+   endrule
+
+   interface next_control_state_0 = (interface BBClient;
+      interface request = toGet(bbReqFifo[0]);
+      interface response = toPut(bbRespFifo[0]);
+   endinterface);
+   interface next_control_state_1 = (interface BBClient;
+      interface request = toGet(bbReqFifo[1]);
+      interface response = toPut(bbRespFifo[1]);
+   endinterface);
+   method Action add_entry(Bit#(32) dstAddr, RouteActionT action_);
+      RoutingReqT req = RoutingReqT {dstAddr: dstAddr, padding: 0};
+      RoutingRespT resp = RoutingRespT {p4_action: action_};
+      if (verbose) $display("(%0d) routing table resp=%h", $time, pack(resp));
+      matchTable.add_entry.put(tuple2(pack(req), pack(resp)));
+   endmethod
+endmodule
 
 interface Ingress0;
    interface PipeOut#(MetadataRequest) eventPktSend;
@@ -388,6 +514,10 @@ module mkIngress0#(Vector#(numClients, MetadataClient) mdc)(Ingress0);
   FIFOF#(MetadataRequest) currPacketFifo <- mkFIFOF;
   FIFO#(MetadataRequest) defaultReqFifo <- mkFIFO;
   FIFO#(MetadataResponse) defaultRespFifo <- mkFIFO;
+
+  FIFO#(MetadataRequest) routingReqFifo <- mkFIFO;
+  FIFO#(MetadataResponse) routingRespFifo <- mkFIFO;
+
   Vector#(numClients, MetadataServer) mds = newVector;
   for (Integer i=0; i<valueOf(numClients); i=i+1) begin
     mds[i] = (interface MetadataServer;
@@ -407,11 +537,37 @@ module mkIngress0#(Vector#(numClients, MetadataClient) mdc)(Ingress0);
     return ret_ifc;
   endfunction
 
+  RoutingTable routingTable <- mkRoutingTable(toGPClient(routingReqFifo, routingRespFifo));
+
+  // BasicBlock
+  BasicBlockForward bb_fwd <- mkBasicBlockForward();
+  BasicBlockNop bb_drop <- mkBasicBlockNop();
+
+  // Connect Table width BasicBlock
+  mkConnection(routingTable.next_control_state_0, bb_fwd.prev_control_state);
+  mkConnection(routingTable.next_control_state_1, bb_drop.prev_control_state);
+
   rule default_next_control_state if (defaultReqFifo.first matches tagged DefaultRequest {pkt: .pkt, meta: .meta});
     defaultReqFifo.deq;
-    $display("(%0d) move default packet %x", $time, pkt, fshow(meta));
-    MetadataRequest req = tagged ForwardQueueRequest {pkt: pkt, meta: meta};
-    currPacketFifo.enq(req);
+    MetadataRequest req = tagged RoutingTableRequest {pkt: pkt, meta: meta};
+    $display("(%0d) default request", $time);
+    routingReqFifo.enq(req);
+  endrule
+
+  rule routing_tbl_next_control_state if (routingRespFifo.first matches tagged RoutingTableResponse {pkt: .pkt, meta: .meta});
+    routingRespFifo.deq;
+    if (meta.routingtable$route matches tagged Valid .route) begin
+      case (route) matches
+         FORWARD: begin
+           MetadataRequest req = tagged ForwardQueueRequest {pkt: pkt, meta: meta};
+           currPacketFifo.enq(req);
+         end
+         NOP: begin
+           MetadataRequest req = tagged ForwardQueueRequest {pkt: pkt, meta: meta};
+           currPacketFifo.enq(req);
+         end
+      endcase
+    end
   endrule
 
   interface eventPktSend = toPipeOut(currPacketFifo);
@@ -495,7 +651,7 @@ module mkStateParseEthernet#(Reg#(ParserState) state, FIFOF#(EtherData) datain)(
     if (nextState == StateParseIpv4) begin
       unparsed_parse_ipv4_fifo.enq(pack(unparsed));
     end
-    parsed_etherType_fifo.enq(hdr.etherType);
+    parsed_etherType_fifo.enq(ethernet_t.etherType);
     next_state_wire[0] <= tagged Valid nextState;
   endaction
   endseq;
@@ -656,8 +812,6 @@ typedef enum {
 function Tuple2#(EthernetT, EthernetT) toEthernet(MetadataT meta);
    EthernetT data = defaultValue;
    EthernetT mask = defaultMask;
-   data.dstAddr = fromMaybe(?, meta.dstAddr);
-   mask.dstAddr = 0;
    data.etherType = fromMaybe(?, meta.etherType);
    mask.etherType = 0;
    return tuple2(data, mask);
@@ -803,10 +957,9 @@ module mkStateDeparseIpv4#(Reg#(DeparserState) state, FIFOF#(EtherData) datain, 
     Vector#(16, Bit#(1)) curr_mask = takeAt(144, unpack(byteSwap(pack(mask_fifo.first))));
     let masked_data = pack(data) & pack(curr_mask);
     let curr_data = masked_data | pack(curr_meta);
-    Ipv4T ipv4_t = unpack(pack(masked_data));
+    //Ipv4T ipv4_t = unpack(pack(masked_data));
     data_this_cycle.data = {pack(unused), pack(curr_data)};
     $display("(%0d) compute_next_state protocol", $time, fshow(meta_fifo.first.protocol));
-    $display("(%0d) Goto ", $time, fshow(nextState));
     dataout.enq(data_this_cycle);
     state <= StateDeparseIdle;
     meta_fifo.deq;

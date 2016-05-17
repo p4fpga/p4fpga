@@ -22,17 +22,17 @@
 
 import MatchTable::*;
 
-import "BDPI" function ActionValue#(Bit#(11)) matchtable_read_routing(Bit#(36) msgtype);
-import "BDPI" function Action matchtable_write_routing(Bit#(36) msgtype, Bit#(11) data);
+import "BDPI" function ActionValue#(Bit#(10)) matchtable_read_routing(Bit#(36) msgtype);
+import "BDPI" function Action matchtable_write_routing(Bit#(36) msgtype, Bit#(10) data);
 
-instance MatchTableSim#(36, 11);
-   function ActionValue#(Bit#(11)) matchtable_read(Bit#(36) key);
+instance MatchTableSim#(36, 10);
+   function ActionValue#(Bit#(10)) matchtable_read(Bit#(36) key);
    actionvalue
       let v <- matchtable_read_routing(key);
       return v;
    endactionvalue
    endfunction
-   function Action matchtable_write(Bit#(36) key, Bit#(11) data);
+   function Action matchtable_write(Bit#(36) key, Bit#(10) data);
    action
       $display("(%0d) matchtable write routing %h %h", $time, key, data);
       matchtable_write_routing(key, data);

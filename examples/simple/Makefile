@@ -11,7 +11,8 @@ SONICDIR?=$(DEV_ROOT)/sonic-lite
 P4EXAMPLEDIR=$(SONICDIR)/p4
 P4FPGADIR?=$(DEV_ROOT)/p4fpga
 BIRDIR?=$(DEV_ROOT)/p4fpga/pif_ir
-PYPATH?=PYTHONPATH=${BIRDIR}
+OFTESTDIR?=$(DEV_ROOT)/p4fpga/pif_ir/submodules/oftest/src/python
+PYPATH?=PYTHONPATH=${BIRDIR}:${OFTESTDIR}
 
 ###########################################
 # Connectal Support
@@ -57,6 +58,9 @@ simgen: codegen
 
 run:
 	(cd bluesim; ./bin/ubuntu.exe -p ../${T})
+
+runyml:
+	sudo ${PYPATH} python ${BIRDIR}/pif_ir/examples/bir/start.py simple.yml
 
 bitgen: codegen
 	make build.nfsume
