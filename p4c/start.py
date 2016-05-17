@@ -127,7 +127,7 @@ class MetadataInstance(StructInstance):
     def __init__(self, meta):
         super(MetadataInstance, self).__init__(meta)
         self.name = meta['name']
-        self.values = meta['name']
+        self.values = meta['name'] + '_t'
 
 class Table(object):
     ''' tables '''
@@ -199,6 +199,7 @@ class BasicBlock(object):
         for branch in parse_state.branch_on:
             #if type extract/set_metadata
             dst = 'meta.{}'.format(branch.name)
+            print 'meta.', branch.name
             inst = ['V', dst, branch.name]
             self.instructions.append(inst)
         branch_to = parse_state.branch_to.items()
@@ -234,12 +235,15 @@ class BasicBlock(object):
             ''' add field to meta '''
             if isinstance(field, int):
                 return field
+            print 'xxx meta action',field
             return 'meta.{}'.format(str(field).replace(".", "_")) if field else None
 
         def print_cond(cond):
             if cond.op == 'valid':
+                print 'xxx meta valid', cond.op, cond.right
                 return 'meta.{}_{} == 1'.format(cond.op, cond.right)
             else:
+                print 'xxx meta cond', cond
                 left = meta(cond.left)
                 right = meta(cond.right)
                 return ("("+(str(left)+" " if left else "")+
@@ -263,7 +267,8 @@ class BasicBlock(object):
                     params.append(str(param))
                 instructions.append(['O', inst[0].name, params])
             elif inst[0].name in ['modify_field', 'modify_field_rng_uniform']:
-                pass
+                print 'xxx', inst[1], inst[2]
+                instructions.append(['V', inst[0].name])
             elif inst[0].name in ['add_to_field', 'subtract_from_field']:
                 pass
             elif inst[0].name in ['add', 'subtract']:
@@ -494,10 +499,13 @@ class MetaIR(object):
         for tbl in self.hlir.p4_tables.values():
             for field, _, _ in tbl.match_fields:
                 inst['fields'][field.name] = field.width
+                print 'meta.',field.name
         # metadata from parser
         for state in self.hlir.p4_parse_states.values():
             for branch_on in state.branch_on:
                 inst['fields'][branch_on.name] = branch_on.width
+                print 'meta.',branch_on.name
+        # more metadata?
         self.structs[inst['name']] = Meta(inst)
 
     def build_tables(self):
