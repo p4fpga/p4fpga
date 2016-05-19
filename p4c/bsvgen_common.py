@@ -869,7 +869,7 @@ def expand_table_response(indent, json):
     temp = []
     for idx, next_state in enumerate(json.next_control_state):
         temp.append(spaces(indent) + "{}: begin".format(next_state[1][3:].upper()))
-        temp.append(spaces(indent+1) + "BBRequest req = tagged %(requestType) {{%(fields)s}};")
+        temp.append(spaces(indent+1) + "BBRequest req = tagged %(requestType)s {{%(fields)s}};")
         temp.append(spaces(indent+1) + "bbReqFifo[{}].enq(req);".format(idx))
         temp.append(spaces(indent) + "end")
     return "\n".join(temp)
@@ -880,6 +880,7 @@ def expand_bb_response(indent, tbl, json):
         temp.append(spaces(indent) + "tagged {}Response {{}}: begin".format(CamelCase(next_state[1])))
         temp.append(spaces(indent+1) + "MetadataResponse resp = tagged {}TableResponse {{pkt: pkt, meta: meta}};".format(CamelCase(tbl.name)))
         temp.append(spaces(indent+1) + "md.response.put(resp);")
+        temp.append(spaces(indent) + "end")
     return "\n".join(temp)
 
 TABLE_TEMPLATE = '''
@@ -988,22 +989,6 @@ def generate_table(tbl, json):
     pmap['bb_client_methods'] = "\n".join(bb_client_defs)
     return  TABLE_TEMPLATE % (pmap)
 
-COND_TEMPLATE = '''\
-if (%(expr)s) : begin
-MetadataRequest req = tagged %(Name)sLookupRequest {pkt: pkt, meta: meta};
-%(name)sReqFifo.enq(req);
-end'''
-
-CONTROL_STATE_TEMPLATE = '''
-  rule %(name)s_next_control_state;
-    let v <- toGet(%(fifo)s).get;
-    case (v) matches
-      tagged %(type)s {pkt: .pkt, meta: .meta} : begin
-%(cond)s
-      end
-    endcase
-  endrule'''
-
 def expand_metadata_fifo(indent, control_flow):
     temp = []
     for block in control_flow.basic_blocks.values():
@@ -1050,28 +1035,43 @@ def expand_connection(indent, control_flow):
                 temp.append(spaces(indent) + CONN_INST_TEMPLATE%({'from': from_node, 'to': to_node}))
     return "\n".join(temp)
  
-def generate_control_state(cond_list, control_states, moduleName=None, request=False):
-    cond = []
-    for item in cond_list:
-        name = item[1]#[3:] #remove leading 'bb_'
-        cond.append(COND_TEMPLATE%({'expr': item[0],
-                                    'name': camelCase(name),
-                                    'Name': CamelCase(name)}))
+def generate_default_control_state(indent, control_flow, json):
+    temp = []
+    temp.append(spaces(indent) + "rule default_next_control_state if (defaultReqFifo.first matches tagged DefaultRequest {pkt: .pkt, meta: .meta});")
+    temp.append(spaces(indent+1) + "defaultReqFifo.deq;")
+    for next_state in control_flow.control_state.basic_block:
+        if next_state == "$done$":
+            continue
+        next_table = json.basicblock[next_state]
+        temp.append(spaces(indent+1) + "MetadataRequest req = tagged {}TableRequest {{pkt: pkt, meta: meta}};".format(CamelCase(next_table.local_table)))
+        temp.append(spaces(indent+1) + "{}ReqFifo.enq(req);".format(next_table.local_table))
+    temp.append(spaces(indent) + "endrule")
+    return "\n".join(temp)
 
-    if request:
-        fifo = camelCase(moduleName) + 'ReqFifo'
-        rtype = CamelCase(moduleName) + 'Request'
-    else:
-        fifo = camelCase(moduleName) + 'RespFifo'
-        rtype = CamelCase(moduleName) + 'Response'
+def generate_table_control_state(indent, table, json):
+    temp = []
+    pmap = {}
+    print table.local_table
+    pmap['name'] = table.local_table
+    pmap['CamelCaseName'] = CamelCase(table.local_table)
+    temp.append(spaces(indent) + "rule %(name)s_next_control_state if (%(name)sRespFifo.first matches tagged %(CamelCaseName)sTableResponse {pkt: .pkt, meta: .meta});" % pmap)
+    temp.append(spaces(indent+1) + "{}RespFifo.deq;".format(table.local_table))
+    temp.append(spaces(indent+1) + "if (meta.{}$p4_action matches tagged Valid .data) begin".format(table.local_table))
+    temp.append(spaces(indent+2) + "case (data) matches")
+    for next_state in table.next_control_state:
+        if next_state == "$done$":
+            continue
+        _, v = str.split(next_state[0], "==")
+        temp.append(spaces(indent+3) + "{}: begin".format(v))
+        temp.append(spaces(indent+4) + "MetadataRequest req = tagged ForwardQueueRequest {pkt: pkt, meta: meta};")
+        temp.append(spaces(indent+4) + "currPacketFifo.enq(req);")
+        temp.append(spaces(indent+3) + "end")
+    temp.append(spaces(indent+2) + "endcase")
+    temp.append(spaces(indent+1) + "end")
+    temp.append(spaces(indent) + "endrule")
+    return "\n".join(temp)
 
-    control_states.append(\
-        CONTROL_STATE_TEMPLATE%({'name': moduleName,
-                                 'fifo': fifo,
-                                 'type': rtype,
-                                 'cond': '\n'.join(cond)}))
-
-def expand_control_state(indent, control_flow):
+def expand_control_state(indent, control_flow, json):
     ''' Function to optmize for paxos '''
     fmap = OrderedDict() # map (table, [cond])
     tmap = {} # map (cond, table)
@@ -1092,17 +1092,16 @@ def expand_control_state(indent, control_flow):
                 tmap[block.name] = []
             tmap[block.name].append(item)
 
+    # generate default Rule
     cond_list = control_flow.control_state.basic_block[:-1]
-    generate_control_state(cond_list, control_states,
-                           moduleName='default', request=True)
+    control_states.append(generate_default_control_state(1, control_flow, json))
 
-    print 'xxx flow', control_flow.name
-    print 'xxx cond', control_flow.control_state.basic_block
-    print 'xxx', cond_list, fmap, tmap
-    for table, conditions in fmap.items():
-        cond_list = [tmap[c] for c in conditions if c in tmap]
-        for cond in cond_list:
-            generate_control_state(cond, control_states, moduleName=table)
+    # generate rule for each table
+    for next_state in control_flow.control_state.basic_block:
+        if next_state == "$done$":
+            continue
+        next_table = json.basicblock[next_state]
+        control_states.append(generate_table_control_state(1, next_table, json))
     return "\n".join(control_states)
 
 CONTROL_FLOW_TEMPLATE = '''
@@ -1137,9 +1136,11 @@ module mk%(name)s#(Vector#(numClients, MetadataClient) mdc)(%(name)s);
 %(basic_block)s
 %(connection)s
 %(control_state)s
+  interface eventPktSend = toPipeOut(currPacketFifo);
+%(table_api)s
 endmodule
 '''
-def generate_control_flow_top(control_flow):
+def generate_control_flow_top(control_flow, json):
     ''' generate control flow from json '''
     pmap = {}
     pmap['name'] = CamelCase(control_flow.name)
@@ -1147,7 +1148,8 @@ def generate_control_flow_top(control_flow):
     pmap['table'] = expand_tables(1, control_flow)
     pmap['basic_block'] = expand_basic_block(1, control_flow)
     pmap['connection'] = expand_connection(1, control_flow)
-    pmap['control_state'] = expand_control_state(1, control_flow)
+    pmap['control_state'] = expand_control_state(1, control_flow, json)
+    pmap['table_api'] = ""
     return CONTROL_FLOW_TEMPLATE % pmap
 
 def expand_bb_interface_decl(indent, json):

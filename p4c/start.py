@@ -353,11 +353,10 @@ class BasicBlock(object):
         self.instructions = []
         next_state = []
         for index, action in enumerate(table.actions):
-            pred = table.name + '_resp.hit == 1'
             action_name = 'bb_' + action.name
             if len(table.actions) > 1:
-                pred = pred + " && {}_resp.p4_action == {}".format(table.name, index+1)
-            next_state.append([pred, action_name])
+                pred = "p4_action == {}".format(index+1)
+                next_state.append([pred, action_name])
         next_state.append("$done$")
         self.next_control_state = [[0], next_state]
 

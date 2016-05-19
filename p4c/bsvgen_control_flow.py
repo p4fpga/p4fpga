@@ -246,7 +246,7 @@ class BSVControlFlow(ControlFlow):
 
     def generate_control_flow(self, serializer, json):
         ''' buidl control flow json '''
-        serializer.append(generate_control_flow_top(self))
+        serializer.append(generate_control_flow_top(self, json))
 
     def bsvgen(self, serializer, json):
         ''' generate control flow from json '''
