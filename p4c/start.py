@@ -16,6 +16,7 @@ from p4_hlir.hlir import p4_parse_state_keywords, p4_conditional_node
 from p4_hlir.hlir import p4_control_flow, p4_expression
 from p4_hlir.hlir.p4_imperatives import p4_signature_ref
 from p4_hlir.hlir.analysis_utils import retrieve_from_one_action, get_all_subfields
+from p4_hlir.hlir.p4_tables import p4_control_flow_to_table_graph
 from compilationException import CompilationException
 
 _include_valid = False
@@ -62,10 +63,10 @@ class Struct(object):
         dump['fields'] = self.fields
         return dump
 
-class Meta(Struct):
+class Metadata(Struct):
     ''' struct to represent internal metadata '''
     def __init__(self, meta):
-        super(Meta, self).__init__(meta)
+        super(Metadata, self).__init__(meta)
         self.name = meta['name'] + '_t'
         for name, width in meta['fields'].items():
             self.fields.append({name: width})
@@ -275,19 +276,35 @@ class BasicBlock(object):
                     params.append(str(param))
                 instructions.append(['O', inst[0].name, params])
             elif inst[0].name in ['modify_field']:
-                dst = "{}${}".format(args[0].instance.name, args[0].name)
+                dst = "meta.{}${}".format(args[0].instance.name, args[0].name)
                 for index, arg in enumerate(args):
                     if isinstance(arg, p4_signature_ref):
                         instructions.append(['V', dst, action.signature[arg.idx]])
                     elif isinstance(arg, int):
                         instructions.append(['V', dst, hex(arg)])
-            elif inst[0].name in ['add_to_field', 'subtract_from_field']:
-                pass
+            elif inst[0].name in ['add_to_field']:
+                dst = "meta.{}${}".format(args[0].instance.name, args[0].name)
+                for index, arg in enumerate(args):
+                    if isinstance(arg, p4_signature_ref):
+                        instructions.append(['V', dst, "{} + {}".format(dst, action.signature[arg.idx])])
+                    elif isinstance(arg, int):
+                        instructions.append(['V', dst, "{} + {}".format(dst, hex(arg))])
+            elif inst[0].name in ['subtract_from_field']:
+                dst = "meta.{}${}".format(args[0].instance.name, args[0].name)
+                for index, arg in enumerate(args):
+                    if isinstance(arg, p4_signature_ref):
+                        instructions.append(['V', dst, "{} - {}".format(dst, action.signature[arg.idx])])
+                    elif isinstance(arg, int):
+                        instructions.append(['V', dst, "{} - {}".format(dst, hex(arg))])
             elif inst[0].name in ['add', 'subtract']:
-                # v1.0/v1.1 takes three arguments:
-                # add: field, value1, value2
-                # subtract: field: value1, value2
-                pass
+                dst = "meta.{}${}".format(args[0].instance.name, args[0].name)
+                for index, arg in enumerate(args):
+                    if isinstance(arg, p4.p4_field):
+                        print 'xx', arg
+                    elif isinstance(arg, p4_signature_ref):
+                        print 'yy', arg
+                    elif isinstance(arg, int):
+                        print 'zz', arg
             elif inst[0].name in ['clone_ingress_pkt_to_egress',
                                   'clone_egress_pkt_to_egress']:
                 pass
@@ -389,10 +406,16 @@ class ControlFlow(ControlFlowBase):
         if 'start_control_state' in kwargs:
             start_states = kwargs['start_control_state']
         start_control_state = []
-        for state in start_states:
-            expr = ("("+"meta.valid_{} == 1".format(str(state.condition.right))+")")
-            name = 'bb_' + state.next_[True].name
-            start_control_state.append([expr, name])
+        print 'xxx control', start_states
+        if isinstance(start_states, p4_table):
+            name = 'bb_' + start_states.name
+            start_control_state.append(name)
+        elif isinstance(start_states, list):
+            print 'bbb', start_states
+            for state in start_states:
+                expr = state[0]
+                name = state[1]
+                start_control_state.append([expr, name])
         start_control_state.append('$done$')
         self.start_control_state = [[0], start_control_state]
 
@@ -490,7 +513,7 @@ class MetaIR(object):
             self.metadata[inst.name] = inst
 
         inst = OrderedDict()
-        inst['name'] = 'meta'
+        inst['name'] = 'metadata'
         self.metadata[inst['name']] = MetadataInstance(inst)
 
     def build_structs(self):
@@ -510,7 +533,7 @@ class MetaIR(object):
             self.structs[resp.name] = resp
 
         inst = OrderedDict()
-        inst['name'] = 'meta_t'
+        inst['name'] = 'metadata_t'
         inst['fields'] = OrderedDict()
         # metadata from match table key
         for tbl in self.hlir.p4_tables.values():
@@ -531,7 +554,7 @@ class MetaIR(object):
                         key = "{}${}".format(field.instance, field.name)
                         inst['fields'][key] = field.width
 
-        self.structs[inst['name']] = Meta(inst)
+        self.structs[inst['name']] = Metadata(inst)
 
     def build_tables(self):
         ''' create table object '''
@@ -571,43 +594,70 @@ class MetaIR(object):
                 basic_block = BasicBlock(action, cond=next_)
                 self.basic_blocks[basic_block.name] = basic_block
 
+    #def get_start_state(self, control_flow, cond_map, stop):
+    #    ''' control_flow '''
+    #    print 'xxx', control_flow
+    #    start_states = []
+    #    if type(control_flow) == list:
+    #        if stop:
+    #            return start_states
+    #        print '-->'
+    #        for item in control_flow:
+    #            start_states.extend(self.get_start_state(item, cond_map, True))
+    #    elif type(control_flow) == tuple:
+    #        if stop:
+    #            return start_states
+    #        for item in control_flow:
+    #            start_states.extend(self.get_start_state(item, cond_map, True))
+    #    elif type(control_flow) == p4_expression:
+    #        cond = cond_map[control_flow]
+    #        for next_ in cond.next_.values():
+    #            if type(next_) is p4_conditional_node and cond in start_states:
+    #                start_states.append(next_)
+    #        print 'yyyy', start_states
+    #    elif type(control_flow) == p4_table:
+    #        start_states.append(control_flow)
+    #    else:
+    #        raise NotImplementedError
+    #    return start_states
+
     def build_control_flows(self):
         ''' TODO '''
-        def get_start_control_state(control_flow, cond_map, out):
-            ''' control_flow '''
-            if type(control_flow) == list:
-                for item in control_flow:
-                    get_start_control_state(item, cond_map, out)
-            elif type(control_flow) == tuple:
-                for item in control_flow:
-                    get_start_control_state(item, cond_map, out)
-            elif type(control_flow) == p4_expression:
-                cond = cond_map[control_flow]
-                for next_ in cond.next_.values():
-                    if type(next_) is p4_conditional_node and cond in out:
-                        out.append(next_)
-            elif type(control_flow) == p4_table:
-                #FIXME BUG?
-                return
-            else:
-                raise NotImplementedError
-
         # map from p4_expression to p4_condition
         cond_map = {}
         for cond in self.hlir.p4_conditional_nodes.values():
             cond_map[cond.condition] = cond
 
-        #FIXME potential bug?
+        def print_cond(cond):
+            if cond.op == 'valid':
+                return 'meta.{}_{} == 1'.format(cond.op, cond.right)
+            else:
+                left = meta(cond.left)
+                right = meta(cond.right)
+                return ("("+(str(left)+" " if left else "")+
+                        cond.op+" "+
+                        str(right)+")")
+
+        def get_next_control_state(state, next_control_state, visited):
+            if isinstance(state, p4_conditional_node):
+                expr = print_cond(state.condition) 
+                for foo, branch in state.next_.items(): # True or False
+                    if branch == None:
+                        continue
+                    if isinstance(branch, p4_conditional_node) and branch not in visited:
+                        get_next_control_state(branch, next_control_state, visited)
+                    else:
+                        visited.add(branch)
+                        name = 'bb_' + branch.name
+                        next_control_state.append([expr, name])
+
         for index, control_flow in enumerate(self.hlir.p4_control_flows.values()):
-            start_control_states = []
-            print "call_sequence", control_flow.call_sequence
-            #FIXME
-            #if isinstance(control_flow.call_sequence[0][0], p4_expression):
-            #    start_control_states.append(cond_map[control_flow.call_sequence[0][0]])
-            get_start_control_state(control_flow.call_sequence, cond_map,
-                                    start_control_states)
-            control_flow = ControlFlow(control_flow, index=index,
-                                       start_control_state=start_control_states)
+            entry_point, _ = p4_control_flow_to_table_graph(self.hlir, control_flow)
+            next_control_state = []
+            visited = set()
+            if isinstance(entry_point, p4_conditional_node):
+                get_next_control_state(entry_point, next_control_state, visited)
+            control_flow = ControlFlow(control_flow, index=index, start_control_state=next_control_state)
             self.control_flow[control_flow.name] = control_flow
 
     def build_processor_layout(self):
