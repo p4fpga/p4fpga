@@ -594,33 +594,6 @@ class MetaIR(object):
                 basic_block = BasicBlock(action, cond=next_)
                 self.basic_blocks[basic_block.name] = basic_block
 
-    #def get_start_state(self, control_flow, cond_map, stop):
-    #    ''' control_flow '''
-    #    print 'xxx', control_flow
-    #    start_states = []
-    #    if type(control_flow) == list:
-    #        if stop:
-    #            return start_states
-    #        print '-->'
-    #        for item in control_flow:
-    #            start_states.extend(self.get_start_state(item, cond_map, True))
-    #    elif type(control_flow) == tuple:
-    #        if stop:
-    #            return start_states
-    #        for item in control_flow:
-    #            start_states.extend(self.get_start_state(item, cond_map, True))
-    #    elif type(control_flow) == p4_expression:
-    #        cond = cond_map[control_flow]
-    #        for next_ in cond.next_.values():
-    #            if type(next_) is p4_conditional_node and cond in start_states:
-    #                start_states.append(next_)
-    #        print 'yyyy', start_states
-    #    elif type(control_flow) == p4_table:
-    #        start_states.append(control_flow)
-    #    else:
-    #        raise NotImplementedError
-    #    return start_states
-
     def build_control_flows(self):
         ''' TODO '''
         # map from p4_expression to p4_condition
@@ -657,6 +630,8 @@ class MetaIR(object):
             visited = set()
             if isinstance(entry_point, p4_conditional_node):
                 get_next_control_state(entry_point, next_control_state, visited)
+            else:
+                next_control_state = entry_point
             control_flow = ControlFlow(control_flow, index=index, start_control_state=next_control_state)
             self.control_flow[control_flow.name] = control_flow
 
