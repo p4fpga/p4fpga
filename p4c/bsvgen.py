@@ -26,6 +26,8 @@ from bsvgen_struct import BSVBIRStruct
 from bsvgen_table import BSVTable
 from bsvgen_common import generate_import_statements
 from bsvgen_common import generate_license
+from bsvgen_common import generate_metadata_union
+from bsvgen_common import generate_basicblock_union
 from programSerializer import ProgramSerializer
 
 verbose = False
@@ -72,8 +74,6 @@ class BirInstance(MetaIRInstance):
                 module = "{}.{}".format(name, operation)
                 self.bir_other_modules[module] = self._load_module(name, operation)
         for name, val in self.basic_block.items():
-            if name[3:] in self.bir_tables:
-                continue
             self.bir_basic_blocks[name] = BSVBasicBlock(name, val,
                                                         self.bir_structs,
                                                         self.bir_tables,
@@ -126,9 +126,9 @@ class BirInstance(MetaIRInstance):
         for key, item in self.bir_basic_blocks.items():
             if key.startswith('parse_'):
                 toplevel.parser[key] = item.serialize_json_parse()
-            if key.startswith('deparse_'):
+            elif key.startswith('deparse_'):
                 toplevel.deparser[key] = item.serialize_json_deparse()
-            if key.startswith('bb_'):
+            else:
                 toplevel.basicblock[key] = item.serialize_json_basicblock()
 
         return toplevel
@@ -149,12 +149,14 @@ class BirInstance(MetaIRInstance):
         ''' TODO '''
         generate_license(serializer)
         generate_import_statements(serializer)
+        generate_metadata_union(serializer, jsondata)
+        generate_basicblock_union(serializer, jsondata)
         for item in self.bir_structs.values():
             item.bsvgen(serializer)
         for item in self.bir_tables.values():
-            item.bsvgen(serializer)
+            item.bsvgen(serializer, jsondata)
         for item in self.bir_basic_blocks.values():
-            item.bsvgen(serializer)
+            item.bsvgen(serializer, jsondata)
         for item in self.bir_control_flows.values():
             item.bsvgen(serializer, jsondata)
 

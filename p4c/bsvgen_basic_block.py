@@ -30,18 +30,6 @@ class BSVBasicBlock(BasicBlock):
                                              self.local_header,
                                              bir_parser)
 
-        # create Interface instance
-        # - token interface
-        # - reg_read, in sequence or in parallel
-        # - reg_write, in sequence or in parallel
-
-        ### create Param instance
-
-        # create moduleContext
-        print 'block', bb_attrs['instructions']
-        # reg_read, reg_read, reg_read, reg_write
-        # create Module instance
-
     def serialize_json_deparse(self):
         ''' jsondata for deparse state '''
         d = DotMap()
@@ -59,9 +47,25 @@ class BSVBasicBlock(BasicBlock):
 
     def serialize_json_basicblock(self):
         ''' jsondata for basicblock '''
-        pass
+        b = DotMap()
 
-    def bsvgen(self, serializer):
+        if self.local_table:
+            b.local_table = self.local_table.name
+
+        b.next_control_state = []
+        for idx, block in enumerate(self.control_state.basic_block):
+            if block == '$done$':
+                continue
+            b.next_control_state.append(block)
+
+        b.instructions = []
+        for idx, inst in enumerate(self.instructions.instructions):
+            print inst
+            b.instructions.append(inst)
+
+        return b
+
+    def bsvgen(self, serializer, json):
         ''' TODO '''
         assert isinstance(serializer, ProgramSerializer)
 
@@ -73,6 +77,11 @@ class BSVBasicBlock(BasicBlock):
         if self.name.startswith('deparse_'):
             return
 
-        serializer.append(generate_basic_block(self))
+        #FIXME: skip generatiing for table basic block
+        if self.local_table:
+            return
+
+        serializer.append(generate_basic_block(self, json))
         # self.control_state.bsvgen(serializer)
+
 

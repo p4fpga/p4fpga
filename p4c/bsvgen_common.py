@@ -127,6 +127,92 @@ def generate_typedef(struct):
             'pack': '\n'.join(pack)}
     return TYPEDEF_TEMPLATE % (pmap)
 
+def expand_metadata_request(indent, name):
+    temp = []
+    temp.append(spaces(indent) + "struct {")
+    temp.append(spaces(indent+1) + "PacketInstance pkt;")
+    temp.append(spaces(indent+1) + "MetadataT meta;")
+    temp.append(spaces(indent) + "}} {}TableRequest;".format(CamelCase(name)))
+    return "\n".join(temp)
+
+def expand_metadata_response(indent, name):
+    temp = []
+    temp.append(spaces(indent) + "struct {")
+    temp.append(spaces(indent+1) + "PacketInstance pkt;")
+    temp.append(spaces(indent+1) + "MetadataT meta;")
+    temp.append(spaces(indent) + "}} {}TableResponse;".format(CamelCase(name)))
+    return "\n".join(temp)
+
+METADATA_TYPED_UNION='''
+typedef union tagged {
+%(request)s
+  struct {
+    PacketInstance pkt;
+    MetadataT meta;
+  } ForwardQueueRequest;
+  struct {
+    PacketInstance pkt;
+    MetadataT meta;
+  } DefaultRequest;
+} MetadataRequest deriving (Bits, Eq, FShow);
+
+typedef union tagged {
+%(response)s
+} MetadataResponse deriving (Bits, Eq, FShow);
+
+typedef Client#(MetadataRequest, MetadataResponse) MetadataClient;
+typedef Server#(MetadataRequest, MetadataResponse) MetadataServer;
+'''
+def generate_metadata_union(serializer, json):
+    pmap = {}
+    requests = []
+    responses = []
+    for x in json.table.keys():
+        requests.append(expand_metadata_request(1, x))
+        responses.append(expand_metadata_response(1, x))
+    pmap['request'] = "\n".join(requests)
+    pmap['response'] = "\n".join(responses)
+    serializer.append(METADATA_TYPED_UNION % pmap)
+
+def expand_basicblock_request(indent, name):
+    temp = []
+    temp.append(spaces(indent) + "struct {")
+    temp.append(spaces(indent+1) + "PacketInstance pkt;")
+    temp.append(spaces(indent) + "}} {}Request;".format(CamelCase(name)))
+    return "\n".join(temp)
+
+def expand_basicblock_response(indent, name):
+    temp = []
+    temp.append(spaces(indent) + "struct {")
+    temp.append(spaces(indent+1) + "PacketInstance pkt;")
+    temp.append(spaces(indent) + "}} {}Response;".format(CamelCase(name)))
+    return "\n".join(temp)
+
+BASICBLOCK_TYPED_UNION='''
+typedef union tagged {
+%(request)s
+} BBRequest deriving (Bits, Eq, FShow);
+
+typedef union tagged {
+%(response)s
+} BBResponse deriving (Bits, Eq, FShow);
+
+typedef Client#(BBRequest, BBResponse) BBClient;
+typedef Server#(BBRequest, BBResponse) BBServer;
+'''
+def generate_basicblock_union(serializer, json):
+    pmap = {}
+    requests = []
+    responses = []
+    for x in json.basicblock.keys():
+        if len(json.basicblock[x].local_table):
+            continue
+        requests.append(expand_basicblock_request(1, x))
+        responses.append(expand_basicblock_response(1, x))
+    pmap['request'] = "\n".join(requests)
+    pmap['response'] = "\n".join(responses)
+    serializer.append(BASICBLOCK_TYPED_UNION % pmap)
+
 COMPUTE_NEXT_STATE = '''
   function %(state)s compute_next_state(Bit#(%(width)s) v);
     %(state)s nextState = %(init_state)s;
@@ -759,66 +845,157 @@ def generate_deparse_top(indent, json):
     pmap["deparse_state_stop"] = expand_state_stop(indent + 3, json.deparser)
     return DEPARSE_TOP_TEMPLATE % (pmap)
 
+def expand_bb_client_decl(indent, json):
+    temp = []
+    for idx, _ in enumerate(json.next_control_state):
+        temp.append(spaces(indent) + "interface BBClient next_control_state_{};".format(idx));
+    return "\n".join(temp)
+
+def expand_bb_client_methods(indent, json):
+    temp = []
+    for idx, _ in enumerate(json.next_control_state):
+        temp.append(spaces(indent) + "interface next_control_state_{} = (interface BBClient;".format(idx))
+        temp.append(spaces(indent+1) + "interface request = toGet(bbReqFifo[{}]);".format(idx))
+        temp.append(spaces(indent+1) + "interface response = toPut(bbRespFifo[{}]);".format(idx))
+        temp.append(spaces(indent) + "endinterface);")
+    return "\n".join(temp)
+
+def expand_table_api(indent, json):
+    temp = []
+    temp.append(spaces(indent) + "method Action {}({})");
+    return "\n".join(temp)
+
+def expand_table_response(indent, json):
+    temp = []
+    for idx, next_state in enumerate(json.next_control_state):
+        temp.append(spaces(indent) + "{}: begin".format(next_state[1][3:].upper()))
+        temp.append(spaces(indent+1) + "BBRequest req = tagged %(requestType) {{%(fields)s}};")
+        temp.append(spaces(indent+1) + "bbReqFifo[{}].enq(req);".format(idx))
+        temp.append(spaces(indent) + "end")
+    return "\n".join(temp)
+
+def expand_bb_response(indent, tbl, json):
+    temp = []
+    for idx, next_state in enumerate(json.next_control_state):
+        temp.append(spaces(indent) + "tagged {}Response {{}}: begin".format(CamelCase(next_state[1])))
+        temp.append(spaces(indent+1) + "MetadataResponse resp = tagged {}TableResponse {{pkt: pkt, meta: meta}};".format(CamelCase(tbl.name)))
+        temp.append(spaces(indent+1) + "md.response.put(resp);")
+    return "\n".join(temp)
+
 TABLE_TEMPLATE = '''
-interface %(name)s;
-  interface Client#(MetadataRequest, MetadataResponse) next;
+
+(* synthesize *)
+module mkMatchTable_%(depth)s_%(name)sTable(MatchTable#(%(depth)s, SizeOf#(%(reqType)s), SizeOf#(%(respType)s)));
+  MatchTable#(%(depth)s, SizeOf#(%(reqType)s), SizeOf#(%(respType)s)) ifc <- mkMatchTable();
+  return ifc;
+endmodule
+
+interface %(name)sTable;
+%(bb_client)s
+%(table_api)s
 endinterface
 
-module mk%(name)s#(Client#(MetadataRequest, MetadataResponse) md)(%(name)s);
+module mk%(name)sTable#(MetadataClient md)(%(name)sTable);
   let verbose = True;
+  MatchTable#(%(depth)s, SizeOf#(%(reqType)s), SizeOf#(%(respType)s)) matchTable <- mkMatchTable_%(depth)s_%(name)sTable();
+  Vector#(%(bbcount)s, FIFOF#(BBRequest)) bbReqFifo <- replicateM(mkFIFOF);
+  Vector#(%(bbcount)s, FIFOF#(BBResponse)) bbRespFifo <- replicateM(mkFIFOF);
+  Vector#(%(bbcount)s, Bool) readyBits = map(fifoNotEmpty, bbRespFifo);
 
-  FIFO#(MetadataRequest) outReqFifo <- mkFIFO;
-  FIFO#(MetadataResponse) inRespFifo <- mkFIFO;
+  Bool interruptStatus = False;
+  Bit#(16) readyChannel = -1;
+  for (Integer i = %(bbcountMinusOne)s; i>=0; i=i-1) begin
+    if (readyBits[i]) begin
+      interruptStatus = True;
+      readyChannel = fromInteger(i);
+    end
+  end
 
-  MatchTable#(%(depth)s, SizeOf#(%(req)s), SizeOf#(%(resp)s)) matchTable <- mkMatchTable;
+  FIFO#(PacketInstance) packetPipelineFifo <- mkFIFO;
+  Vector#(2, FIFO#(MetadataT)) metadataPipelineFifo <- replicateM(mkFIFO);
 
-  rule handleRequest;
+  rule handle_%(name)s_request;
     let v <- md.request.get;
     case (v) matches
+      tagged %(name)sTableRequest {pkt: .pkt, meta: .meta}: begin
+%(tableRequest)s
+        matchTable.lookupPort.request.put(pack(req));
+        packetPipelineFifo.enq(pkt);
+        metadataPipelineFifo[0].enq(meta);
+      end
     endcase
   endrule
 
-  rule handleResponse;
-
+  rule handle_%(name)s_response;
+    let v <- matchTable.lookupPort.response.get;
+    let pkt <- toGet(packetPipelineFifo).get;
+    let meta <- toGet(metadataPipelineFifo).get;
+    if (v matches tagged Valid .data) begin
+      %(respType)s resp = unpack(data);
+      case (resp.p4_action) matches
+%(p4_actions)s
+      endcase
+      metadataPipelineFifo[1].enq(meta);
+    end
   endrule
 
-  interface next = (interface Client#(MetadataRequest, MetadataResponse);
-    interface request = toGet(outReqFifo);
-    interface response = toPut(inRespFifo);
-  endinterface);
+  rule bb_response if (interruptStatus);
+    let v <- toGet(bbRespFifo[readyChannel]).get;
+    let meta <- toGet(metadataPipelineFifo[1]).get;
+    case (v) matches
+%(bb_actions)s
+    endcase
+  endrule
+%(bb_client_methods)s
 endmodule
 '''
-def generate_table(tbl):
-    ''' TODO '''
+def generate_table(tbl, json):
+    ''' generate basicblock for table '''
     assert isinstance(tbl, Table)
+    pmap = {}
+    pmap['name'] = CamelCase(tbl.name)
 
-    pmap = {'name': CamelCase(tbl.name),
-            'depth': tbl.depth,
-            'req': CamelCase(tbl.req_attrs['values']),
-            'resp': CamelCase(tbl.resp_attrs['values'])}
+    bb_clients = []
+    for _, value in json.basicblock.items():
+        if value.local_table == tbl.name:
+            bb_clients.append(expand_bb_client_decl(1, value))
+    pmap['bb_client'] = "\n".join(bb_clients)
+    pmap['table_api'] = expand_table_api(1, json)
+    pmap['depth'] =  tbl.depth
+    pmap['reqType'] = CamelCase(tbl.req_attrs['values'])
+    pmap['respType'] = CamelCase(tbl.resp_attrs['values'])
+    pmap['bbcount'] = 2
+    pmap['bbcountMinusOne'] = 1
+    pmap['tableRequest'] = ""
+
+    table_responses = []
+    for _, value in json.basicblock.items():
+        if value.local_table == tbl.name:
+            table_responses.append(expand_table_response(4, value))
+    pmap['p4_actions'] = "\n".join(table_responses)
+
+    bb_responses = []
+    for _, value in json.basicblock.items():
+        if value.local_table == tbl.name:
+            bb_responses.append(expand_bb_response(3, tbl, value))
+    pmap['bb_actions'] = "\n".join(bb_responses)
+
+    bb_client_defs = []
+    for name, value in json.basicblock.items():
+        if value.local_table != tbl.name:
+            continue
+        bb_client_defs.append(expand_bb_client_methods(1, value))
+    pmap['bb_client_methods'] = "\n".join(bb_client_defs)
     return  TABLE_TEMPLATE % (pmap)
 
-METADATA_FIFO_TEMPLATE = '''\
-  FIFO#(MetadataRequest) %(name)sReqFifo <- mkFIFO;
-  FIFO#(MetadataResponse) %(name)sRespFifo <- mkFIFO;'''
-
-TABLE_INST_TEMPLATE = '''\
-  %(type)s %(name)s <- mk%(type)s(toMetadataClient(%(name)sReqFifo, %(name)sRespFifo));'''
-
-BB_INST_TEMPLATE = '''\
-  %(type)s %(name)s <- mk%(type)s()'''
-
-CONN_INST_TEMPLATE = '''\
-  mkConnection(%(from)s, %(to)s);'''
-
 COND_TEMPLATE = '''\
-        if (%(expr)s) : begin
-          MetadataRequest req = tagged %(Name)sLookupRequest {pkt: pkt, meta: meta};
-          %(name)sReqFifo.enq(req);
-        end'''
+if (%(expr)s) : begin
+MetadataRequest req = tagged %(Name)sLookupRequest {pkt: pkt, meta: meta};
+%(name)sReqFifo.enq(req);
+end'''
 
 CONTROL_STATE_TEMPLATE = '''
-  rule %(name)s_next_control_state:
+  rule %(name)s_next_control_state;
     let v <- toGet(%(fifo)s).get;
     case (v) matches
       tagged %(type)s {pkt: .pkt, meta: .meta} : begin
@@ -827,104 +1004,75 @@ CONTROL_STATE_TEMPLATE = '''
     endcase
   endrule'''
 
-CONTROL_FLOW_TEMPLATE = '''
-interface %(name)s;
-endinterface
+def expand_metadata_fifo(indent, control_flow):
+    temp = []
+    for block in control_flow.basic_blocks.values():
+        if block.local_table:
+            instname = camelCase(block.local_table.name)
+            temp.append(spaces(indent) + "FIFO#(MetadataRequest) {}ReqFifo <- mkFIFO;".format(instname))
+            temp.append(spaces(indent) + "FIFO#(MetadataResponse) {}RespFifo <- mkFIFO;".format(instname))
+    return "\n".join(temp)
 
-module mk%(name)s#(Vector#(numClients, MetadataClient) mdc)(%(name)s);
-  let verbose = True;
-  FIFOF#(MetadataRequest) currPacketFifo <- mkFIFOF;
-  FIFO#(MetadataRequest) defaultReqFifo <- mkFIFO;
-  FIFO#(MetadataResponse) defaultRespFifo <- mkFIFO;
-  Vector#(numClients, MetadataServer) mds = newVector;
-  for (Integer i=0; i<valueOf(numClients); i=i+1) begin
-    mds[i] = (interface MetadataServer;
-      interface Put request = toPut(defaultReqFifo);
-      interface Get response = toGet(defaultRespFifo);
-    endinterface);
-  end
-  mkConnection(mdc, mds);
-%(meta_fifo)s
-  function MetadataClient toMetadataClient(FIFO#(MetadataRequest) reqFifo,
-                                           FIFO#(MetadataResponse) respFifo);
-    MetadataClient ret_ifc;
-    ret_ifc = (interface MetadataClient;
-      interface Get request = toGet(reqFifo);
-      interface Put response = toPut(respFifo);
-    endinterface);
-    return ret_ifc;
-  endfunction
-%(table)s
-
-%(basic_block)s
-%(connection)s
-
-%(control_state)s
-endmodule
-'''
-def generate_control_flow_top(control_flow):
-    ''' generate control flow from json '''
-    def generate_control_state(cond_list, control_states, moduleName=None, request=False):
-        cond = []
-        for item in cond_list:
-            name = item[1][3:] #remove leading 'bb_'
-            cond.append(COND_TEMPLATE%({'expr': item[0],
-                                        'name': camelCase(name),
-                                        'Name': CamelCase(name)}))
-
-        if request:
-            fifo = camelCase(moduleName) + 'ReqFifo'
-            rtype = CamelCase(moduleName) + 'Request'
-        else:
-            fifo = camelCase(moduleName) + 'RespFifo'
-            rtype = CamelCase(moduleName) + 'Response'
-
-        control_states.append(\
-            CONTROL_STATE_TEMPLATE%({'name': moduleName,
-                                     'fifo': fifo,
-                                     'type': rtype,
-                                     'cond': '\n'.join(cond)}))
-
-    pmap = {}
-    pmap['name'] = CamelCase(control_flow.name)
-
-    fifos = []
-    tables = []
+def expand_tables(indent, control_flow):
+    TABLE_INST_TEMPLATE = '''%(type)sTable %(name)sTable <- mk%(type)sTable(toGPClient(%(name)sReqFifo, %(name)sRespFifo));'''
+    temp = []
     for block in control_flow.basic_blocks.values():
         if block.local_table:
             typename = CamelCase(block.local_table.name)
             instname = camelCase(block.local_table.name)
-            inst = TABLE_INST_TEMPLATE % ({'name': instname, 'type': typename})
-            fifo = METADATA_FIFO_TEMPLATE % ({'name': instname})
-            tables.append(inst)
-            fifos.append(fifo)
-    pmap['meta_fifo'] = "\n".join(fifos)
-    pmap['table'] = "\n".join(tables)
+            inst = spaces(indent) + TABLE_INST_TEMPLATE % ({'name': instname, 'type': typename})
+            temp.append(inst)
+    return "\n".join(temp)
 
-    blocks = []
+def expand_basic_block(indent, control_flow):
+    BB_INST_TEMPLATE = '''%(type)s %(name)s <- mk%(type)s();'''
+    temp = []
     for block in control_flow.basic_blocks.values():
         if block.local_table:
             continue
         if block.local_header:
             continue
-        if block.instructions.instructions != []:
-            blocks.append(BB_INST_TEMPLATE%({'type': CamelCase(block.name),
-                                             'name': block.name}))
-    pmap['basic_block'] = "\n".join(blocks)
-
-    connections = []
+        #if block.instructions.instructions != []:
+        temp.append(spaces(indent) + BB_INST_TEMPLATE%({'type': CamelCase(block.name), 'name': block.name}))
+    return "\n".join(temp)
+ 
+def expand_connection(indent, control_flow):
+    CONN_INST_TEMPLATE = '''mkConnection(%(from)s, %(to)s);'''
+    temp = []
     for table in control_flow.basic_blocks.values():
         if table.local_table:
             for idx, block in enumerate(table.control_state.basic_block):
                 if block == '$done$':
                     continue
-                from_node = "{}.{}_{}".format(camelCase(table.local_table.name),
+                from_node = "{}Table.{}_{}".format(camelCase(table.local_table.name),
                                               'next_control_state', idx)
                 to_node = "{}.{}".format(block[1], 'prev_control_state')
-                connections.append(CONN_INST_TEMPLATE%({'from': from_node,
-                                                        'to': to_node}))
-    pmap['connection'] = "\n".join(connections)
+                temp.append(spaces(indent) + CONN_INST_TEMPLATE%({'from': from_node, 'to': to_node}))
+    return "\n".join(temp)
+ 
+def generate_control_state(cond_list, control_states, moduleName=None, request=False):
+    cond = []
+    for item in cond_list:
+        name = item[1]#[3:] #remove leading 'bb_'
+        cond.append(COND_TEMPLATE%({'expr': item[0],
+                                    'name': camelCase(name),
+                                    'Name': CamelCase(name)}))
 
+    if request:
+        fifo = camelCase(moduleName) + 'ReqFifo'
+        rtype = CamelCase(moduleName) + 'Request'
+    else:
+        fifo = camelCase(moduleName) + 'RespFifo'
+        rtype = CamelCase(moduleName) + 'Response'
+
+    control_states.append(\
+        CONTROL_STATE_TEMPLATE%({'name': moduleName,
+                                 'fifo': fifo,
+                                 'type': rtype,
+                                 'cond': '\n'.join(cond)}))
+
+def expand_control_state(indent, control_flow):
+    ''' Function to optmize for paxos '''
     fmap = OrderedDict() # map (table, [cond])
     tmap = {} # map (cond, table)
     control_states = []
@@ -948,95 +1096,96 @@ def generate_control_flow_top(control_flow):
     generate_control_state(cond_list, control_states,
                            moduleName='default', request=True)
 
+    print 'xxx flow', control_flow.name
+    print 'xxx cond', control_flow.control_state.basic_block
+    print 'xxx', cond_list, fmap, tmap
     for table, conditions in fmap.items():
         cond_list = [tmap[c] for c in conditions if c in tmap]
         for cond in cond_list:
             generate_control_state(cond, control_states, moduleName=table)
-    pmap['control_state'] = "\n".join(control_states)
-    return CONTROL_FLOW_TEMPLATE % pmap
+    return "\n".join(control_states)
 
-ACTION_REG_READ_TEMPLATE = '''
-  rule reg_add;
-    // read reg
-    // reg_val.first;
-    // reg_val.deq;
+CONTROL_FLOW_TEMPLATE = '''
+interface %(name)s;
+  interface PipeOut#(MetadataRequest) eventPktSend;
+endinterface
 
-    // modify reg
-    // let newval = reg_val op;
-
-    // write reg
-    // reg_val.write;
-
-    // next action
-  endrule
-'''
-
-ACTION_REG_WRITE_TEMPLATE = '''
-%(rule)s
-'''
-
-INTF_DECL_TEMPLATE = '''
-%(intf)s
-'''
-
-INTF_IMPL_TEMPLATE = '''
-%(intf)s
-'''
-
-RULE_TEMPLATE = '''
-%(rule)s
-%(join)s
-'''
-
-STATE_TEMPLATE = '''
-%(reg)s
-%(fifo)s
-'''
-
-MODULE_TEMPLATE = '''
-module mk%(name)s(%(name)s);
-%(state)s
-%(rule)s
-%(intf)s
+module mk%(name)s#(Vector#(numClients, MetadataClient) mdc)(%(name)s);
+  let verbose = True;
+  FIFOF#(MetadataRequest) currPacketFifo <- mkFIFOF;
+  FIFO#(MetadataRequest) defaultReqFifo <- mkFIFO;
+  FIFO#(MetadataResponse) defaultRespFifo <- mkFIFO;
+%(meta_fifo)s
+  Vector#(numClients, MetadataServer) mds = newVector;
+  for (Integer i=0; i<valueOf(numClients); i=i+1) begin
+    mds[i] = (interface MetadataServer;
+      interface Put request = toPut(defaultReqFifo);
+      interface Get response = toGet(defaultRespFifo);
+    endinterface);
+  end
+  mkConnection(mdc, mds);
+  function MetadataClient toMetadataClient(FIFO#(MetadataRequest) reqFifo,
+                                           FIFO#(MetadataResponse) respFifo);
+    MetadataClient ret_ifc;
+    ret_ifc = (interface MetadataClient;
+      interface Get request = toGet(reqFifo);
+      interface Put response = toPut(respFifo);
+    endinterface);
+    return ret_ifc;
+  endfunction
+%(table)s
+%(basic_block)s
+%(connection)s
+%(control_state)s
 endmodule
 '''
-
-# class Interface, __repr__
-INTERFACE_TEMPLATE = '''
-interface %(name)s
-endinterface
-'''
-
-# class Module, __repr__
-BASIC_BLOCK_TEMPLATE = '''
-%(intf)s
-%(module)s
-'''
-
-# AST.Interface
-# AST.Param
-# AST.Module
-#   - name
-#   - moduleContext
-#   - interface -> class
-#   - params -> class
-#   - provisos ??
-#   - decls ??
-def generate_basic_block (block):
-    ''' Each basic block is translated to a Module
-        'moduleContext' is derived from BIR instruction
-        'interface', by default, it provides an #Server interface,
-            additional, register access interface can be added.
-        'params', currently requires no parameters
-        'provisos', currently requires no provisos
-        'decls', methods, and interface declaration at the end
-    '''
+def generate_control_flow_top(control_flow):
+    ''' generate control flow from json '''
     pmap = {}
-    pmap['intf'] = INTERFACE_TEMPLATE % {'name': CamelCase(block.name)}
-    pmap['module'] = MODULE_TEMPLATE % {'name': CamelCase(block.name),
-                                        'state': "",
-                                        'rule': "",
-                                        'intf': ""}
+    pmap['name'] = CamelCase(control_flow.name)
+    pmap['meta_fifo'] = expand_metadata_fifo(1, control_flow)
+    pmap['table'] = expand_tables(1, control_flow)
+    pmap['basic_block'] = expand_basic_block(1, control_flow)
+    pmap['connection'] = expand_connection(1, control_flow)
+    pmap['control_state'] = expand_control_state(1, control_flow)
+    return CONTROL_FLOW_TEMPLATE % pmap
+
+def expand_bb_interface_decl(indent, json):
+    temp = []
+    temp.append(spaces(indent) + "interface BBServer prev_control_state;")
+    return "\n".join(temp)
+
+def expand_bb_interface_defs(indent, block, json):
+    temp = []
+    temp.append(spaces(indent) + "interface prev_control_state = (interface BBServer;")
+    temp.append(spaces(indent+1) + "interface request = toPut({}_request_fifo);".format(block.name))
+    temp.append(spaces(indent+1) + "interface response = toGet({}_response_fifo);".format(block.name))
+    temp.append(spaces(indent) + "endinterface);")
+    return "\n".join(temp)
+
+BASIC_BLOCK_TEMPLATE = '''
+interface %(CamelCaseName)s;
+%(prev_state_decl)s
+endinterface
+module mk%(CamelCaseName)s(%(CamelCaseName)s);
+  FIFO#(BBRequest) %(name)s_request_fifo <- mkSizedFIFO(1);
+  FIFO#(BBResponse) %(name)s_response_fifo <- mkSizedFIFO(1);
+  FIFO#(PacketInstance) packetPipelineFifo <- mkSizedFIFO(1);
+
+  rule handle_bb_request;
+
+  endrule
+
+%(prev_state_defs)s
+endmodule
+'''
+def generate_basic_block (block, json):
+    ''' TODO '''
+    pmap = {}
+    pmap['name'] = block.name
+    pmap['CamelCaseName'] = CamelCase(block.name)
+    pmap['prev_state_decl'] = expand_bb_interface_decl(1, json)
+    pmap['prev_state_defs'] = expand_bb_interface_defs(1, block, json)
     return BASIC_BLOCK_TEMPLATE % pmap
 
 """
