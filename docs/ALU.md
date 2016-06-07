@@ -17,7 +17,7 @@
 |   | expression EQ expression | EQ | == |
 |   | expression & expression | BIT_AND | & |
 |   | expression ^ expression | BIT_XOR | ^ |
-|   | expression | expression | BIT_OR | `|` |
+|   | expression `|` expression | BIT_OR | `|` |
 |   | expression PP expression | ?  | ? |
 |   | expression AND expression | AND | && |
 |   | expression OR expression | OR | `||`  |
