@@ -111,6 +111,7 @@ int main(int argc, char **argv)
     device = new MainRequestProxy(IfcNames_MainRequestS2H);
 
     parse_options(argc, argv, &pcap_file, 0);
+    device->set_verbosity(2);
     device->read_version();
 
     device->routingTable_add_entry(0x0200000a, FORWARD, 1);

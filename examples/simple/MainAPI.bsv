@@ -38,6 +38,7 @@ interface MainRequest;
    method Action read_version();
    method Action writePacketData(Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
    method Action routingTable_add_entry(Bit#(32) dstAddr, RouteActionT act, Bit#(9) port_);
+   method Action set_verbosity (Bit#(32) verbosity);
 endinterface
 
 interface MainAPI;
@@ -60,5 +61,8 @@ module mkMainAPI#(MainIndication indication, HostChannel hostchan, Ingress0 ingr
          hostchan.writeServer.writeData.put(beat);
       endmethod
       method routingTable_add_entry = ingress.routingTable_add_entry;
+      method Action set_verbosity(Bit#(32) verbosity);
+         hostchan.set_verbosity(unpack(verbosity));
+      endmethod
    endinterface
 endmodule

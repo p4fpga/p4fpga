@@ -40,6 +40,14 @@ import Utils::*;
 import Vector::*;
 
 import MainDefs::*;
+
+typedef enum {
+   StateParseStart,
+   StateParseEthernet,
+   StateParseIpv4
+} ParserState deriving (Bits, Eq);
+
+
 typedef union tagged {
   struct {
     PacketInstance pkt;
@@ -89,6 +97,38 @@ typedef Client#(BBRequest, BBResponse) BBClient;
 typedef Server#(BBRequest, BBResponse) BBServer;
 
 typedef struct {
+  Bit#(48) dstAddr;
+  Bit#(48) srcAddr;
+  Bit#(16) etherType;
+} EthernetT deriving (Bits, Eq);
+
+instance DefaultValue#(EthernetT);
+  defaultValue = unpack(0);
+endinstance
+instance DefaultMask#(EthernetT);
+  defaultMask = unpack(maxBound);
+endinstance
+
+instance FShow#(EthernetT);
+  function Fmt fshow(EthernetT p);
+    return $format("EthernetT: dstAddr=%h, srcAddr=%h, etherType=%h", p.dstAddr, p.srcAddr, p.etherType);
+  endfunction
+endinstance
+
+function EthernetT extract_ethernet_t(Bit#(112) data);
+  Vector#(112, Bit#(1)) dataVec = unpack(data);
+  Vector#(48, Bit#(1)) dstAddr = takeAt(0, dataVec);
+  Vector#(48, Bit#(1)) srcAddr = takeAt(48, dataVec);
+  Vector#(16, Bit#(1)) etherType = takeAt(96, dataVec);
+  EthernetT hdr = defaultValue;
+  hdr.dstAddr = pack(dstAddr);
+  hdr.srcAddr = pack(srcAddr);
+  hdr.etherType = pack(etherType);
+  return hdr;
+endfunction
+
+
+typedef struct {
   RouteActionT p4_action;
   Bit#(9) port_;
 } RoutingRespT deriving (Bits, Eq);
@@ -108,8 +148,8 @@ endinstance
 
 function RoutingRespT extract_RoutingRespT(Bit#(10) data);
   Vector#(10, Bit#(1)) dataVec = unpack(data);
-  Vector#(1, Bit#(1)) p4_action = takeAt(1, dataVec);
-  Vector#(9, Bit#(1)) port_ = takeAt(2, dataVec);
+  Vector#(1, Bit#(1)) p4_action = takeAt(0, dataVec);
+  Vector#(9, Bit#(1)) port_ = takeAt(1, dataVec);
   RoutingRespT hdr = defaultValue;
   hdr.p4_action = unpack(pack(p4_action));
   hdr.port_ = pack(port_);
@@ -268,38 +308,7 @@ function Ipv4T extract_ipv4_t(Bit#(160) data);
   return hdr;
 endfunction
 
-typedef struct {
-  Bit#(48) dstAddr;
-  Bit#(48) srcAddr;
-  Bit#(16) etherType;
-} EthernetT deriving (Bits, Eq);
-
-instance DefaultValue#(EthernetT);
-  defaultValue = unpack(0);
-endinstance
-instance DefaultMask#(EthernetT);
-  defaultMask = unpack(maxBound);
-endinstance
-
-instance FShow#(EthernetT);
-  function Fmt fshow(EthernetT p);
-    return $format("EthernetT: dstAddr=%h, srcAddr=%h, etherType=%h", p.dstAddr, p.srcAddr, p.etherType);
-  endfunction
-endinstance
-
-function EthernetT extract_ethernet_t(Bit#(112) data);
-  Vector#(112, Bit#(1)) dataVec = unpack(data);
-  Vector#(48, Bit#(1)) dstAddr = takeAt(0, dataVec);
-  Vector#(48, Bit#(1)) srcAddr = takeAt(48, dataVec);
-  Vector#(16, Bit#(1)) etherType = takeAt(96, dataVec);
-  EthernetT hdr = defaultValue;
-  hdr.dstAddr = pack(dstAddr);
-  hdr.srcAddr = pack(srcAddr);
-  hdr.etherType = pack(etherType);
-  return hdr;
-endfunction
-
-
+// Template for Table??
 (* synthesize *)
 module mkMatchTable_512_RoutingTable(MatchTable#(512, SizeOf#(RoutingReqT), SizeOf#(RoutingRespT)));
   MatchTable#(512, SizeOf#(RoutingReqT), SizeOf#(RoutingRespT)) ifc <- mkMatchTable();
@@ -355,10 +364,8 @@ module mkRoutingTable#(MetadataClient md)(RoutingTable);
           bbReqFifo[0].enq(req);
         end
         FORWARD: begin
-          Bit#(9) egress_port = resp.port_;
-          BBRequest req = tagged BBForwardRequest {pkt: pkt, egress_port: egress_port};
+          BBRequest req = tagged BBForwardRequest {pkt: pkt, egress_port: resp.port_};
           bbReqFifo[1].enq(req);
-          $display("(%0d) routing response", $time);
         end
       endcase
       meta.routing$p4_action = tagged Valid resp.p4_action;
@@ -399,22 +406,32 @@ module mkRoutingTable#(MetadataClient md)(RoutingTable);
   endmethod
 endmodule
 
-
+// template for BB??
 interface BbForward;
   interface BBServer prev_control_state;
 endinterface
 module mkBbForward(BbForward);
   FIFO#(BBRequest) bb_forward_request_fifo <- mkSizedFIFO(1);
   FIFO#(BBResponse) bb_forward_response_fifo <- mkSizedFIFO(1);
+  FIFO#(PacketInstance) packetPipelineFifo <- mkSizedFIFO(1);
 
   rule handle_bb_request;
     let req <- toGet(bb_forward_request_fifo).get;
     case (req) matches
       tagged BBForwardRequest {pkt: .pkt, egress_port: .egress_port}: begin
-        BBResponse resp;
-        resp = tagged BBForwardResponse {pkt: pkt, egress_port: egress_port};
+         // ALURequest req = tagged ALUAdd {a: egress, b: 0};
+//        packetPipelineFifo.enq(pkt);
+//        $display("(%0d) handle forward", $time);
+//      end
+//    endcase
+//  endrule
+
+   // ALU Response
+
+//  rule handle_bb_resp;
+//    let pkt <- toGet(packetPipelineFifo).get;
+        BBResponse resp = tagged BBForwardResponse {pkt: pkt, egress_port: egress_port};
         bb_forward_response_fifo.enq(resp);
-        $display("(%0d) handle forward", $time);
       end
     endcase
   endrule
@@ -431,9 +448,21 @@ endinterface
 module mkBbNop(BbNop);
   FIFO#(BBRequest) bb_nop_request_fifo <- mkSizedFIFO(1);
   FIFO#(BBResponse) bb_nop_response_fifo <- mkSizedFIFO(1);
+  FIFO#(PacketInstance) packetPipelineFifo <- mkSizedFIFO(1);
 
-  rule bb_handle_nop;
+  rule handle_bb_request;
+    let req <- toGet(bb_nop_request_fifo).get;
+    case (req) matches
+      tagged BBNopRequest {pkt: .pkt}: begin
+        packetPipelineFifo.enq(pkt);
+      end
+    endcase
+  endrule
 
+  rule handle_bb_resp;
+    let pkt <- toGet(packetPipelineFifo).get;
+    BBResponse resp = tagged BBNopResponse {pkt: pkt};
+    bb_nop_response_fifo.enq(resp);
   endrule
 
   interface prev_control_state = (interface BBServer;
@@ -501,236 +530,7 @@ module mkIngress0#(Vector#(numClients, MetadataClient) mdc)(Ingress0);
   method routingTable_add_entry = routingTable.add_entry;
 endmodule
 
-typedef enum {
-   StateParseStart,
-   StateParseEthernet,
-   StateParseIpv4
-} ParserState deriving (Bits, Eq);
-module mkStateParseStart#(Reg#(ParserState) state, FIFOF#(EtherData) datain, Wire#(Bool) start_fsm)(Empty);
-  rule load_packet if (state == StateParseStart);
-    let v = datain.first;
-    if (v.sop) begin
-      state <= StateParseEthernet;
-      start_fsm <= True;
-    end
-    else begin
-      datain.deq;
-      start_fsm <= False;
-    end
-  endrule
-endmodule
-
-interface ParseEthernet;
-
-  interface Get#(Bit#(16)) parse_ipv4;
-  interface Get#(Bit#(16)) parsedOut_ethernet_etherType;
-  method Action start;
-  method Action stop;
-endinterface
-module mkStateParseEthernet#(Reg#(ParserState) state, FIFOF#(EtherData) datain)(ParseEthernet);
-  let verbose = False;
-  FIFO#(Bit#(16)) unparsed_parse_ipv4_fifo <- mkFIFO;
-  FIFOF#(Bit#(16)) parsed_etherType_fifo <- mkFIFOF;
-  Wire#(Bit#(128)) packet_in_wire <- mkDWire(0);
-  Vector#(4, Wire#(Maybe#(ParserState))) next_state_wire <- replicateM(mkDWire(tagged Invalid));
-  PulseWire start_wire <- mkPulseWire();
-  PulseWire stop_wire <- mkPulseWire();
-  (* fire_when_enabled *)
-  rule arbitrate_outgoing_state if (state == StateParseEthernet);
-    Vector#(4, Bool) next_state_valid = replicate(False);
-    Bool stateSet = False;
-    for (Integer port=0; port<4; port=port+1) begin
-      next_state_valid[port] = isValid(next_state_wire[port]);
-      if (!stateSet && next_state_valid[port]) begin
-        stateSet = True;
-        ParserState next_state = fromMaybe(?, next_state_wire[port]);
-        state <= next_state;
-      end
-    end
-  endrule
-
-  function ParserState compute_next_state(Bit#(16) v);
-    ParserState nextState = StateParseStart;
-    case (byteSwap(v)) matches
-      'h800: begin
-        nextState = StateParseIpv4;
-      end
-      default: begin
-        nextState = StateParseStart;
-      end
-    endcase
-    return nextState;
-  endfunction
-
-  rule load_packet if (state == StateParseEthernet);
-    let data_current <- toGet(datain).get;
-    packet_in_wire <= data_current.data;
-  endrule
-
-  Stmt parse_ethernet =
-  seq
-  action
-    let data_this_cycle = packet_in_wire;
-    Vector#(128, Bit#(1)) dataVec = unpack(data_this_cycle);
-    Vector#(16, Bit#(1)) unparsed = takeAt(112, dataVec);
-    let ethernet_t = extract_ethernet_t(pack(takeAt(0, dataVec)));
-    let nextState = compute_next_state(ethernet_t.etherType);
-    if (verbose) $display("Goto state ", nextState);
-    if (nextState == StateParseIpv4) begin
-      unparsed_parse_ipv4_fifo.enq(pack(unparsed));
-    end
-    parsed_etherType_fifo.enq(ethernet_t.etherType);
-    next_state_wire[0] <= tagged Valid nextState;
-  endaction
-  endseq;
-  FSM fsm_parse_ethernet <- mkFSM(parse_ethernet);
-  rule start_fsm if (start_wire);
-    fsm_parse_ethernet.start;
-  endrule
-  rule stop_fsm if (stop_wire);
-    fsm_parse_ethernet.abort;
-  endrule
-
-  method start = start_wire.send;
-  method stop = stop_wire.send;
-  interface parse_ipv4 = toGet(unparsed_parse_ipv4_fifo);
-  interface parsedOut_ethernet_etherType = toGet(parsed_etherType_fifo);
-endmodule
-
-interface ParseIpv4;
-  interface Put#(Bit#(16)) parse_ethernet;
-  interface Get#(Bit#(8)) parsedOut_ipv4_protocol;
-  interface Get#(Bit#(32)) parsedOut_ipv4_dstAddr;
-  method Action start;
-  method Action stop;
-endinterface
-module mkStateParseIpv4#(Reg#(ParserState) state, FIFOF#(EtherData) datain, FIFOF#(ParserState) parseStateFifo)(ParseIpv4);
-  let verbose = False;
-  FIFOF#(Bit#(16)) unparsed_parse_ethernet_fifo <- mkBypassFIFOF;
-
-  FIFOF#(Bit#(32)) parsed_ipv4_dstAddr_fifo <- mkFIFOF;
-  FIFOF#(Bit#(144)) internal_fifo_144 <- mkSizedFIFOF(1);
-
-  Wire#(Bit#(128)) packet_in_wire <- mkDWire(0);
-  Vector#(4, Wire#(Maybe#(ParserState))) next_state_wire <- replicateM(mkDWire(tagged Invalid));
-  PulseWire start_wire <- mkPulseWire();
-  PulseWire stop_wire <- mkPulseWire();
-  (* fire_when_enabled *)
-  rule arbitrate_outgoing_state if (state == StateParseIpv4);
-    Vector#(4, Bool) next_state_valid = replicate(False);
-    Bool stateSet = False;
-    for (Integer port=0; port<4; port=port+1) begin
-      next_state_valid[port] = isValid(next_state_wire[port]);
-      if (!stateSet && next_state_valid[port]) begin
-        stateSet = True;
-        ParserState next_state = fromMaybe(?, next_state_wire[port]);
-        state <= next_state;
-      end
-    end
-  endrule
-
-  rule load_packet if (state == StateParseIpv4);
-    let data_current <- toGet(datain).get;
-    packet_in_wire <= data_current.data;
-  endrule
-  Stmt parse_ipv4 =
-  seq
-  action
-    let data_this_cycle = packet_in_wire;
-    let data_last_cycle <- toGet(unparsed_parse_ethernet_fifo).get;
-    Bit#(144) data = {data_this_cycle, data_last_cycle};
-    internal_fifo_144.enq(data);
-  endaction
-  action
-    let data_this_cycle = packet_in_wire;
-    let data_last_cycle <- toGet(internal_fifo_144).get;
-    Bit#(272) data = {data_this_cycle, data_last_cycle};
-    Vector#(272, Bit#(1)) dataVec = unpack(data);
-    let ipv4_t = extract_ipv4_t(pack(takeAt(0, dataVec)));
-    parseStateFifo.enq(StateParseIpv4);
-    parsed_ipv4_dstAddr_fifo.enq(ipv4_t.dstAddr);
-    next_state_wire[0] <= tagged Valid StateParseStart;
-  endaction
-  endseq;
-  FSM fsm_parse_ipv4 <- mkFSM(parse_ipv4);
-  rule start_fsm if (start_wire);
-    fsm_parse_ipv4.start;
-  endrule
-  rule stop_fsm if (stop_wire);
-    fsm_parse_ipv4.abort;
-  endrule
-  method start = start_wire.send;
-  method stop = stop_wire.send;
-  interface parse_ethernet = toPut(unparsed_parse_ethernet_fifo);
-  interface parsedOut_ipv4_dstAddr = toGet(parsed_ipv4_dstAddr_fifo);
-endmodule
-
-interface Parser;
-  interface Put#(EtherData) frameIn;
-  interface Get#(MetadataT) meta;
-  method ParserPerfRec read_perf_info;
-endinterface
 typedef 4 PortMax;
-(* synthesize *)
-module mkParser(Parser);
-  Reg#(ParserState) curr_state <- mkReg(StateParseStart);
-  Reg#(Bool) started <- mkReg(False);
-  FIFOF#(EtherData) data_in_fifo <- mkFIFOF;
-  Wire#(Bool) start_fsm <- mkDWire(False);
-
-  Vector#(PortMax, FIFOF#(ParserState)) parse_state_in_fifo <- replicateM(mkGFIFOF(False, True)); // ungarded deq
-  FIFOF#(ParserState) parse_state_out_fifo <- mkFIFOF;
-  FIFOF#(MetadataT) metadata_out_fifo <- mkFIFOF;
-
-  (* fire_when_enabled *)
-  rule arbitrate_parse_state;
-    Bool sentOne = False;
-    for (Integer port=0; port<valueOf(PortMax); port=port+1) begin
-      if (!sentOne && parse_state_in_fifo[port].notEmpty()) begin
-        ParserState state <- toGet(parse_state_in_fifo[port]).get;
-        sentOne = True;
-        parse_state_out_fifo.enq(state);
-      end
-    end
-  endrule
-
-  Empty init_state <- mkStateParseStart(curr_state, data_in_fifo, start_fsm);
-  ParseIpv4 parse_ipv4 <- mkStateParseIpv4(curr_state, data_in_fifo, parse_state_in_fifo[0]);
-  ParseEthernet parse_ethernet <- mkStateParseEthernet(curr_state, data_in_fifo);
-  mkConnection(parse_ipv4.parse_ethernet, parse_ethernet.parse_ipv4);
-  rule start if (start_fsm);
-    if (!started) begin
-      parse_ipv4.start;
-      parse_ethernet.start;
-      started <= True;
-    end
-  endrule
-
-  rule stop if (!start_fsm && curr_state == StateParseStart);
-    if (started) begin
-      parse_ipv4.stop;
-      parse_ethernet.stop;
-      started <= False;
-    end
-  endrule
-
-  // handle ipv4 packet
-  rule handle_ipv4_packet if (parse_state_out_fifo.first == StateParseIpv4);
-    parse_state_out_fifo.deq;
-    let etherType <- toGet(parse_ethernet.parsedOut_ethernet_etherType).get;
-    let dstAddr <- toGet(parse_ipv4.parsedOut_ipv4_dstAddr).get;
-    $display("(%0d) handle ipv4", $time);
-    MetadataT meta = defaultValue;
-    meta.ethernet$etherType = tagged Valid etherType;
-    meta.ipv4$dstAddr = tagged Valid dstAddr;
-    meta.valid_ipv4 = tagged Valid True;
-    meta.valid_ethernet = tagged Valid True;
-    metadata_out_fifo.enq(meta);
-  endrule
-
-  interface frameIn = toPut(data_in_fifo);
-  interface meta = toGet(metadata_out_fifo);
-endmodule
 
 typedef enum {
   StateDeparseIdle,
@@ -1007,3 +807,4 @@ module mkDeparser(Deparser);
     };
   endmethod
 endmodule
+

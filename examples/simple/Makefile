@@ -44,8 +44,10 @@ BURST_LEN_SIZE=12
 ###########################################
 
 P4FILE=simple.p4
-CONNECTALFLAGS += -D PARSER=Simple
-#CONNECTALFLAGS += -D MATCHTABLE=MatchTableSim
+CONNECTALFLAGS += -D PARSER=Parser
+CONNECTALFLAGS += -D MATCHTABLE=MatchTableSim
+CONNECTALFLAGS += -D TYPEDEF=Simple
+CONNECTALFLAGS += -D DEPARSER=Simple
 
 ALL: codegen simgen
 
