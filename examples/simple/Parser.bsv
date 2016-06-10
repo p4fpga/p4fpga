@@ -30,16 +30,21 @@ import Vector::*;
 import Simple::*;
 import Utils::*;
 
+typedef enum {
+   TYPE_ERROR,
+   TYPE_ETH,
+   TYPE_IPV4
+} PacketType deriving (Bits, Eq);
+
 interface Parser;
    interface Put#(EtherData) frameIn;
    interface Get#(MetadataT) meta;
-   method ParserPerfRec read_perf_info;
    interface Put#(int) verbosity;
+   method ParserPerfRec read_perf_info;
 endinterface
 
 (* synthesize *)
 module mkParser(Parser);
-   // verbosity
    Reg#(int) cr_verbosity[2] <- mkCRegU(2);
    FIFOF#(int) cr_verbosity_ff <- mkFIFOF;
 
@@ -52,8 +57,15 @@ module mkParser(Parser);
    FIFOF#(EtherData) data_in_ff <- mkFIFOF;
    FIFOF#(MetadataT) meta_out_ff <- mkFIFOF;
    Reg#(ParserState) rg_parse_state <- mkReg(StateParseStart);
+   Wire#(PacketType) parse_state_w <- mkDWire(TYPE_ERROR);
    Reg#(Bit#(32)) rg_offset <- mkReg(0);
-   Reg#(Bit#(160)) rg_tmp_ipv4 <- mkReg(0);
+   Reg#(Bit#(144)) rg_tmp_ipv4 <- mkReg(0);
+
+   Reg#(Bit#(32)) rg_dst_addr[2] <- mkCRegU(2);
+   Reg#(Bit#(16)) rg_ether_type[2] <- mkCRegU(2);
+   Reg#(Bit#(9)) rg_egress_port[2] <- mkCRegU(2);
+
+   PulseWire parse_done <- mkPulseWire();
 
    function Tuple2 #(Bit#(112), Bit#(16)) extract_header (Bit#(128) d);
       Vector#(128, Bit#(1)) data_vec = unpack(d);
@@ -62,10 +74,10 @@ module mkParser(Parser);
       return tuple2 (curr_data, next_data);
    endfunction
 
-   function Action report_parse_action (ParserState state, Bit#(32) offset);
+   function Action report_parse_action (ParserState state, Bit#(32) offset, Bit#(128) data);
       action
          if (cr_verbosity[0] > 0)
-            $display ("(%d) Parser State %h offset 0x%h", $time, state, offset);
+            $display ("(%d) Parser State %h offset 0x%h %h", $time, state, offset, data);
       endaction
    endfunction
 
@@ -80,6 +92,32 @@ module mkParser(Parser);
       action
          data_in_ff.deq;
          rg_offset <= 0;
+      endaction
+   endfunction
+
+   function Action push_phv (PacketType ty);
+      action
+         if (ty == TYPE_IPV4) begin
+            let phv = MetadataT {
+               ipv4 : tagged Valid M_Ipv4T { dstAddr : rg_dst_addr[1] },
+               ethernet : tagged Valid M_EthernetT { etherType : rg_ether_type[1] },
+               standard_metadata : tagged Valid M_StandardMetadata { egress_port : rg_egress_port[1] },
+               table_action : tagged Invalid
+            };
+            meta_out_ff.enq(phv);
+         end
+         else if (ty == TYPE_ETH) begin
+            let phv = MetadataT {
+               ipv4 : tagged Invalid,
+               ethernet : tagged Valid M_EthernetT { etherType : rg_ether_type[1] },
+               standard_metadata : tagged Valid M_StandardMetadata { egress_port : rg_egress_port[1] },
+               table_action : tagged Invalid
+            };
+            meta_out_ff.enq(phv);
+         end
+         else begin
+            // error
+         end
       endaction
    endfunction
 
@@ -108,28 +146,38 @@ module mkParser(Parser);
 
    let din = data_in_ff.first.data;
 
-   rule parse_ethernet ((rg_parse_state == StateParseEthernet) && (rg_offset == 0));
-      report_parse_action(rg_parse_state, rg_offset);
+   rule rl_parse_ethernet ((rg_parse_state == StateParseEthernet) && (rg_offset == 0));
+      report_parse_action(rg_parse_state, rg_offset, din);
       let tmp_ethernet = din[111:0];
       let ethernet = extract_ethernet_t(tmp_ethernet);
       let next_state = compute_next_state(ethernet.etherType);
       rg_parse_state <= next_state;
       rg_tmp_ipv4 <= zeroExtend(din[127:112]);
+      parse_state_w <= TYPE_ETH;
       succeed_and_next(rg_offset + 128);
    endrule
 
-   rule parse_ipv4_1 ((rg_parse_state == StateParseIpv4) && (rg_offset == 128));
-      report_parse_action(rg_parse_state, rg_offset);
-      rg_tmp_ipv4 <= zeroExtend( { din<<16 , rg_tmp_ipv4[11:0] } );
+   rule rl_parse_ipv4_1 ((rg_parse_state == StateParseIpv4) && (rg_offset == 128));
+      report_parse_action(rg_parse_state, rg_offset, din);
+      rg_tmp_ipv4 <= zeroExtend( { din, rg_tmp_ipv4[15:0] } );
       succeed_and_next(rg_offset + 128);
    endrule
 
-   rule parse_ipv4_2 ((rg_parse_state == StateParseIpv4) && (rg_offset == 256));
-      report_parse_action(rg_parse_state, rg_offset);
-      let tmp_ipv4 = {din[15:0], rg_tmp_ipv4[143:0]};
-      let ipv4 = extract_ipv4_t(tmp_ipv4);
+   rule rl_parse_ipv4_2 ((rg_parse_state == StateParseIpv4) && (rg_offset == 256));
+      report_parse_action(rg_parse_state, rg_offset, din);
+      Bit#(272) data = {din, rg_tmp_ipv4};
+      Vector#(272, Bit#(1)) dataVec = unpack(data);
+      let ipv4 = extract_ipv4_t(pack(takeAt(0, dataVec)));
       rg_parse_state <= StateParseStart;
+      rg_dst_addr[0] <= ipv4.dstAddr;
+      $display("dstAddr = %h", ipv4.dstAddr);
+      parse_state_w <= TYPE_IPV4;
+      parse_done.send();
       succeed_and_next(rg_offset + 128);
+   endrule
+
+   rule rl_push_phv (parse_done);
+      push_phv(parse_state_w);
    endrule
 
    interface frameIn = toPut(data_in_ff);

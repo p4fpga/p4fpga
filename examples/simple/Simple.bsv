@@ -229,12 +229,28 @@ function StandardMetadata extract_standard_metadata(Bit#(160) data);
 endfunction
 
 typedef struct {
-  Maybe#(Bit#(32)) ipv4$dstAddr;
-  Maybe#(Bit#(16)) ethernet$etherType;
-  Maybe#(Bit#(9)) standard_metadata$egress_port;
-  Maybe#(RouteActionT) routing$p4_action;
-  Maybe#(Bool) valid_ipv4;
-  Maybe#(Bool) valid_ethernet;
+   Bit#(32) dstAddr;
+} M_Ipv4T deriving (Bits, Eq);
+
+typedef struct {
+   Bit#(16) etherType;
+} M_EthernetT deriving (Bits, Eq);
+
+typedef struct {
+   Bit#(9) egress_port;
+} M_StandardMetadata deriving (Bits, Eq);
+
+typedef union tagged {
+   struct {
+      RouteActionT e;
+   } Routing;
+} M_TableAction deriving (Bits, Eq);
+
+typedef struct {
+  Maybe#(M_Ipv4T) ipv4;
+  Maybe#(M_EthernetT) ethernet;
+  Maybe#(M_StandardMetadata) standard_metadata;
+  Maybe#(M_TableAction) table_action;
 } MetadataT deriving (Bits, Eq);
 
 instance DefaultValue#(MetadataT);
@@ -246,7 +262,7 @@ endinstance
 
 instance FShow#(MetadataT);
   function Fmt fshow(MetadataT p);
-    return $format("MetadataT: ipv4$dstAddr=%h, ethernet$etherType=%h, standard_metadata$egress_port=%h", p.ipv4$dstAddr, p.ethernet$etherType, p.standard_metadata$egress_port);
+    return $format("MetadataT: ipv4=%h, ethernet=%h, standard_metadata=%h", p.ipv4, p.ethernet, p.standard_metadata);
   endfunction
 endinstance
 
@@ -343,11 +359,12 @@ module mkRoutingTable#(MetadataClient md)(RoutingTable);
     let v <- md.request.get;
     case (v) matches
       tagged RoutingTableRequest {pkt: .pkt, meta: .meta}: begin
-        RoutingReqT req = RoutingReqT {padding: 0, dstAddr: fromMaybe(?, meta.ipv4$dstAddr)};
+        let ipv4 = fromMaybe(?, meta.ipv4);
+        RoutingReqT req = RoutingReqT {padding: 0, dstAddr: ipv4.dstAddr};
         matchTable.lookupPort.request.put(pack(req));
         packetPipelineFifo.enq(pkt);
         metadataPipelineFifo[0].enq(meta);
-        $display("(%0d) forward routing request", $time);
+        $display("(%0d) forward routing request %h", $time, ipv4.dstAddr);
       end
     endcase
   endrule
@@ -368,7 +385,9 @@ module mkRoutingTable#(MetadataClient md)(RoutingTable);
           bbReqFifo[1].enq(req);
         end
       endcase
-      meta.routing$p4_action = tagged Valid resp.p4_action;
+      let _act = tagged Routing {e: resp.p4_action};
+      $display("(%0d) response %h", $time, _act);
+      meta.table_action = tagged Valid _act;
       metadataPipelineFifo[1].enq(meta);
     end
   endrule
@@ -382,7 +401,8 @@ module mkRoutingTable#(MetadataClient md)(RoutingTable);
         md.response.put(resp);
       end
       tagged BBForwardResponse {pkt: .pkt, egress_port: .egress_port}: begin
-        meta.standard_metadata$egress_port = tagged Valid egress_port;
+        let std_metadata = M_StandardMetadata { egress_port: egress_port };
+        meta.standard_metadata = tagged Valid std_metadata;
         MetadataResponse resp = tagged RoutingTableResponse {pkt: pkt, meta: meta};
         md.response.put(resp);
         $display("(%0d) forward response", $time);
@@ -512,16 +532,18 @@ module mkIngress0#(Vector#(numClients, MetadataClient) mdc)(Ingress0);
   endrule
   rule routing_next_control_state if (routingRespFifo.first matches tagged RoutingTableResponse {pkt: .pkt, meta: .meta});
     routingRespFifo.deq;
-    if (meta.routing$p4_action matches tagged Valid .data) begin
+    if (meta.table_action matches tagged Valid .data) begin
       case (data) matches
-        FORWARD: begin
-          MetadataRequest req = tagged ForwardQueueRequest {pkt: pkt, meta: meta};
-          currPacketFifo.enq(req);
-        end
-        NOP: begin
-          MetadataRequest req = tagged ForwardQueueRequest {pkt: pkt, meta: meta};
-          currPacketFifo.enq(req);
-        end
+         tagged Routing { e: .act }: begin
+           if (act == FORWARD) begin
+              MetadataRequest req = tagged ForwardQueueRequest {pkt: pkt, meta: meta};
+              currPacketFifo.enq(req);
+           end
+           else if (act == NOP) begin
+              MetadataRequest req = tagged ForwardQueueRequest {pkt: pkt, meta: meta};
+              currPacketFifo.enq(req);
+           end
+         end
       endcase
     end
   endrule
@@ -541,17 +563,19 @@ typedef enum {
 function Tuple2#(EthernetT, EthernetT) toEthernet(MetadataT meta);
    EthernetT data = defaultValue;
    EthernetT mask = defaultMask;
-   data.etherType = fromMaybe(?, meta.ethernet$etherType);
+   let ethernet = fromMaybe(?, meta.ethernet);
+   data.etherType = ethernet.etherType;
    mask.etherType = 0;
    return tuple2(data, mask);
 endfunction
 
 function Tuple2#(Ipv4T, Ipv4T) toIpv4(MetadataT meta);
-   Ipv4T ipv4 = defaultValue;
+   Ipv4T data = defaultValue;
    Ipv4T mask = defaultMask;
-   ipv4.dstAddr = fromMaybe(?, meta.ipv4$dstAddr);
+   let ipv4 = fromMaybe(?, meta.ipv4);
+   data.dstAddr = ipv4.dstAddr;
    mask.dstAddr = 0;
-   return tuple2(ipv4, mask);
+   return tuple2(data, mask);
 endfunction
 
 module mkStateDeparseIdle#(Reg#(DeparserState) state, FIFOF#(EtherData) datain, FIFOF#(EtherData) dataout, Wire#(Bool) start_fsm)(Empty);
