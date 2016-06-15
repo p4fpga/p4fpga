@@ -253,31 +253,6 @@ module mkDeparser(Deparser);
       succeed_and_next(rg_offset + 32);
    endrule
 
-//   function Rules build_deparse_rule (List#(MetaT, int) offsets);
-//      Rules d =
-//      rules
-//         rule rl_;
-//            Bit#(128) data = 0;
-//            // Vector#(length(offsets), MetaT) metaVec = newVector;
-//            // Vector#(length(offsets), MaskT) maskVec = newVector;
-//            // may touch multiple headers
-//            for (Integer i=0; i < length(offsets); i=i+1) begin
-//               let header = tpl_1(offsets[i]);
-//               let offset = tpl_2(offsets[i]);
-//               match {.mta, ._msk} = toTuple(header);
-//               data = data | mta << offset;
-//               // let metaVec[i] = pack();
-//               $display("deparse %h", i);
-//            end
-//            // apply field update
-//            // let data = apply_changes (data, meta, mask);
-//            // apply header removal by marking mask zero
-//            // apply added header by setting field at offset.
-//         endrule
-//      endrules;
-//      return d;
-//   endfunction
-
    Tuple2#(EthernetT, EthernetT) ethernet = toTuple(meta);
    Bit#(112) ethernet_meta = pack(tpl_1(ethernet));
    Bit#(112) ethernet_mask = pack(tpl_2(ethernet));
