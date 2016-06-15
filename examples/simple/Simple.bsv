@@ -637,7 +637,6 @@ module mkStateDeparseEthernet#(Reg#(DeparserState) state, FIFOF#(EtherData) data
     Vector#(112, Bit#(1)) curr_mask = takeAt(0, unpack(byteSwap(pack(mask_fifo.first))));
     let masked_data = pack(data) & pack(curr_mask);
     let curr_data = masked_data | pack(curr_meta);
-    EthernetT ethernet_t = unpack(pack(masked_data));
     data_this_cycle.data = {pack(unused), pack(curr_data)};
     let nextState = compute_next_state(meta_fifo.first.etherType);
     if (verbose) $display("(%0d) etherType", $time, meta_fifo.first.etherType);
