@@ -146,12 +146,10 @@ module mkDeparser(Deparser);
    function DeparserState compute_next_state_ethernet(Bit#(16) v);
       DeparserState nextState = StateDeparseStart;
       case (byteSwap(v)) matches
-         'h800: begin
+         'h800:
             nextState = StateDeparseIpv4;
-         end
-         default: begin
+         default:
             nextState = StateDeparseStart;
-         end
       endcase
       return nextState;
    endfunction
@@ -193,19 +191,23 @@ module mkDeparser(Deparser);
                 Add#(a__, n, 128));
       Rules d =
       rules
-         rule rl_deparse if ((rg_deparse_state == state) && (rg_offset == unpack(pack(offset))));
+         rule rl_deparse if ((rg_deparse_state == state)
+                          && (rg_offset == unpack(pack(offset))));
             report_deparse_action(rg_deparse_state, rg_offset);
             match {.meta, .mask} = m;
             Vector#(n, Bit#(1)) curr_meta = takeAt(0, unpack(byteSwap(meta)));
             Vector#(n, Bit#(1)) curr_mask = takeAt(0, unpack(byteSwap(mask)));
             Bit#(n) curr_data = read_data (clen, plen);
+            $display ("read_data %h", curr_data);
             let data = apply_changes (curr_data, pack(curr_meta), pack(curr_mask));
             let data_this_cycle = EtherData { sop: din.sop,
                                               eop: din.eop,
                                               data: zeroExtend(data),
                                               mask: create_mask(cExtend(fromInteger(valueOf(n)))) };
             data_out_ff.enq (data_this_cycle);
-            rg_deparse_state <= compute_next_state(state);
+            DeparserState next_state = compute_next_state(state);
+            $display ("next_state %h", next_state);
+            rg_deparse_state <= next_state;
             rg_buff <= din.data;
             // apply header removal by marking mask zero
             // apply added header by setting field at offset.
