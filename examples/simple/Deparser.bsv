@@ -215,44 +215,6 @@ module mkDeparser(Deparser);
       return d;
    endfunction
 
-   rule rl_deparse_ipv4_1 if ((rg_deparse_state == StateDeparseIpv4) && (rg_offset == 112));
-      report_deparse_action(rg_deparse_state, rg_offset);
-      Tuple2#(Ipv4T, Ipv4T) tp = toTuple(meta);
-      match {.mta, .msk} = tp;
-      Vector#(128, Bit#(1)) curr_meta = takeAt(0, unpack(byteSwap(pack(mta))));
-      Vector#(128, Bit#(1)) curr_mask = takeAt(0, unpack(byteSwap(pack(msk))));
-      Bit#(112) d = truncate (din.data);
-      Bit#(16) e = grab_left (rg_buff);
-      let curr_data = {d, e};
-      let data = apply_changes(curr_data, pack(curr_meta), pack(curr_mask));
-      let data_this_cycle = EtherData { sop: din.sop, eop: din.eop, data: zeroExtend(data), mask: din.mask };
-      data_out_ff.enq(data_this_cycle);
-      // if eoh:
-      //   state <= next_state
-      rg_buff <= din.data;
-      succeed_and_next(rg_offset + 128);
-   endrule
-
-   rule rl_deparse_ipv4_2 if ((rg_deparse_state == StateDeparseIpv4) && (rg_offset == 240));
-      report_deparse_action(rg_deparse_state, rg_offset);
-      Tuple2#(Ipv4T, Ipv4T) tp = toTuple(meta);
-      match {.mta, .msk} = tp;
-      // let data_in = read_data (16);
-      Vector#(32, Bit#(1)) curr_meta = takeAt(128, unpack(byteSwap(pack(mta))));
-      Vector#(32, Bit#(1)) curr_mask = takeAt(128, unpack(byteSwap(pack(msk))));
-      //Bit#(32) curr_data = read_data (16, 16);
-      Bit#(16) d = truncate (din.data);
-      Bit#(16) e = grab_left (rg_buff);
-      let curr_data = {d, e};
-      let data = apply_changes(curr_data, pack(curr_meta), pack(curr_mask));
-      let data_this_cycle = EtherData { sop: din.sop, eop: din.eop, data: zeroExtend(data), mask: din.mask };
-      data_out_ff.enq(data_this_cycle);
-      // if eoh:
-      //    state <= next_state;
-      rg_buff <= din.data;
-      succeed_and_next(rg_offset + 32);
-   endrule
-
    Tuple2#(EthernetT, EthernetT) ethernet = toTuple(meta);
    Bit#(112) ethernet_meta = pack(tpl_1(ethernet));
    Bit#(112) ethernet_mask = pack(tpl_2(ethernet));
@@ -262,13 +224,26 @@ module mkDeparser(Deparser);
                                       112,
                                       0));
 
-//   Tuple2#(Ipv4T, Ipv4T) ipv4 = toTuple(meta);
-//   let ipv4_meta = pack(tpl_1(ipv4));
-//   let ipv4_mask = pack(tpl_2(ipv4));
-//   addRules(build_deparse_rule_no_opt(StateDeparseIpv4, 112,
-//      tuple2(ipv4_meta, ipv4_mask), 160, 112, 16));
-//   addRules(build_deparse_rule_no_opt(StateDeparseIpv4, 240, 
-//      tuple2(ipv4_meta, ipv4_mask), 160, 16, 16));
+   Tuple2#(Ipv4T, Ipv4T) ipv4 = toTuple(meta);
+   Vector#(128, Bit#(1)) ipv4_meta_vec_0 = takeAt(0, unpack(pack(tpl_1(ipv4))));
+   Vector#(128, Bit#(1)) ipv4_mask_vec_0 = takeAt(0, unpack(pack(tpl_2(ipv4))));
+   Bit#(128) ipv4_meta_0 = pack(ipv4_meta_vec_0);
+   Bit#(128) ipv4_mask_0 = pack(ipv4_mask_vec_0);
+   addRules(build_deparse_rule_no_opt(StateDeparseIpv4,
+                                      112,
+                                      tuple2(ipv4_meta_0, ipv4_mask_0),
+                                      112,
+                                      16));
+
+   Vector#(32, Bit#(1)) ipv4_meta_vec_1 = takeAt(128, unpack(pack(tpl_1(ipv4))));
+   Vector#(32, Bit#(1)) ipv4_mask_vec_1 = takeAt(128, unpack(pack(tpl_2(ipv4))));
+   Bit#(32) ipv4_meta_1 = pack(ipv4_meta_vec_1);
+   Bit#(32) ipv4_mask_1 = pack(ipv4_mask_vec_1);
+   addRules(build_deparse_rule_no_opt(StateDeparseIpv4,
+                                      240,
+                                      tuple2(ipv4_meta_1, ipv4_mask_1),
+                                      16,
+                                      16));
 
    rule rl_deparse_done;
 
