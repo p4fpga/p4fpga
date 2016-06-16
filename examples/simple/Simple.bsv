@@ -38,6 +38,7 @@ import SpecialFIFOs::*;
 import StmtFSM::*;
 import Utils::*;
 import Vector::*;
+import TxRx::*;
 
 import MainDefs::*;
 
@@ -332,8 +333,8 @@ module mkMatchTable_512_RoutingTable(MatchTable#(512, SizeOf#(RoutingReqT), Size
 endmodule
 
 interface RoutingTable;
-  interface BBClient next_control_state_0;
-  interface BBClient next_control_state_1;
+  interface Client #(BBRequest, BBResponse) next_control_state_0;
+  interface Client #(BBRequest, BBResponse) next_control_state_1;
   method Action add_entry(Bit#(32) dstAddr, RouteActionT action_, Bit#(9) port_);
 endinterface
 module mkRoutingTable#(MetadataClient md)(RoutingTable);
@@ -341,8 +342,8 @@ module mkRoutingTable#(MetadataClient md)(RoutingTable);
   MatchTable#(512, SizeOf#(RoutingReqT), SizeOf#(RoutingRespT)) matchTable <- mkMatchTable_512_RoutingTable();
   Vector#(2, FIFOF#(BBRequest)) bbReqFifo <- replicateM(mkFIFOF);
   Vector#(2, FIFOF#(BBResponse)) bbRespFifo <- replicateM(mkFIFOF);
-  Vector#(2, Bool) readyBits = map(fifoNotEmpty, bbRespFifo);
 
+  Vector#(2, Bool) readyBits = map(fifoNotEmpty, bbRespFifo);
   Bool interruptStatus = False;
   Bit#(16) readyChannel = -1;
   for (Integer i = 1; i>=0; i=i-1) begin
@@ -410,14 +411,9 @@ module mkRoutingTable#(MetadataClient md)(RoutingTable);
     endcase
   endrule
 
-  interface next_control_state_0 = (interface BBClient;
-    interface request = toGet(bbReqFifo[0]);
-    interface response = toPut(bbRespFifo[0]);
-  endinterface);
-  interface next_control_state_1 = (interface BBClient;
-    interface request = toGet(bbReqFifo[1]);
-    interface response = toPut(bbRespFifo[1]);
-  endinterface);
+  interface next_control_state_0 = toClient(bbReqFifo[0], bbRespFifo[0]);
+  interface next_control_state_1 = toClient(bbReqFifo[1], bbRespFifo[1]);
+
   method Action add_entry(Bit#(32) dstAddr, RouteActionT action_, Bit#(9) port_);
      RoutingReqT req = RoutingReqT {dstAddr: dstAddr, padding: 0};
      RoutingRespT resp = RoutingRespT {p4_action: action_, port_: port_};
@@ -428,67 +424,70 @@ endmodule
 
 // template for BB??
 interface BbForward;
-  interface BBServer prev_control_state;
+  interface Server #(BBRequest, BBResponse) prev_control_state;
 endinterface
 module mkBbForward(BbForward);
-  FIFO#(BBRequest) bb_forward_request_fifo <- mkSizedFIFO(1);
-  FIFO#(BBResponse) bb_forward_response_fifo <- mkSizedFIFO(1);
-  FIFO#(PacketInstance) packetPipelineFifo <- mkSizedFIFO(1);
 
-  rule handle_bb_request;
-    let req <- toGet(bb_forward_request_fifo).get;
-    case (req) matches
-      tagged BBForwardRequest {pkt: .pkt, egress_port: .egress_port}: begin
-         // ALURequest req = tagged ALUAdd {a: egress, b: 0};
-//        packetPipelineFifo.enq(pkt);
-//        $display("(%0d) handle forward", $time);
-//      end
-//    endcase
-//  endrule
+   RX #(BBRequest) rx_t1_b1 <- mkRX();
+   let rx_info_t1_b1 = rx_t1_b1.u;
 
-   // ALU Response
+   TX #(BBResponse) tx_b1_t1 <- mkTX();
+   let tx_info_b1_t1 = tx_b1_t1.u;
 
-//  rule handle_bb_resp;
-//    let pkt <- toGet(packetPipelineFifo).get;
-        BBResponse resp = tagged BBForwardResponse {pkt: pkt, egress_port: egress_port};
-        bb_forward_response_fifo.enq(resp);
-      end
-    endcase
-  endrule
+   FIFO#(PacketInstance) packetPipelineFifo <- mkSizedFIFO(1);
+   Reg#(Bit#(9)) rg_egress_port <- mkReg(0);
 
-  interface prev_control_state = (interface BBServer;
-    interface request = toPut(bb_forward_request_fifo);
-    interface response = toGet(bb_forward_response_fifo);
-  endinterface);
+   rule handle_bb_request;
+      let req = rx_info_t1_b1.first;
+      case (req) matches
+         tagged BBForwardRequest {pkt: .pkt, egress_port: .egress_port}: begin
+            // ALURequest req = tagged ALUAdd {a: egress, b: 0};
+            $display("(%0d) handle forward", $time);
+            rg_egress_port <= egress_port;
+         end
+      endcase
+      rx_info_t1_b1.deq;
+   endrule
+
+   rule handle_bb_resp;
+      let pkt <- toGet(packetPipelineFifo).get;
+      BBResponse resp = tagged BBForwardResponse {pkt: pkt, egress_port: rg_egress_port};
+      tx_info_b1_t1.enq(resp);
+   endrule
+
+   interface prev_control_state = toServer(rx_t1_b1.e, tx_b1_t1.e);
 endmodule
 
 interface BbNop;
-   interface BBServer prev_control_state;
+   interface Server #(BBRequest, BBResponse) prev_control_state;
 endinterface
 module mkBbNop(BbNop);
-  FIFO#(BBRequest) bb_nop_request_fifo <- mkSizedFIFO(1);
-  FIFO#(BBResponse) bb_nop_response_fifo <- mkSizedFIFO(1);
-  FIFO#(PacketInstance) packetPipelineFifo <- mkSizedFIFO(1);
 
-  rule handle_bb_request;
-    let req <- toGet(bb_nop_request_fifo).get;
-    case (req) matches
-      tagged BBNopRequest {pkt: .pkt}: begin
-        packetPipelineFifo.enq(pkt);
-      end
-    endcase
-  endrule
+   RX #(BBRequest) rx_t1_b2 <- mkRX();
+   let rx_info_t1_b2 = rx_t1_b2.u;
 
-  rule handle_bb_resp;
-    let pkt <- toGet(packetPipelineFifo).get;
-    BBResponse resp = tagged BBNopResponse {pkt: pkt};
-    bb_nop_response_fifo.enq(resp);
-  endrule
+   TX #(BBResponse) tx_b2_t1 <- mkTX();
+   let tx_info_b2_t1 = tx_b2_t1.u;
 
-  interface prev_control_state = (interface BBServer;
-    interface request = toPut(bb_nop_request_fifo);
-    interface response = toGet(bb_nop_response_fifo);
-  endinterface);
+   FIFO#(PacketInstance) packetPipelineFifo <- mkSizedFIFO(1);
+
+   rule handle_bb_request;
+      let req = rx_info_t1_b2.first;
+      case (req) matches
+         tagged BBNopRequest {pkt: .pkt}: begin
+            packetPipelineFifo.enq(pkt);
+         end
+      endcase
+      rx_info_t1_b2.deq;
+   endrule
+
+   rule handle_bb_resp;
+      let pkt <- toGet(packetPipelineFifo).get;
+      BBResponse resp = tagged BBNopResponse {pkt: pkt};
+      tx_info_b2_t1.enq(resp);
+   endrule
+
+   interface prev_control_state = toServer (rx_t1_b2.e, tx_b2_t1.e);
 endmodule
 
 interface Ingress0;

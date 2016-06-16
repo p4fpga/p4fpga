@@ -29,6 +29,8 @@ import StmtFSM::*;
 import Vector::*;
 import Simple::*;
 import Utils::*;
+import TxRx::*;
+import Pipe::*;
 
 typedef enum {
    TYPE_ERROR,
