@@ -7,6 +7,7 @@ from dotmap import DotMap
 from collections import OrderedDict
 from pif_ir.bir.objects.bir_struct import BIRStruct
 from pif_ir.bir.objects.table import Table
+from AST import Function
 
 def get_camel_case(column_name):
     ''' TODO '''
@@ -178,6 +179,7 @@ def expand_basicblock_request(indent, name):
     temp = []
     temp.append(spaces(indent) + "struct {")
     temp.append(spaces(indent+1) + "PacketInstance pkt;")
+    #FIXME
     temp.append(spaces(indent) + "}} {}Request;".format(CamelCase(name)))
     return "\n".join(temp)
 
@@ -213,6 +215,14 @@ def generate_basicblock_union(serializer, json):
     pmap['response'] = "\n".join(responses)
     serializer.append(BASICBLOCK_TYPED_UNION % pmap)
 
+
+def build_ast_next_state():
+    ''' ast node for next state function '''
+    funct = Function(name="compute_next_state",
+                     return_type="ParserState",
+                     params=["Bit#(32) v"])
+    print funct
+
 COMPUTE_NEXT_STATE = '''
   function %(state)s compute_next_state(Bit#(%(width)s) v);
     %(state)s nextState = %(init_state)s;
@@ -227,6 +237,8 @@ COMPUTE_NEXT_STATE = '''
 '''
 def expand_next_state(indent, state, json):
     ''' cases, width '''
+    build_ast_next_state()
+
     def process(branch):
         value = branch.value.replace("0x", "'h")
         state = CamelCase(branch.next_state)
@@ -865,11 +877,23 @@ def expand_table_api(indent, json):
     temp.append(spaces(indent) + "method Action {}({})");
     return "\n".join(temp)
 
-def expand_table_response(indent, json):
+def expand_table_response(indent, basicblock, json):
     temp = []
-    for idx, next_state in enumerate(json.next_control_state):
+    for idx, next_state in enumerate(basicblock.next_control_state):
         temp.append(spaces(indent) + "{}: begin".format(next_state[1][3:].upper()))
-        temp.append(spaces(indent+1) + "BBRequest req = tagged %(requestType)s {{%(fields)s}};")
+        pmap={}
+        pmap['requestType'] = CamelCase(next_state[1])
+        table = basicblock.local_table
+        responseType = json.table[table].responseType
+        #FIXME
+        fields = json.struct[responseType].field
+        field_list = ['pkt: pkt']
+        for field in fields:
+            if field == 'p4_action':
+                continue
+            field_list.append("{}: resp.{}".format(field, field))
+        pmap['fields'] = ", ".join(field_list)
+        temp.append(spaces(indent+1) + "BBRequest req = tagged %(requestType)sRequest {%(fields)s};" % pmap)
         temp.append(spaces(indent+1) + "bbReqFifo[{}].enq(req);".format(idx))
         temp.append(spaces(indent) + "end")
     return "\n".join(temp)
@@ -896,9 +920,9 @@ interface %(name)sTable;
 %(table_api)s
 endinterface
 
-module mk%(name)sTable#(MetadataClient md)(%(name)sTable);
+module mk%(CamelCaseName)sTable#(MetadataClient md)(%(CamelCaseName)sTable);
   let verbose = True;
-  MatchTable#(%(depth)s, SizeOf#(%(reqType)s), SizeOf#(%(respType)s)) matchTable <- mkMatchTable_%(depth)s_%(name)sTable();
+  MatchTable#(%(depth)s, SizeOf#(%(reqType)s), SizeOf#(%(respType)s)) matchTable <- mkMatchTable_%(depth)s_%(CamelCaseName)sTable();
   Vector#(%(bbcount)s, FIFOF#(BBRequest)) bbReqFifo <- replicateM(mkFIFOF);
   Vector#(%(bbcount)s, FIFOF#(BBResponse)) bbRespFifo <- replicateM(mkFIFOF);
   Vector#(%(bbcount)s, Bool) readyBits = map(fifoNotEmpty, bbRespFifo);
@@ -915,10 +939,10 @@ module mk%(name)sTable#(MetadataClient md)(%(name)sTable);
   FIFO#(PacketInstance) packetPipelineFifo <- mkFIFO;
   Vector#(2, FIFO#(MetadataT)) metadataPipelineFifo <- replicateM(mkFIFO);
 
-  rule handle_%(name)s_request;
+  rule handle_%(CamelCaseName)s_request;
     let v <- md.request.get;
     case (v) matches
-      tagged %(name)sTableRequest {pkt: .pkt, meta: .meta}: begin
+      tagged %(CamelCaseName)sTableRequest {pkt: .pkt, meta: .meta}: begin
 %(tableRequest)s
         matchTable.lookupPort.request.put(pack(req));
         packetPipelineFifo.enq(pkt);
@@ -927,7 +951,7 @@ module mk%(name)sTable#(MetadataClient md)(%(name)sTable);
     endcase
   endrule
 
-  rule handle_%(name)s_response;
+  rule handle_%(CamelCaseName)s_response;
     let v <- matchTable.lookupPort.response.get;
     let pkt <- toGet(packetPipelineFifo).get;
     let meta <- toGet(metadataPipelineFifo).get;
@@ -936,6 +960,7 @@ module mk%(name)sTable#(MetadataClient md)(%(name)sTable);
       case (resp.p4_action) matches
 %(p4_actions)s
       endcase
+      meta.%(name)s$p4_action = tagged Valid resp.p4_action;
       metadataPipelineFifo[1].enq(meta);
     end
   endrule
@@ -954,7 +979,8 @@ def generate_table(tbl, json):
     ''' generate basicblock for table '''
     assert isinstance(tbl, Table)
     pmap = {}
-    pmap['name'] = CamelCase(tbl.name)
+    pmap['name'] = tbl.name
+    pmap['CamelCaseName'] = CamelCase(tbl.name)
 
     bb_clients = []
     for _, value in json.basicblock.items():
@@ -970,9 +996,9 @@ def generate_table(tbl, json):
     pmap['tableRequest'] = ""
 
     table_responses = []
-    for _, value in json.basicblock.items():
-        if value.local_table == tbl.name:
-            table_responses.append(expand_table_response(4, value))
+    for _, basicblock in json.basicblock.items():
+        if basicblock.local_table == tbl.name:
+            table_responses.append(expand_table_response(4, basicblock, json))
     pmap['p4_actions'] = "\n".join(table_responses)
 
     bb_responses = []
@@ -1042,6 +1068,8 @@ def generate_default_control_state(indent, control_flow, json):
     for next_state in control_flow.control_state.basic_block:
         if next_state == "$done$":
             continue
+        if isinstance(next_state, list):
+            next_state = next_state[1]
         next_table = json.basicblock[next_state]
         temp.append(spaces(indent+1) + "MetadataRequest req = tagged {}TableRequest {{pkt: pkt, meta: meta}};".format(CamelCase(next_table.local_table)))
         temp.append(spaces(indent+1) + "{}ReqFifo.enq(req);".format(next_table.local_table))
@@ -1100,6 +1128,8 @@ def expand_control_state(indent, control_flow, json):
     for next_state in control_flow.control_state.basic_block:
         if next_state == "$done$":
             continue
+        if isinstance(next_state, list):
+            next_state = next_state[1]
         next_table = json.basicblock[next_state]
         control_states.append(generate_table_control_state(1, next_table, json))
     return "\n".join(control_states)
@@ -1157,6 +1187,32 @@ def expand_bb_interface_decl(indent, json):
     temp.append(spaces(indent) + "interface BBServer prev_control_state;")
     return "\n".join(temp)
 
+def expand_bb_instructions(indent, block, json):
+    temp = []
+    # differentiate V-type, R-type, O-type, M-type instructions
+    temp.append(spaces(indent) + "let req <- toGet({}_request_fifo).get;".format(block.name))
+    return "\n".join(temp)
+
+def expand_v_type_request(indent, block, json):
+    temp = []
+    return "\n".join(temp)
+
+def expand_v_type_response(indent, block, json):
+    temp = []
+    return "\n".join(temp)
+
+def expand_o_type(indent, block, json):
+    temp = []
+    return "\n".join(temp)
+
+def expand_r_type(indent, block, json):
+    temp = []
+    return "\n".join(temp)
+
+def expand_m_type(indent, block, json):
+    temp = []
+    return "\n".join(temp)
+
 def expand_bb_interface_defs(indent, block, json):
     temp = []
     temp.append(spaces(indent) + "interface prev_control_state = (interface BBServer;")
@@ -1174,8 +1230,17 @@ module mk%(CamelCaseName)s(%(CamelCaseName)s);
   FIFO#(BBResponse) %(name)s_response_fifo <- mkSizedFIFO(1);
   FIFO#(PacketInstance) packetPipelineFifo <- mkSizedFIFO(1);
 
-  rule handle_bb_request;
+%(bypassFifo)s
 
+  rule handle_bb_request;
+%(instructions)s
+    packetPipelineFifo.enq(pkt);
+  endrule
+
+  rule handle_bb_resp;
+    let pkt <- toGet(packetPipelineFifo).get;
+%(bbresponse)s
+    %(name)s_response_fifo.enq(resp);
   endrule
 
 %(prev_state_defs)s
@@ -1187,6 +1252,9 @@ def generate_basic_block (block, json):
     pmap['name'] = block.name
     pmap['CamelCaseName'] = CamelCase(block.name)
     pmap['prev_state_decl'] = expand_bb_interface_decl(1, json)
+    pmap['bypassFifo'] = ""
+    pmap['instructions'] = expand_bb_instructions(2, block, json)
+    pmap['bbresponse'] = ""
     pmap['prev_state_defs'] = expand_bb_interface_defs(1, block, json)
     return BASIC_BLOCK_TEMPLATE % pmap
 

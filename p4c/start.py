@@ -3,6 +3,8 @@
     It translates HLIR to BIR and generates Bluespec from BIR
 '''
 
+#import p4_hlir as p4hlir
+
 import argparse
 import math
 import sys
@@ -92,7 +94,7 @@ class TableResponse(Struct):
     def __init__(self, tbl):
         super(TableResponse, self).__init__(tbl)
         self.name = tbl.name + '_resp_t'
-        self.fields.append({'hit':1})
+        #self.fields.append({'hit':1})
         num_action = int(math.ceil(math.log(len(tbl.actions), 2)))
         if num_action != 0:
             self.fields.append({'p4_action': num_action})
@@ -282,29 +284,6 @@ class BasicBlock(object):
                         instructions.append(['V', dst, action.signature[arg.idx]])
                     elif isinstance(arg, int):
                         instructions.append(['V', dst, hex(arg)])
-            elif inst[0].name in ['add_to_field']:
-                dst = "meta.{}${}".format(args[0].instance.name, args[0].name)
-                for index, arg in enumerate(args):
-                    if isinstance(arg, p4_signature_ref):
-                        instructions.append(['V', dst, "{} + {}".format(dst, action.signature[arg.idx])])
-                    elif isinstance(arg, int):
-                        instructions.append(['V', dst, "{} + {}".format(dst, hex(arg))])
-            elif inst[0].name in ['subtract_from_field']:
-                dst = "meta.{}${}".format(args[0].instance.name, args[0].name)
-                for index, arg in enumerate(args):
-                    if isinstance(arg, p4_signature_ref):
-                        instructions.append(['V', dst, "{} - {}".format(dst, action.signature[arg.idx])])
-                    elif isinstance(arg, int):
-                        instructions.append(['V', dst, "{} - {}".format(dst, hex(arg))])
-            elif inst[0].name in ['add', 'subtract']:
-                dst = "meta.{}${}".format(args[0].instance.name, args[0].name)
-                for index, arg in enumerate(args):
-                    if isinstance(arg, p4.p4_field):
-                        print 'xx', arg
-                    elif isinstance(arg, p4_signature_ref):
-                        print 'yy', arg
-                    elif isinstance(arg, int):
-                        print 'zz', arg
             elif inst[0].name in ['clone_ingress_pkt_to_egress',
                                   'clone_egress_pkt_to_egress']:
                 pass
@@ -327,12 +306,13 @@ class BasicBlock(object):
                 pass
             elif inst[0].name in ['execute_meter']:
                 pass
-            elif inst[0].name in ['bit_xor', 'bit_or', 'bit_and']:
-                pass
             elif inst[0].name in ['push', 'pop']:
                 pass
             elif inst[0].name in ['add_header', 'remove_header', 'copy_header']:
                 raise NotImplementedError
+            else:
+                print vars(inst[1][0])
+                #raise NotImplementedError
             return instructions
 
         # instructions
@@ -415,6 +395,8 @@ class ControlFlow(ControlFlowBase):
                 expr = state[0]
                 name = state[1]
                 start_control_state.append([expr, name])
+        else:
+            print 'xxx', start_states
         start_control_state.append('$done$')
         self.start_control_state = [[0], start_control_state]
 
@@ -595,6 +577,13 @@ class MetaIR(object):
 
     def build_control_flows(self):
         ''' TODO '''
+        ''' build action basic block '''
+        def meta(field):
+            ''' add field to meta '''
+            if isinstance(field, int):
+                return field
+            return 'meta.{}'.format(str(field).replace(".", "_")) if field else None
+
         # map from p4_expression to p4_condition
         cond_map = {}
         for cond in self.hlir.p4_conditional_nodes.values():
@@ -602,7 +591,13 @@ class MetaIR(object):
 
         def print_cond(cond):
             if cond.op == 'valid':
-                return 'meta.{}_{} == 1'.format(cond.op, cond.right)
+                return 'meta.{}${} == 1'.format(cond.op, cond.right)
+            elif cond.op == 'and':
+                left = print_cond(cond.left)
+                right = print_cond(cond.right)
+                return ("("+(str(left)+" " if left else "")+
+                        cond.op+" "+
+                        str(right)+")")
             else:
                 left = meta(cond.left)
                 right = meta(cond.right)
