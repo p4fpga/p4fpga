@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 
-# helper for building C program source text
+# helper for building program source text
 
-from compilationException import *
+from exceptions import CompilationException as BUG
 
-
-class ProgramSerializer(object):
+class SourceCodeBuilder(object):
     def __init__(self):
         self.program = ""
         self.eol = "\n"
@@ -21,7 +20,7 @@ class ProgramSerializer(object):
     def decreaseIndent(self):
         self.currentIndent -= self.INDENT_AMOUNT
         if self.currentIndent < 0:
-            raise CompilationException(True, "Negative indentation level")
+            raise BUG(True, "Negative indentation level")
 
     def toString(self):
         return self.program
