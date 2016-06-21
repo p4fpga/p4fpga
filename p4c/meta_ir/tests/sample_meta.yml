@@ -1,0 +1,74 @@
+################################################################
+#
+# Default AIR Metalanguage Definitions
+#
+# This section of YAML is valid AIR input. It defines the
+# metalanguage of recognized types and their attributes.
+#
+# To document:
+#   air_types
+#   air_processors
+#   air_attributes
+#
+# Add run-time type list?
+#  fld-value, fld-ref, header-ref, counter, meter, register
+#
+################################################################
+---
+# These are the recognized top level IR object types
+meta_ir_types :
+  - value_set
+  - value_map
+  - table
+  - header
+  - metadata
+  - action
+  - parse_state
+  - parser
+  - control_flow
+  - traffic_manager
+  - processor_layout
+
+# These objects must implement a process method
+meta_ir_processors:
+  - control_flow
+  - parser
+  - traffic_manager
+
+graph_attributes : &graph_attributes
+  - format
+  - implementation
+
+# These are the attributes each object type supports
+# All objects support the type and doc attributes
+meta_ir_attributes :
+  table :
+    - match_on
+    - allowed_actions
+  header :
+    - fields
+    - max_depth # If present and > 1, this is a header stack
+  metadata :
+    - fields
+    - initial_values
+  action :
+    - format
+    - parameter_list
+    - implementation
+  parse_state :
+    - extracts
+    - select_value # Optional
+  control_flow : *graph_attributes
+  parser :
+    - format
+    - implementation
+    - start_state
+  traffic_manager : # Experimental
+    - queues_per_port
+    - dequeue_discipline
+    - egress_spec_map
+  processor_layout:
+    - format
+    - implementation
+    - port_count
+

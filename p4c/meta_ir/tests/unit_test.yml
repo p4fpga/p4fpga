@@ -1,0 +1,400 @@
+################################################################
+#
+# Discussion
+#
+# An AIR switch is composed of a set of processor objects such as
+# parsers, pipelines and traffic managers. A processor object accepts
+# packets and produces 0 or more packets. 
+#
+# The processor_layout node specifies the connectivity between 
+# processor objects. Currently the layout is staticly determined.
+# The identifier 'exit' is used to indicate the termination of a 
+# process() method when the implementation is defined in the IR
+# (such as for parsers or pipelines).
+#   
+################################################################
+
+# Can use anchors and references for typing
+
+# A set of fields for a header
+vlan_fields : &vlan_fields
+  - pri : 3
+  - cfi : 1
+  - vlan_id : 12
+  - ethertype : 16
+
+# A field type declaration
+ip_v4_addr_t : &ip_v4_addr_t
+  width : 32
+  endian : big
+  signed : False
+  wooblitz : 17
+  froobelized : True
+
+mpls_fields : &mpls_fields
+  - label : 20
+  - tc : 3
+  - bos : 1
+  - ttl : 8
+
+################################################################
+# HEADERS
+################################################################
+
+ethernet :
+  type : header
+  doc : "The L2 header"
+  fields :
+    - dst_mac : 48
+    - src_mac : 48
+    - ethertype : 16
+
+vlan_tag_inner :
+  type : header
+  doc : "The inner VLAN tag instance"
+  fields : *vlan_fields
+
+vlan_tag_outer :
+  type : header
+  doc : "The outer VLAN tag instance"
+  fields : *vlan_fields
+
+ipv4 :
+  type : header
+  doc : "An IPv4 header"
+  fields :
+    - version : 4
+    - ihl : 4
+    - diff_serve : 8
+    - total_length : 16
+    - identification : 16
+    - flags : 3
+    - fragment_offset : 13
+    - ttl : 8
+    - protocol : 8
+    - header_checksum : 16
+    - src : *ip_v4_addr_t
+    - dst : *ip_v4_addr_t
+    - options : (ihl * 32) - 160
+
+udp :
+  type : header
+  doc : "A UDP header"
+  fields :
+    - srcPort : 16
+    - dstPort : 16
+    - length : 16
+    - checksum : 16
+
+
+tcp :
+  type : header
+  doc : "A TCP header"
+  fields :
+    - srcPort : 16
+    - dstPort : 16
+    - seqNo : 32
+    - ackNo : 32
+    - dataOffset : 4
+    - res : 3
+    - ecn : 3
+    - ctrl : 6
+    - window : 16
+    - checksum : 16
+    - urgentPtr : 16
+
+mpls :
+  type : header
+  doc : "MPLS header stack"
+  max_depth : 10
+  fields : *mpls_fields
+
+route_md : # Routing metadata
+  type : metadata
+  doc : "Metadata related to routing"
+  fields :
+    - next_hop_idx : 16
+    - vfi : 16
+
+intrinsic_metadata : # Standard AIR metadata
+  type : metadata
+  doc : "Metadata whose semantics are determined by the machine"
+  fields :
+    - ingress_port : 16
+    - egress_specification : 32
+    - egress_port : 16
+    - egress_instance : 16
+
+
+
+################################################################
+#
+# PARSE GRAPH
+#
+################################################################
+
+host_ports :
+  type : value_set
+  doc : "The set of local ports"
+
+port_check_p :
+  type : parse_state
+  doc : "Port check parse state"
+  select_value :
+    - intrinsic_metadata.ingress_port
+
+ethernet_p :
+  type : parse_state
+  doc : "Parse state for ethernet"
+  extracts :
+    - ethernet
+  select_value :
+    - ethernet.ethertype
+
+vlan_p :
+  type : parse_state
+  doc : "Parse state for vlan tag"
+  extracts :
+    - vlan_tag_outer
+  select_value :
+    - vlan_tag_outer.ethertype
+
+ipv4_p :
+  type : parse_state
+  doc : "Parse state for first IPv4 header"
+  extracts :
+    - ipv4
+  select_value :
+    - ipv4.protocol
+
+udp_p :
+  type : parse_state
+  doc : "Parse state for UDP header"
+  extracts :
+    - udp
+
+tcp_p :
+  type : parse_state
+  doc : "Parse state for TCP header"
+  extracts :
+    - tcp
+    
+parser :
+  type : parser
+  doc : "Implementation of primary parser"
+  format : dot
+  start_state : ethernet_p
+  implementation : >-
+    digraph {
+      port_check_p -> ethernet_p [in_value_set=host_ports]
+      port_check_p -> ipv4_p [not_in_value_set=host_ports]
+      ethernet_p -> vlan_p [value="0x8100"]
+      ethernet_p -> ipv4_p [value="0x0800"]
+      vlan_p -> ipv4_p [value="0x0800"]
+      ipv4_p -> udp_p [value=6]
+      ipv4_p -> tcp_p [value=17]
+    }
+
+################################################################
+# ACTIONS
+################################################################
+
+set_l2_vfi_a :
+  type : action
+  doc : "Set the VFI in metadata and choose L2 forwarding"
+  format : action_set
+  parameter_list :
+    - vfi_id # infer type
+  implementation : >-
+    modify_field(route_md.vfi, vfi_id);
+
+set_l3_vfi_a :
+  type : action
+  doc : "Set the VFI in metadata and choose L3 forwarding"
+  format : action_set
+  parameter_list :
+    - vfi_id # infer type
+  implementation : >-
+     modify_field(route_md.vfi, vfi_id);
+
+l2_forward_a :
+  type : action
+  doc : "Do L2 forwarding (set egress spec)"
+  format : action_set
+  parameter_list :
+    - egress_spec
+  implementation : tbd
+
+l3_route_a :
+  type : action
+  doc : "Do L3 routing"
+  format : action_set
+  parameter_list :
+    - src_mac
+    - dst_mac
+    - vid
+    - dec_ttl
+  implementation : tbd
+
+flood :
+  type : action
+  doc : "Mark the packet for flood"
+  format : action_set
+  parameter_list :
+    - src_mac : tbd # Probably a field type ref
+    - dst_mac : tbd
+    - vid : tbd
+    - dec_ttl : boolean
+  implementation : tbd
+
+apply_route_if :
+  type : action
+  doc : "Update packet based on the nexthop"
+  format : action_set
+  parameter_list :
+    - route_md.next_hop_idx
+  implementation : tbd
+
+acl_remark :
+  type : action
+  doc : "Remark a packet"
+  parameter_list :
+    - diff_serve_val : typeof(ipv4.diff_serve)
+  implementation : >-
+    modify_field(ipv4.diff_serve, diff_serve_val)
+
+egress_mirror :
+  type : action
+  doc : "Mirror packet on egress"
+  parameter_list :
+    - mirror_id : 16
+  implementation : >-
+    clone_with_id(mirror_id)
+      
+################################################################
+# TABLES
+################################################################
+
+vlan :
+  type : table
+  doc : "Map VLAN to VFI and select L2 or L3 processing"
+  match_on :
+    vlan_tag_outer : valid
+    vlan_tag_outer.vlan_id : exact
+    ethernet.dst_mac : exact
+  # Optionally may specify actions here, but they are noted
+  # in the control flow graph
+
+l2 :
+  type : table
+  doc : "Do L2 forwarding"
+  match_on :
+    metadata.vif : exact
+    ethernet.dst_mac : exact
+
+l3 :
+  type : table
+  doc : "Do L3 interface selection"
+  match_on :
+    metadata.vfi : exact
+    ipv4.dst : exact
+
+apply_route :
+  type : table
+  doc : "Do L3 forwarding logic based on interface"
+  match_on :
+    metadata.l3_output_if : exact
+
+flood_block :
+  type : table
+  doc : "Allow blocking of flooded traffic"
+  match_on :
+    vlan_tag.vlan_id : exact
+    ethernet.src_mac : exact
+
+acl1 :
+  type : table
+  doc : "Egress ACL table"
+  match_on :
+    ethernet.dst_mac : ternary
+    ethernet.src_mac : ternary
+    ipv4.src : ternary
+    ipv4.dst : ternary
+
+acl2 :
+  type : table
+  doc : "Egress ACL table"
+  match_on :
+    ipv4.protocol : ternary
+    vlan_tag_inner.vlan_id : ternary
+    vlan_tag_outer.vlan_id : ternary
+
+################################################################
+# CONTROL FLOW GRAPH
+#
+# exit_control_flow is reserved exit state
+#
+################################################################
+
+ingress_flow :
+  type : control_flow
+  doc : "The control flow for ingress"
+  format : dot
+  # Use "action" here; really just a label
+  implementation : >-
+    digraph {
+      vlan -> l2 [action=set_l2_vfi_a]
+      vlan -> l3 [action=set_l3_vfi_a]
+      l2 -> flood_block [action=flood]
+      l2 -> queue [action=l2_forward_a]
+      l3 -> apply_route [action=l3_route_a]
+      apply_route -> exit_control_flow [action=apply_route_if]
+    }
+
+egress_flow :
+  type : control_flow
+  doc : "The control flow for egress"
+  format : dot
+  # Use "action" here; really just a label
+  implementation : >-
+    digraph {
+      acl1 -> acl2 [action=acl_remark]
+      acl1 -> acl2 [action=no_op]
+      acl2 -> exit_control_flow [action=egress_mirror]
+      acl2 -> exit_control_flow [action=no_op]
+    }
+
+################################################################
+# TRAFFIC MANAGER
+#
+# Queuing and egress spec processor
+#
+################################################################
+
+tm_queues :
+  type : traffic_manager
+  doc : "The central traffic manager"
+  queues_per_port : 8
+  dequeue_discipline : strict
+
+################################################################
+# PROCESSOR LAYOUT
+#
+# This determines how the processing nodes are connected
+#
+# Format is 'list' (only supported version). 'dot' may be
+# supported in the future
+#
+################################################################
+
+layout:
+  type : processor_layout
+  doc  : "The layout specification for the switch instance"
+  port_count : 32 # This doesn't really belong here
+  format : list
+  implementation :
+    - parser
+    - ingress_flow
+    - tm_queues
+    - egress_flow
+
