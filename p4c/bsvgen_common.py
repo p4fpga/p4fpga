@@ -7,7 +7,6 @@ from dotmap import DotMap
 from collections import OrderedDict
 from pif_ir.bir.objects.bir_struct import BIRStruct
 from pif_ir.bir.objects.table import Table
-from AST import Function
 
 def get_camel_case(column_name):
     ''' TODO '''
@@ -51,13 +50,13 @@ LICENSE ='''\
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 '''
-def generate_license(serializer):
-    serializer.append(LICENSE)
+def emit_license(builder):
+    builder.append(LICENSE)
 
 IMPORT_TEMPLATE = '''
 %(imports)s
 '''
-def generate_import_statements(serializer):
+def generate_import_statements(builder):
     ''' TODO '''
     pmap = {}
     import_modules = ["Connectable", "DefaultValue", "FIFO", "FIFOF", "FShow",
@@ -65,7 +64,7 @@ def generate_import_statements(serializer):
                       "Ethernet", "ClientServer", "DbgDefs", "PacketBuffer", 
                       "Pipe", "MatchTable", "MatchTableSim", "Utils"]
     pmap['imports'] = "\n".join(["import {}::*;".format(x) for x in sorted(import_modules)])
-    serializer.append(IMPORT_TEMPLATE % (pmap))
+    builder.append(IMPORT_TEMPLATE % (pmap))
 
 
 TYPEDEF_TEMPLATE = '''
@@ -164,7 +163,7 @@ typedef union tagged {
 typedef Client#(MetadataRequest, MetadataResponse) MetadataClient;
 typedef Server#(MetadataRequest, MetadataResponse) MetadataServer;
 '''
-def generate_metadata_union(serializer, json):
+def generate_metadata_union(builder, json):
     pmap = {}
     requests = []
     responses = []
@@ -173,7 +172,7 @@ def generate_metadata_union(serializer, json):
         responses.append(expand_metadata_response(1, x))
     pmap['request'] = "\n".join(requests)
     pmap['response'] = "\n".join(responses)
-    serializer.append(METADATA_TYPED_UNION % pmap)
+    builder.append(METADATA_TYPED_UNION % pmap)
 
 def expand_basicblock_request(indent, name):
     temp = []
@@ -202,7 +201,7 @@ typedef union tagged {
 typedef Client#(BBRequest, BBResponse) BBClient;
 typedef Server#(BBRequest, BBResponse) BBServer;
 '''
-def generate_basicblock_union(serializer, json):
+def generate_basicblock_union(builder, json):
     pmap = {}
     requests = []
     responses = []
@@ -213,15 +212,8 @@ def generate_basicblock_union(serializer, json):
         responses.append(expand_basicblock_response(1, x))
     pmap['request'] = "\n".join(requests)
     pmap['response'] = "\n".join(responses)
-    serializer.append(BASICBLOCK_TYPED_UNION % pmap)
+    builder.append(BASICBLOCK_TYPED_UNION % pmap)
 
-
-def build_ast_next_state():
-    ''' ast node for next state function '''
-    funct = Function(name="compute_next_state",
-                     return_type="ParserState",
-                     params=["Bit#(32) v"])
-    print funct
 
 COMPUTE_NEXT_STATE = '''
   function %(state)s compute_next_state(Bit#(%(width)s) v);
@@ -237,8 +229,6 @@ COMPUTE_NEXT_STATE = '''
 '''
 def expand_next_state(indent, state, json):
     ''' cases, width '''
-    build_ast_next_state()
-
     def process(branch):
         value = branch.value.replace("0x", "'h")
         state = CamelCase(branch.next_state)
@@ -452,7 +442,7 @@ module mkState%(CamelCaseName)s#(Reg#(ParserState) state, FIFOF#(EtherData) data
 %(intf_ctrl_out)s
 endmodule
 '''
-def generate_parse_state(serializer, node, structmap, json):
+def generate_parse_state(builder, node, structmap, json):
     ''' expand json configuration into bluespec '''
     pmap = {}
     pmap['name'] = json.name
@@ -465,7 +455,7 @@ def generate_parse_state(serializer, node, structmap, json):
     pmap['statement'] = expand_parse_statement(1, json)
     pmap['intf_data_out'] = expand_parse_intf_get_defs(1, json.intf_get)
     pmap['intf_ctrl_out'] = expand_parse_intf_put_defs(1, json.intf_put)
-    serializer.append(PARSE_STATE_TEMPLATE % (pmap))
+    builder.append(PARSE_STATE_TEMPLATE % (pmap))
 
 PARSE_TOP_TEMPLATE = '''
 interface Parser;
@@ -711,7 +701,7 @@ module mkState%(CamelCaseName)s#(Reg#(DeparserState) state, FIFOF#(EtherData) da
 %(intf_ctrl_out)s
 endmodule
 '''
-def generate_deparse_state(serializer, json):
+def generate_deparse_state(builder, json):
     ''' generate one deparse state '''
     assert isinstance(json, DotMap)
     pmap = {}
@@ -726,7 +716,7 @@ def generate_deparse_state(serializer, json):
     pmap['intf_data_out'] = expand_deparse_intf_get_defs(1, json.intf_get);
     pmap['intf_ctrl_out'] = expand_deparse_intf_put_defs(1, json.intf_put);
     pmap['headertype'] = CamelCase(json.headertype)
-    serializer.append(DEPARSE_STATE_TEMPLATE % pmap)
+    builder.append(DEPARSE_STATE_TEMPLATE % pmap)
 
 DEPARSE_STATE_INIT='''
 module mkStateDeparseIdle#(Reg#(DeparserState) state, FIFOF#(EtherData) datain, FIFOF#(EtherData) dataout, Wire#(Bool) start_fsm)(Empty);
@@ -747,8 +737,8 @@ module mkStateDeparseIdle#(Reg#(DeparserState) state, FIFOF#(EtherData) datain, 
    endrule
 endmodule
 '''
-def generate_deparse_idle(serializer):
-    serializer.append(DEPARSE_STATE_INIT)
+def generate_deparse_idle(builder):
+    builder.append(DEPARSE_STATE_INIT)
 
 def expand_meta_fifo(indent, json):
     temp = []
@@ -1258,39 +1248,9 @@ def generate_basic_block (block, json):
     pmap['prev_state_defs'] = expand_bb_interface_defs(1, block, json)
     return BASIC_BLOCK_TEMPLATE % pmap
 
-"""
-class.Interface
--- name
--- methods, decls
--- subinterfacename
-subinterfacename = [Put#(Bit#(112)), Get#(Bit#(176)), Get#(Bit#(16))]
-decls = [method start, method stop]
-Interface(name, [], decls, subinterfacename, packagename)
-
-functions = []
-class.Function
--- name
--- return_type
--- params
-
-class.Type: FIFO
--- name = unparsed_0
--- params = Bit#(16)
-
-class.Type: Wire
--- name = packet_in_wire
--- params = Bit#(128)
-
-fifos = []
-wires = []
-rules = []
-methods = []
-
-class.Module
--- name
--- params = [Reg#(ParserState), FIFO#(EtherData)]
--- decls = [FIFO, Wire, rule, method, interface]
--- provisos
-"""
-
+def generate_pipelines(builder, ir):
+    # for t in ir.tables:
+    #   t.emit(builder)
+    for table in ir['tables']:
+        builder.append(table)
 

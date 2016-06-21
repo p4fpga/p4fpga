@@ -22,12 +22,11 @@ p4:
 	python p4c-llvm.py $(P4PAXOS)/paxos.p4
 
 caans:
-	${PYPATH} python start.py -y -f tests/caans.p4
-	${PYPATH} python bsvgen.py -y tests/caans.yml -o tests/caans.bsv
+	p4c-bmv2 --json tests/caans.json tests/caans.p4
+	python bsvgen.py -o tests/caans.bsv tests/caans.p4
 
 route:
-	${PYPATH} python start.py -y -f tests/basic_routing.p4
-	${PYPATH} python bsvgen.py -y tests/basic_routing.yml -o tests/basic_routing.bsv
+	python bsvgen.py -o tests/basic_routing.bsv tests/basic_routing.p4
 
 clean:
 	rm *.pyc

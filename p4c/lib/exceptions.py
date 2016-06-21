@@ -17,7 +17,6 @@ class CompilationException(Exception):
         # TODO: format this message nicely
         return self.format.format(*self.message)
 
-
 class NotSupportedException(Exception):
     archError = " not supported by EBPF"
 
@@ -32,3 +31,5 @@ class NotSupportedException(Exception):
         # TODO: format this message nicely
         return (self.format + NotSupportedException.archError).format(
             *self.message)
+
+

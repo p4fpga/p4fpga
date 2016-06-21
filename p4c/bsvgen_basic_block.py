@@ -8,12 +8,8 @@ from pif_ir.bir.utils.validate import check_control_state
 
 from bsvgen_control_state import BSVControlState
 from bsvgen_common import generate_basic_block
-from programSerializer import ProgramSerializer
-
-def CamelCase(name):
-    ''' CamelCase '''
-    output = ''.join(x for x in name.title() if x.isalnum())
-    return output
+from sourceCodeBuilder import SourceCodeBuilder
+from lib.utils import CamelCase
 
 # BSVBasicBlock should be an AST node
 class BSVBasicBlock(BasicBlock):
@@ -65,9 +61,9 @@ class BSVBasicBlock(BasicBlock):
 
         return b
 
-    def bsvgen(self, serializer, json):
+    def bsvgen(self, builder, json):
         ''' TODO '''
-        assert isinstance(serializer, ProgramSerializer)
+        assert isinstance(builder, SourceCodeBuilder)
 
         #FIXME: generate parser from json
         if self.name.startswith('parse_'):
@@ -81,7 +77,7 @@ class BSVBasicBlock(BasicBlock):
         if self.local_table:
             return
 
-        serializer.append(generate_basic_block(self, json))
-        # self.control_state.bsvgen(serializer)
+        builder.append(generate_basic_block(self, json))
+        # self.control_state.bsvgen(builder)
 
 
