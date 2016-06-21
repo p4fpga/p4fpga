@@ -21,6 +21,8 @@ from p4_hlir.hlir.analysis_utils import retrieve_from_one_action, get_all_subfie
 from p4_hlir.hlir.p4_tables import p4_control_flow_to_table_graph
 from compilationException import CompilationException
 
+from p4c_bm import gen_json
+
 _include_valid = False
 
 # Print OrderedDict() to standard yaml
@@ -270,7 +272,7 @@ class BasicBlock(object):
 
         def print_instruction(inst):
             instructions = []
-            primitive = inst[0]
+            primitive_name = inst[0].name
             args = inst[1]
             if inst[0].name in ['register_read', 'register_write']:
                 params=[]
@@ -711,6 +713,8 @@ def main():
 
     hlir = HLIR(options.file)
     hlir.build()
+
+    js_program = gen_json.json_dict_create(hlir)
 
     try:
         bir = compile_hlir(hlir)

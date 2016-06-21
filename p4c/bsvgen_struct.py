@@ -3,7 +3,7 @@ Struct with bsv backend
 '''
 
 from pif_ir.bir.objects.bir_struct import BIRStruct
-from programSerializer import ProgramSerializer
+from sourceCodeBuilder import SourceCodeBuilder
 from bsvgen_common import generate_typedef
 from dotmap import DotMap
 
@@ -26,9 +26,9 @@ class BSVBIRStruct(BIRStruct):
             json.field[k] = v
         return json
 
-    def bsvgen(self, serializer):
+    def bsvgen(self, builder):
         ''' TODO '''
-        assert isinstance(serializer, ProgramSerializer)
+        assert isinstance(builder, SourceCodeBuilder)
         out = generate_typedef(self)
-        serializer.append(out)
+        builder.append(out)
 

@@ -1,193 +1,131 @@
-''' BIR to Bluespec translation
-'''
+# Copyright 2016 Han Wang
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 import argparse
 import json
 import logging
 import os
 import sys
 import yaml
+import p4fpga
 
-from dotmap import DotMap
 from collections import OrderedDict
+from p4c_bm import gen_json
+from pkg_resources import resource_string
+from lib.sourceCodeBuilder import SourceCodeBuilder
 
-from pif_ir.meta_ir.instance import MetaIRInstance
+# to be used for a destination file
+def _validate_path(path):
+    path = os.path.abspath(path)
+    if not os.path.isdir(os.path.dirname(path)):
+        print path, "is not a valid path because",\
+            os.path.dirname(path), "is not a valid directory"
+        sys.exit(1)
+    if os.path.exists(path) and not os.path.isfile(path):
+        print path, "exists and is not a file"
+        sys.exit(1)
+    return path
 
-from pif_ir.bir.objects.metadata_instance import MetadataInstance
-from pif_ir.bir.objects.packet_instance import PacketInstance
-from pif_ir.bir.objects.processor import Processor
-from pif_ir.bir.objects.table_entry import TableEntry
 
-from pif_ir.bir.utils.exceptions import BIRError
-from pif_ir.bir.utils.bir_parser import BIRParser
+# to be used for a source file
+def _validate_file(path):
+    path = _validate_path(path)
+    if not os.path.exists(path):
+        print path, "does not exist"
+        sys.exit(1)
+    return path
 
-from bsvgen_control_flow import BSVControlFlow
-from bsvgen_basic_block import BSVBasicBlock
-from bsvgen_struct import BSVBIRStruct
-from bsvgen_table import BSVTable
-from bsvgen_common import generate_import_statements
-from bsvgen_common import generate_license
-from bsvgen_common import generate_metadata_union
-from bsvgen_common import generate_basicblock_union
-from programSerializer import ProgramSerializer
 
-verbose = False
-tempFilename = 'generatedPipeline.json'
-
-class BirInstance(MetaIRInstance):
-    ''' TODO '''
-    def __init__(self, name, inputfile):
-        """
-        @brief BirInstance constructor
-
-        @param name The name of the instance
-        @param input An object with the YAML description of the BIR instance
-        @param transmit_handler A function to be called to transmit pkts
-        """
-        local_dir = os.path.dirname(os.path.abspath(__file__))
-        bir_meta_yml = os.path.join(local_dir, 'bir_meta.yml')
-        super(BirInstance, self).__init__(bir_meta_yml)
-
-        self.name = name
-        self.add_content(inputfile)
-
-        # create parsers to handle next_control_states, and the
-        # F instructions
-        bir_parser = BIRParser()
-
-        # BIR objects
-        self.bir_structs = {}
-        self.bir_tables = {}
-        self.bir_other_modules = {}
-        self.bir_basic_blocks = {}
-        self.bir_control_flows = {}
-        self.bir_other_processors = {}
-        self.start_processor = []
-        self.table_init = []
-
-        for name, val in self.struct.items():
-            self.bir_structs[name] = BSVBIRStruct(name, val)
-        for name, val in self.table.items():
-            print 'table', name
-            self.bir_tables[name] = BSVTable(name, val)
-        for name, val in self.other_module.items():
-            for operation in val['operations']:
-                module = "{}.{}".format(name, operation)
-                self.bir_other_modules[module] = self._load_module(name, operation)
-        for name, val in self.basic_block.items():
-            self.bir_basic_blocks[name] = BSVBasicBlock(name, val,
-                                                        self.bir_structs,
-                                                        self.bir_tables,
-                                                        self.bir_other_modules,
-                                                        bir_parser)
-        for name, val in self.control_flow.items():
-            self.bir_control_flows[name] = BSVControlFlow(name, val,
-                                                          self.bir_basic_blocks,
-                                                          self.bir_structs,
-                                                          bir_parser)
-        for name, val in self.other_processor.items():
-            self.bir_other_processors[name] = self._load_processor(name,
-                                                                   val['class'])
-
-        # BIR processor layout
-        for layout in self.processor_layout.values():
-            if layout['format'] != 'list':
-                logging.error("unsupported layout format")
-                exit(1)
-
-            last_proc = None
-            for proc_name in layout['implementation']:
-                curr_proc = self._get_processor(proc_name)
-                if last_proc == None:
-                    self.start_processor = curr_proc
-                else:
-                    last_proc.next_processor = curr_proc
-                last_proc = curr_proc
-            #last_proc.next_processor = self.transmit_processor
-
-    def _get_processor(self, name):
-        ''' TODO '''
-        if name in self.bir_control_flows.keys():
-            return self.bir_control_flows[name]
-        elif name in self.bir_other_processors.keys():
-            return self.bir_other_processors[name]
-        else:
-            raise BIRError("unknown processor: {}".format(name))
-
-    def serialize_json(self):
-        global verbose
-        toplevel = DotMap()
-
-        for item in self.bir_tables.values():
-            toplevel.table[item.name] = item.serialize()
-
-        for key, item in self.bir_structs.items():
-            toplevel.struct[key] = item.serialize()
-
-        for key, item in self.bir_basic_blocks.items():
-            if key.startswith('parse_'):
-                toplevel.parser[key] = item.serialize_json_parse()
-            elif key.startswith('deparse_'):
-                toplevel.deparser[key] = item.serialize_json_deparse()
-            else:
-                toplevel.basicblock[key] = item.serialize_json_basicblock()
-
-        return toplevel
-
-    def dump_json(self, toplevel):
-        ''' dump json configuration '''
-        jfile = open(tempFilename, 'w')
-        try:
-            print json.dump(toplevel, jfile, sort_keys=False, indent=4)
-            jfile.close()
-            j2file = open(tempFilename).read()
-            toplevelnew = json.loads(j2file)
-        except TypeError as e:
-            print 'Unabled to encode json file: {0} {1}'.format(tempFilename, e)
-
-    def generatebsv(self, serializer, noisyFlag, jsondata):
-        # jsondata with datatype
-        ''' TODO '''
-        generate_license(serializer)
-        generate_import_statements(serializer)
-        generate_metadata_union(serializer, jsondata)
-        generate_basicblock_union(serializer, jsondata)
-        for item in self.bir_structs.values():
-            item.bsvgen(serializer)
-        for item in self.bir_tables.values():
-            item.bsvgen(serializer, jsondata)
-        for item in self.bir_basic_blocks.values():
-            item.bsvgen(serializer, jsondata)
-        for item in self.bir_control_flows.values():
-            item.bsvgen(serializer, jsondata)
+def _validate_dir(path):
+    path = os.path.abspath(path)
+    if not os.path.isdir(path):
+        print path, "is not a valid directory"
+        sys.exit(1)
+    return path
 
 def main():
-    ''' entry point '''
     argparser = argparse.ArgumentParser(
-        description="BIR to Bluespec Translator")
-    argparser.add_argument('-y', '--yaml', required=True,
-                           help='Input BIR YAML file')
-    argparser.add_argument('-o', '--output', required=True,
-                           help='Output BSV file')
+            description="P4 to Bluespec Translator")
+    argparser.add_argument('source', metavar='source', type=str,
+                           help='A source file to include in the P4 program.')
+    argparser.add_argument('--json', dest='json', type=str,
+                           help='Dump the JSON representation to this file.',
+                           required=False)
+    argparser.add_argument('--p4-v1.1', action='store_true',
+                           help='Run the compiler on a P4 v1.1 program.',
+                           default=False, required=False)
+    argparser.add_argument('--output', '-o', type=str,
+                           help='Output BSV file.')
     options = argparser.parse_args()
 
-    # our frontend or ocaml frontend
-    # verified p4 frontend
-    bir = BirInstance('p4fpga', options.yaml)
+    if options.json:
+        path_json = _validate_path(options.json)
 
-    # generate_bsv
-    serializer = ProgramSerializer()
-    jsondata = bir.serialize_json()
+    if options.output:
+        path_output = _validate_path(options.output)
+
+    p4_v1_1 = getattr(options, 'p4_v1.1')
+    if p4_v1_1:
+        try:
+            import p4_hlir_v1_1  # NOQA
+        except ImportError:  # pragma: no cover
+            print "You requested P4 v1.1 but the corresponding p4-hlir",\
+                "package does not seem to be installed"
+            sys.exit(1)
+
+    if p4_v1_1:
+        from p4_hlir_v1_1.main import HLIR
+        primitives_res = 'primitives_v1_1.json'
+    else:
+        from p4_hlir.main import HLIR
+        primitives_res = 'primitives.json'
+
+    h = HLIR(options.source)
+
+    more_primitives = json.loads(resource_string(__name__, primitives_res))
+    h.add_primitives(more_primitives)
+
+    if not h.build(analyze=False):
+        print "Error while building HLIR"
+        sys.exit(1)
+
+    # frontend
+    json_dict = gen_json.json_dict_create(h, None, p4_v1_1)
+    if options.json:
+        print "Generating json output to", path_json
+        with open(path_json, 'w') as fp:
+            json.dump(json_dict, fp, indent=4, separators=(',', ': '))
+
+    # entry point for mid-end
+    ir = p4fpga.ir_create(json_dict);
+
     noisyFlag = os.environ.get('D') == '1'
-    bir.generatebsv(serializer, noisyFlag, jsondata)
+    #if noisyFlag:
+    #    with open("generatedPipeline.json", "w") as fp:
+    #        json.dump(ir, fp, indent=4, separators=(',', ': '))
 
-    if options.yaml:
-        bir.dump_json(jsondata)
+    # entry point for backend
+    builder = SourceCodeBuilder()
+    ir.emit(builder, noisyFlag)
 
     if os.path.dirname(options.output) and \
         not os.path.exists(os.path.dirname(options.output)):
         os.makedirs(os.path.dirname(options.output))
-    with open(options.output, 'w') as bsv:
-        bsv.write(serializer.toString())
+
+    if options.output:
+        with open(path_output, 'w') as bsv:
+            bsv.write(builder.toString())
 
 if __name__ == "__main__":
     main()
