@@ -9,7 +9,7 @@ class SourceCodeBuilder(object):
         self.program = ""
         self.eol = "\n"
         self.currentIndent = 0
-        self.INDENT_AMOUNT = 4  # default indent amount
+        self.INDENT_AMOUNT = 2  # default indent amount
 
     def __str__(self):
         return self.program

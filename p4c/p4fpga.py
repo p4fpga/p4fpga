@@ -135,7 +135,7 @@ def render_deparsers(ir, json_dict):
     # TODO: generate IR_basic_block objects
     pass
 
-def build_expression(json_data):
+def build_expression(json_data, sb=[]):
     if not json_data:
         return
     json_type = json_data["type"]
@@ -145,32 +145,39 @@ def build_expression(json_data):
         json_left = json_value["left"]
         json_right = json_value["right"]
 
+        sb.append("(")
         if (op == "?"):
             json_cond = json_data["cond"]
-            build_expression(value["left"])
-            build_expression(value["right"])
-            print "expr push back tenary"
+            build_expression(value["left"], sb)
+            sb.append(op)
+            build_expression(value["right"], sb)
+            sb.append(")")
         else:
             if ((op == "+") or op == "-") and json_left is None:
                 print "expr push back load const"
             else:
-                build_expression(json_left)
-            build_expression(json_right)
-            print "expr push back op", op
+                build_expression(json_left, sb)
+            sb.append(op)
+            build_expression(json_right, sb)
+            sb.append(")")
     elif (json_type == "header"):
-        print "get data from metadata bus"
-        print "expr push back header"
+        if type(json_value) == list:
+            sb.append(".".join(json_value))
+        else:
+            sb.append(json_value)
     elif (json_type == "field"):
-        print "get data from metadata bus"
-        print "expr push back field"
+        if type(json_value) == list:
+            sb.append(".".join(json_value))
+        else:
+            sb.append(json_value)
     elif (json_type == "bool"):
-        print "expr push back bool"
+        sb.append(json_value)
     elif (json_type == "hexstr"):
-        print "expr push back hexstr"
+        sb.append(json_value)
     elif (json_type == "local"):
-        print "expr push back local"
+        sb.append(json_value)
     elif (json_type == "register"):
-        print "expr push back register"
+        sb.append(json_value)
     else:
         assert "Error: unimplemented expression type", json_type
 
@@ -179,17 +186,25 @@ def render_pipelines(ir, json_dict):
         Control Flow and Table.
         ** optimization to be done.
     '''
-    tables = [] # table for this pipeline
     pipelines = json_dict["pipelines"]
     for pipeline in pipelines:
         name = pipeline["name"]
         control = Control(name)
 
+        control.init_table = pipeline['init_table']
+
         for t in pipeline["tables"]:
-            control.tables.append(Table(t))
+            tname = t['name']
+            control.tables[tname] = Table(t)
 
         for c in pipeline["conditionals"]:
-            build_expression(c["expression"])
+            cname = c['name']
+            expr = []
+            build_expression(c["expression"], expr)
+            control.conditionals[cname] = {'expression': " ".join(expr),
+                                           'true_next': c['true_next'],
+                                           'false_next': c['false_next']}
+            control.entry.append(cname)
 
         ir.controls[name] = control
 

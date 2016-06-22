@@ -20,7 +20,9 @@
 #
 
 def CamelCase(name):
-    ''' CamelCase '''
     output = ''.join(x for x in name.title() if x.isalnum())
     return output
 
+def camelCase(name):
+    output = ''.join(x for x in name.title() if x.isalnum())
+    return output[0].lower() + output[1:]

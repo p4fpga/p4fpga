@@ -40,6 +40,9 @@ IRQ_TEMPLATE = """Vector#(%(sz)s, Bool) readyBits = map(fifoNotEmpty, %(fifo)s);
     end
 """
 
+META_IN_TEMPLATE = """let md <- metadata.request.get;"""
+MATCH_LOOKUP_TEMPLATE = """matchTable.lookupPort.request.put(pack(req));"""
+
 class Table(object):
     required_attributes = ["name", "match_type", "max_size", "key", "actions"]
     def __init__(self, table_attrs):
@@ -51,6 +54,7 @@ class Table(object):
         #self.req_attrs = table_attrs['request']
         #self.rsp_attrs = table_attrs['response']
         self.actions = table_attrs.get('actions', None)
+        self.next_tables= table_attrs.get('next_tables', None)
 
     def __repr__(self):
         return "{} ({}, {}, {}, {})".format(
@@ -60,22 +64,113 @@ class Table(object):
                     self.key,
                     self.actions)
 
-    def buildStmt(self):
+    def buildRuleRequestStmt(self):
+        EXPR_CASE_PATT = "tagged %(case)s {pkt: .pkt, meta: .meta}"
+        stmt = []
+        stmt.append(ast.Template(META_IN_TEMPLATE, []))
+        case_stmt = ast.Case("metadata")
+        logger.debug("TODO: FIX Request Type.")
+        pdict = {"case": "ReqT"}
+        case_stmt.casePatItem["ReqT"] = ast.Template(EXPR_CASE_PATT, pdict)
+        casePatStmts = []
+        logger.debug("TODO: GET lookup key from metadata")
+        logger.debug("TODO: BUILD lookup request")
+        casePatStmts.append(ast.Template(MATCH_LOOKUP_TEMPLATE, []))
+        case_stmt.casePatStmt["ReqT"] = casePatStmts
+        stmt.append(case_stmt)
+        return stmt
+
+    def buildRuleRequest(self):
+        rname = "rl_handle_request"
+        cond = []
+        stmt = self.buildRuleRequestStmt()
+        rule = ast.Rule(rname, cond, stmt)
+        return rule
+
+    def buildRuleExecuteActionStmt(self):
+        ACTIONS = [ "NOP", "FORWARD" ] #FIXME
+        TMP1 = "let v <- matchTable.lookupPort.response.get;"
+        TMP2 = "let pkt <- toGet(packetPipelineFifo).get;"
+        TMP3 = "let metadata <- toGet(metadataPipelineFifo[0]).get;"
+        TMP4 = "RspT resp = unpack(data);"
+        TMP5 = "let _act = tagged {} {e: resp.p4_action};"
+        TMP6 = "meta.table_action = tagged Valid _act;"
+        TMP7 = "metadataPipelineFifo[1].enq(meta);"
+
+        stmt = []
+        stmt.append(ast.Template(TMP1))
+        stmt.append(ast.Template(TMP2))
+        stmt.append(ast.Template(TMP3))
+        if_stmt = ast.If("v matches tagged Valid .data", [])
+        case_stmt = ast.Case("resp.p4_action")
+
+        action = []
+        action.append(ast.Template("BBRequest req = tagged {} {pkt: pkt};", []))
+        action.append(ast.Template("bbReqFifo[{}].enq(req);", []))
+
+        case_stmt.casePatItem["NOP"] = "NOP"
+        case_stmt.casePatItem["FORWARD"] = "FORWARD"
+        case_stmt.casePatStmt["NOP"] = action
+        case_stmt.casePatStmt["FORWARD"] = action
+
+        if_stmt.stmt.append(ast.Template(TMP4))
+        if_stmt.stmt.append(case_stmt)
+        if_stmt.stmt.append(ast.Template(TMP5))
+        if_stmt.stmt.append(ast.Template(TMP6))
+        if_stmt.stmt.append(ast.Template(TMP7))
+        stmt.append(if_stmt)
+        return stmt
+
+    def buildRuleExecuteAction(self):
+        rname = "rl_handle_execute"
+        cond = []
+        stmt = self.buildRuleExecuteActionStmt()
+        rule = ast.Rule(rname, cond, stmt)
+        return rule
+
+    def buildRuleResponseStmt(self):
+        logger.debug("TODO: fix Resp type")
+        TMP1 = "let v <- toGet(bbRespFifo[readyChannel]).get;"
+        TMP2 = "let meta <- toGet(metadataPipelineFifo[1]).get;"
+        TMP3 = "tagged %(case)s {pkt: .pkt, meta: .meta}"
+        TMP4 = "MetadataResponse rsp = tagged RoutingTableResponse {pkt: .pkt, meta: .meta};"
+        TMP5 = "md.response.put(rsp);"
+
+        stmt = []
+        case_stmt = ast.Case("v")
+
+        actions = []
+        #FIXME: if action modifies metadata, update metadata
+        actions.append(ast.Template(TMP4))
+        actions.append(ast.Template(TMP5))
+
+        case_stmt.casePatItem["BBNopResponse"] = ast.Template(TMP3, {"case": "BBNopResponse"})
+        case_stmt.casePatStmt["BBNopResponse"] = actions
+        case_stmt.casePatItem["BBForwardResponse"] = ast.Template(TMP3, {"case": "BBForwardResponse"})
+        case_stmt.casePatStmt["BBForwardResponse"] = actions
+
+        stmt.append(ast.Template(TMP1))
+        stmt.append(ast.Template(TMP2))
+        stmt.append(case_stmt)
+        return stmt
+
+    def buildRuleResponse(self):
+        rname = "rl_handle_response"
+        cond = "interruptStatus"
+        stmt = self.buildRuleResponseStmt()
+        rule = ast.Rule(rname, cond, stmt)
+        return rule
+
+    def buildModuleStmt(self):
         stmt = []
         pdict = {"sz": 256, "reqT": "ReqT", "rspT": "RspT"}
         stmt.append(ast.Template(TBL_TEMPLATE, pdict))
         pdict = {"sz": 16, "szminus1": 15, "fifo": "pipeout"}
         stmt.append(ast.Template(IRQ_TEMPLATE, pdict))
+        stmt.append(self.buildRuleRequest())
+        stmt.append(self.buildRuleExecuteAction())
+        stmt.append(self.buildRuleResponse())
         return stmt
-
-    def buildRuleRequest(self):
-        pass
-
-    def buildRuleExecuteAction(self):
-        pass
-
-    def buildRuleResponse(self):
-        pass
 
     def emitTableInterface(self, builder):
         logger.info("emitTable: {}".format(self.name))
@@ -94,28 +189,18 @@ class Table(object):
         table_intf.emit(builder)
 
     def emitModule(self, builder):
-        # module ast
         logger.info("emitModule: {}".format(self.name))
         mname = "mk{}".format(CamelCase(self.name))
         iname = CamelCase(self.name)
         params = []
         provisos = []
         decls = []
-        stmt = self.build_stmt()
+        stmt = self.buildModuleStmt()
         module = ast.Module(mname, params, iname, provisos, decls, stmt)
         module.emit(builder)
 
-    def emitRuleRequest(self):
-        pass
-
-    def emitRuleExecuteAction(self):
-        pass
-
-    def emitRuleResponse(self):
-        pass
-
     def emitKeyType(self, builder):
-        builder.emitIndent()
+        pass
 
     def emitValueType(self, builder):
         pass

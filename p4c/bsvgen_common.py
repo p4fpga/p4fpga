@@ -3,10 +3,10 @@ Common template for bsv generation
 '''
 
 import re
-from dotmap import DotMap
+#from dotmap import DotMap
 from collections import OrderedDict
-from pif_ir.bir.objects.bir_struct import BIRStruct
-from pif_ir.bir.objects.table import Table
+#from pif_ir.bir.objects.bir_struct import BIRStruct
+#from pif_ir.bir.objects.table import Table
 
 def get_camel_case(column_name):
     ''' TODO '''

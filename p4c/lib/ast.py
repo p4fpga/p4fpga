@@ -31,9 +31,12 @@ import traceback
 logger = logging.getLogger(__name__)
 
 class Template(object):
-    def __init__(self, template, pdict):
+    def __init__(self, template, pdict=[]):
         self.template = template
         self.pdict = pdict
+
+    def __repr__(self):
+        return self.template % self.pdict
 
     def emit(self, builder):
         builder.emitIndent()
@@ -103,14 +106,18 @@ class Method:
         self.name = name
         self.return_type = return_type
         self.params = params
+
     def __repr__(self):
         sparams = [p.__repr__() for p in self.params]
-        return '<method: %s %s %s>' % (self.name, self.return_type, sparams)
-    def instantiate(self, paramBindings):
-        #print 'instantiate method', self.name, self.params
-        return Method(self.name,
-                      self.return_type.instantiate(paramBindings),
-                      [ p.instantiate(paramBindings) for p in self.params])
+        return '<method: %s %s %s>' % (self.name, self.return_type, self.params)
+
+    def emit(self, builder):
+        builder.emitIndent()
+        builder.append("method {} {} ({});".format(self.return_type, self.name, self.params))
+        builder.newline()
+
+    def instantiate(self):
+        return self
 
 class Function:
     def __init__(self, name, return_type, params):
@@ -123,6 +130,10 @@ class Function:
             return '<function: %s %s NONE>' % (self.name, self.return_type)
         sparams = map(str, self.params)
         return '<function: %s %s %s>' % (self.name, self.return_type, sparams)
+
+    def emit(self, builder):
+        builder.append("function {} {}".format(self.return_type, self.name))
+        builder.newline()
 
 class Variable:
     def __init__(self, name, t, value):
@@ -153,17 +164,11 @@ class Interface(InterfaceMixin):
         return Type(self.name,self.params)
 
     def __repr__(self):
-        return '{interface: %s (%s) : %s}' % (self.name, self.params)
+        return '{interface: %s (%s) : %s}' % (self.name, self.params, self.typeDefType)
 
     def emitSubinterfaceDecl(self, builder):
         builder.emitIndent()
         builder.append("interface {} {};".format(self.typeDefType, self.name))
-        builder.newline()
-
-    def emitMethodProto(self, builder):
-        logger.info("TODO: generate method prototype")
-        builder.emitIndent()
-        builder.append("method Action {};".format())
         builder.newline()
 
     def emit(self, builder):
@@ -172,6 +177,8 @@ class Interface(InterfaceMixin):
         builder.increaseIndent()
         for s in self.subinterfaces:
             s.emitSubinterfaceDecl(builder)
+        for s in self.methodProto:
+            s.emit(builder)
         builder.decreaseIndent()
         # print list = methods, if any
         builder.append("endinterface")
@@ -217,6 +224,28 @@ class Module:
             builder.newline()
         builder.decreaseIndent()
         builder.append("endmodule")
+        builder.newline()
+
+class Rule:
+    def __init__(self, name, ruleCond, actionStmt):
+        self.name = name
+        self.ruleCond = ruleCond
+        self.actionStmt = actionStmt
+
+    def emit(self, builder):
+        builder.emitIndent()
+        if self.ruleCond:
+            builder.append("rule {} if ({});".format(self.name, self.ruleCond))
+        else:
+            builder.append("rule {};".format(self.name))
+        builder.newline()
+        builder.increaseIndent()
+        for s in self.actionStmt:
+            s.emit(builder)
+            builder.newline()
+        builder.decreaseIndent()
+        builder.emitIndent()
+        builder.append("endrule")
         builder.newline()
 
 class EnumElement:
@@ -292,3 +321,64 @@ class Type:
             return paramBindings[self.name]
         else:
             return Type(self.name, [p.instantiate(paramBindings) for p in self.params])
+
+class Case:
+    def __init__(self, expression):
+        self.expression = expression
+        self.casePatItem = dict()
+        self.casePatStmt = {} # {'casePat' : [stmt]}
+        self.defaultItem = []
+
+    def __repr__(self):
+        return '{case %s: %s}' % (self.expression)
+
+    def emit(self, builder):
+        builder.emitIndent()
+        builder.appendLine("case ({}) matches".format(self.expression))
+        builder.increaseIndent()
+        for k, v in self.casePatItem.items():
+            builder.emitIndent()
+            builder.appendLine("{}: begin".format(v))
+            builder.increaseIndent()
+            for s in self.casePatStmt[k]:
+                s.emit(builder)
+                builder.newline()
+            builder.decreaseIndent()
+            builder.emitIndent()
+            builder.appendLine("end")
+        builder.decreaseIndent()
+        builder.emitIndent()
+        builder.append("end")
+
+class If:
+    def __init__(self, expression, stmt):
+        self.expression = expression
+        self.stmt = stmt
+
+    def emit(self, builder):
+        builder.emitIndent()
+        builder.append("if ({}) begin".format(self.expression))
+        builder.newline()
+        builder.increaseIndent()
+        for s in self.stmt:
+            s.emit(builder)
+            builder.newline()
+        builder.decreaseIndent()
+        builder.emitIndent()
+        builder.append("end")
+
+class Else:
+    def __init__(self, stmt):
+        self.stmt = stmt
+
+    def emit(self, builder):
+        builder.emitIndent()
+        builder.append("else begin")
+        builder.newline()
+        builder.increaseIndent()
+        for s in self.stmt:
+            s.emit(builder)
+            builder.newline()
+        builder.decreaseIndent()
+        builder.emitIndent()
+        builder.append("end")
