@@ -104,6 +104,12 @@ class BasicBlock(object):
             return prm.Drop(p['op'], p['parameters'])
         elif p['op'] == 'no_op':
             return prm.Nop(p['op'], p['parameters'])
+        elif p['op'] == 'add_to_field':
+            return prm.AddToField(p['op'], p['parameters'])
+        elif p['op'] == 'subtract_from_field':
+            return prm.SubtractFromField(p['op'], p['parameters'])
+        elif p['op'] == 'clone_ingress_pkt_to_egress':
+            return prm.CloneIngressPktToEgress(p['op'], p['parameters'])
         else:
             raise Exception("Unsupported primitive", p['op'])
         return None
@@ -135,7 +141,7 @@ class BasicBlock(object):
         stmt = []
         rname = self.name + "_request"
         cname = CamelCase(self.name)
-        ctype = "ReqT" #FIXME
+        ctype = "TTReqT" #FIXME
         pdict = {"type": ctype, "field": []}
         casePatStmts = []
         for p in self.primitives:

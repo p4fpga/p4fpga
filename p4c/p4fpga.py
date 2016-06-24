@@ -25,11 +25,15 @@ from bsvgen_program import Program
 from bsvgen_control import Control
 from bsvgen_basic_block import BasicBlock
 from bsvgen_table import Table
+from bsvgen_struct import Struct
+from lib.utils import CamelCase
 
 def render_header_types(ir, json_dict):
-
-    # TODO: generate IR_struct objects
-    ir["header_types"] = json_dict["header_types"]
+    for s in json_dict["header_types"]:
+        name = s['name']
+        struct = Struct(s)
+        struct.build()
+        ir.structs[name] = struct
 
 def render_parsers(ir, json_dict):
     # TODO: generate IR_basic_block objects
@@ -222,7 +226,7 @@ def render_basic_blocks(ir, json_dict):
 
 def ir_create(json_dict):
     ir = Program("program", "ir_meta.yml")
-    #render_header_types(ir, json_dict)
+    render_header_types(ir, json_dict)
     #render_parsers(ir, json_dict)
     #render_deparsers(ir, json_dict)
     render_pipelines(ir, json_dict)

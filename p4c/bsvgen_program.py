@@ -94,7 +94,7 @@ class Program(MetaIRInstance):
         #                                                bir_parser)
 
     def emit_structs(self, builder):
-        for it in self.structs:
+        for it in self.structs.values():
             it.emit(builder)
 
     def emit_basic_blocks(self, builder):
@@ -113,7 +113,7 @@ class Program(MetaIRInstance):
         """
         Emit Mid-end IR to BSV
         """
-        #self.emit_structs(builder)
+        self.emit_structs(builder)
         self.emit_basic_blocks(builder)
         self.emit_controls(builder)
         emit_license(builder)

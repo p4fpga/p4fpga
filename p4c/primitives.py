@@ -206,3 +206,29 @@ class Nop(Primitive):
         stmt = []
         return stmt
 
+class AddToField(Primitive):
+    def __init__(self, op, parameters):
+        self.op = op
+        self.parameters = parameters
+
+    def build(self):
+        stmt = []
+        return stmt
+
+class SubtractFromField(Primitive):
+    def __init__(self, op, parameters):
+        self.op = op
+        self.parameters = parameters
+
+    def build(self):
+        stmt = []
+        return stmt
+
+class CloneIngressPktToEgress(Primitive):
+    def __init__(self, op, parameters):
+        self.op = op
+        self.parameters = parameters
+
+    def build(self):
+        stmt = []
+        return stmt

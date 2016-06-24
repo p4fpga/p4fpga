@@ -1,34 +1,64 @@
-'''
-Struct with bsv backend
-'''
+# Copyright (c) 2016 Han Wang
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included
+# in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+# DEALINGS IN THE SOFTWARE.
+#
 
-from pif_ir.bir.objects.bir_struct import BIRStruct
-from sourceCodeBuilder import SourceCodeBuilder
-from bsvgen_common import generate_typedef
-from dotmap import DotMap
+import logging
+from lib.sourceCodeBuilder import SourceCodeBuilder
+from lib.utils import CamelCase
+import lib.ast as ast
 
-def CamelCase(name):
-    ''' CamelCase '''
-    output = ''.join(x for x in name.title() if x.isalnum())
-    return output
+STRUCT_DEFAULT="""\
+instance DefaultValue#(%(name)s);
+  defaultValue = unpack(0);
+endinstance"""
 
-class BSVBIRStruct(BIRStruct):
-    '''
-    TODO
-    '''
-    def __init__(self, name, struct_attrs):
-        super(BSVBIRStruct, self).__init__(name, struct_attrs)
+STRUCT_MASK="""\
+instance DefaultMask#(%(name)s);
+  defaultMask = unpack(maxBound);
+endinstance"""
 
-    def serialize(self):
-        ''' Serialize struct to JSON '''
-        json = DotMap()
-        for k, v in self.fields.items():
-            json.field[k] = v
-        return json
+class Struct(object):
+    def __init__(self, struct_attrs):
+        self.name = struct_attrs['name']
+        self.fields = struct_attrs['fields']
+        self.stmt = []
+        e = []
+        for f, l in self.fields:
+            e.append(ast.StructMember(l, f))
+        self.struct = ast.Struct(CamelCase(self.name), e)
 
-    def bsvgen(self, builder):
-        ''' TODO '''
+    def buildStruct(self):
+        stmt = []
+        stmt.append(ast.Template(STRUCT_DEFAULT, {"name": CamelCase(self.name)}))
+        stmt.append(ast.Template(STRUCT_MASK, {"name": CamelCase(self.name)}))
+        return stmt
+
+    def build(self):
+        self.stmt = self.buildStruct()
+
+    def emit(self, builder):
         assert isinstance(builder, SourceCodeBuilder)
-        out = generate_typedef(self)
-        builder.append(out)
+        self.struct.emit(builder)
+        for s in self.stmt:
+            builder.emitIndent()
+            s.emit(builder)
+            builder.newline()
+        builder.newline()
 

@@ -269,28 +269,37 @@ class StructMember:
         self.type = t
         self.name = name
     def __repr__(self):
-        return '{field: %s %s}' % (self.type, self.name)
-    def instantiate(self, paramBindings):
-        return StructMember(self.type.instantiate(paramBindings), self.name)
+        return '{field: Bit#(%s) %s}' % (self.type, self.name)
+    def emit(self, builder):
+        builder.emitIndent()
+        builder.append("%s: %s;"%(self.name, self.type))
+        builder.newline()
 
 class Struct:
-    def __init__(self, elements):
+    def __init__(self, name, elements):
         self.type = 'Struct'
+        self.name = name
         self.elements = elements
     def __repr__(self):
         return '{struct: %s}' % (self.elements)
-    def instantiate(self, paramBindings):
-        return Struct([e.instantiate(paramBindings) for e in self.elements])
+    def emit(self, builder):
+        builder.emitIndent()
+        builder.append("typedef struct {")
+        builder.newline()
+        builder.increaseIndent()
+        for p in self.elements:
+            p.emit(builder)
+        builder.decreaseIndent()
+        builder.append("} %(name)s deriving (Bits, Eq);" %({'name': self.name}))
+        builder.newline()
 
 class TypeDef:
     def __init__(self, tdtype, name, params):
+        self.type = 'TypeDef'
         self.name = name
         self.params = params
-        self.type = 'TypeDef'
         self.tdtype = tdtype
-        if tdtype and tdtype.type != 'Type':
-            tdtype.name = name
-        self.type = 'TypeDef'
+
     def __repr__(self):
         return '{typedef: %s %s}' % (self.tdtype, self.name)
 
