@@ -92,22 +92,13 @@ class Program(MetaIRInstance):
         #                                                self.bir_tables,
         #                                                self.bir_other_modules,
         #                                                bir_parser)
-        #for name, val in self.control_flow.items():
-        #    self.bir_control_flows[name] = BSVControlFlow(name, val,
-        #                                                  self.bir_basic_blocks,
-        #                                                  self.bir_structs,
-        #                                                  bir_parser)
-        #for name, val in self.other_processor.items():
-        #    self.bir_other_processors[name] = self._load_processor(name,
-        #                                                           val['class'])
-        pass
 
     def emit_structs(self, builder):
         for it in self.structs:
             it.emit(builder)
 
     def emit_basic_blocks(self, builder):
-        for it in self.basic_blocks:
+        for it in self.basic_blocks.values():
             it.emit(builder)
 
     def emit_tables(self, builder):
@@ -115,19 +106,15 @@ class Program(MetaIRInstance):
             it.emit(builder)
 
     def emit_controls(self, builder):
-        for k, v in self.controls.items():
-            v.emit(builder)
+        for it in self.controls.values():
+            it.emit(builder)
 
     def emit(self, builder, noisyFlag):
         """
         Emit Mid-end IR to BSV
         """
-        #generate_import_statements(builder)
-        #generate_metadata_union(builder, jsondata)
-        #generate_basicblock_union(builder, jsondata)
         #self.emit_structs(builder)
-        #self.emit_basic_blocks(builder)
-        #self.emit_tables(builder)
+        self.emit_basic_blocks(builder)
         self.emit_controls(builder)
         emit_license(builder)
 

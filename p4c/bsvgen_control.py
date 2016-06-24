@@ -44,6 +44,10 @@ class Control (object):
             stmt.append(ast.Template(TMP4, {"name": t.name} ))
         return stmt
 
+    def buildRegisterArrays(self):
+        stmt = []
+        return stmt
+
     def buildConnection(self):
         TMP1 = "Vector#(numClients, Server#(MetadataRequest, MetadataResponse)) mds = replicate(toServer(default_req_ff, default_rsp_ff));"
         TMP2 = "mkConnection(mds, mdc);"
@@ -167,6 +171,7 @@ class Control (object):
     def buildModuleStmt(self):
         stmt = []
         stmt += self.buildFFs()
+        stmt += self.buildRegisterArrays()
         stmt += self.buildConnection()
         stmt += self.buildTableInstance()
         stmt += self.buildRules()

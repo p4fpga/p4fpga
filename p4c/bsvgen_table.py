@@ -20,14 +20,12 @@
 #
 
 import logging
-from bsvgen_common import generate_table
 from lib.sourceCodeBuilder import SourceCodeBuilder
 from lib.utils import CamelCase
 import lib.ast as ast
 
 logger = logging.getLogger(__name__)
 
-TBL_TEMPLATE = "MatchTable#(%(sz)s, SizeOf#(%(reqT)s), SizeOf#(%(rspT)s) tbl <- mkMatchTable();"
 
 IRQ_TEMPLATE = """Vector#(%(sz)s, Bool) readyBits = map(fifoNotEmpty, %(fifo)s);
     Bool interruptStatus = False;
@@ -162,9 +160,10 @@ class Table(object):
         return rule
 
     def buildModuleStmt(self):
+        TMP1 = "MatchTable#(%(sz)s, SizeOf#(%(reqT)s), SizeOf#(%(rspT)s) tbl <- mkMatchTable();"
         stmt = []
         pdict = {"sz": 256, "reqT": "ReqT", "rspT": "RspT"}
-        stmt.append(ast.Template(TBL_TEMPLATE, pdict))
+        stmt.append(ast.Template(TMP1, pdict))
         pdict = {"sz": 16, "szminus1": 15, "fifo": "pipeout"}
         stmt.append(ast.Template(IRQ_TEMPLATE, pdict))
         stmt.append(self.buildRuleRequest())
@@ -172,21 +171,19 @@ class Table(object):
         stmt.append(self.buildRuleResponse())
         return stmt
 
-    def emitTableInterface(self, builder):
+    def emitInterface(self, builder):
         logger.info("emitTable: {}".format(self.name))
-
+        TMP1 = "prev_control_state_%(id)s"
+        TMP2 = "Server #(BBRequest, BBResponse)"
+        TMP3 = "next_control_state_%(id)s"
+        TMP4 = "Client #(BBRequest, BBResponse)"
         iname = CamelCase(self.name)
-        table_intf = ast.Interface(iname, None, [], None)
-
-        subintf_s = ast.Interface("prev_control_state_{}".format(0), None, [],
-                    "Server #(BBRequest, BBResponse)") #FIXME
-        table_intf.subinterfaces.append(subintf_s)
-
-        subintf_c = ast.Interface("next_control_state_{}".format(0), None, [],
-                    "Client #(BBRequest, BBResponse)")
-        table_intf.subinterfaces.append(subintf_c)
-
-        table_intf.emit(builder)
+        intf = ast.Interface(iname, None, [], None)
+        subintf_s = ast.Interface(TMP1 % {"id": 0}, None, [], TMP2)
+        intf.subinterfaces.append(subintf_s)
+        subintf_c = ast.Interface(TMP3 % {"id": 0}, None, [], TMP4)
+        intf.subinterfaces.append(subintf_c)
+        intf.emit(builder)
 
     def emitModule(self, builder):
         logger.info("emitModule: {}".format(self.name))
@@ -209,6 +206,6 @@ class Table(object):
         assert isinstance(builder, SourceCodeBuilder)
         self.emitKeyType(builder)
         self.emitValueType(builder)
-        self.emitTableInterface(builder)
+        self.emitInterface(builder)
         self.emitModule(builder)
 

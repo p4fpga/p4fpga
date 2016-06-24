@@ -23,6 +23,7 @@ from collections import OrderedDict
 from pprint import pprint
 from bsvgen_program import Program
 from bsvgen_control import Control
+from bsvgen_basic_block import BasicBlock
 from bsvgen_table import Table
 
 def render_header_types(ir, json_dict):
@@ -209,22 +210,15 @@ def render_pipelines(ir, json_dict):
         ir.controls[name] = control
 
 def render_basic_blocks(ir, json_dict):
-    # TODO: generate IR_basic_block objects
     '''
         Basic blocks implements P4 actions.
         ** optimization to be done.
     '''
-    functions = []
     actions = json_dict["actions"]
-
     for action in actions:
-        f = OrderedDict()
         name = action["name"]
-        f["name"] = name
-
-        functions.append(f)
-
-    ir.basic_blocks = functions
+        basicblock = BasicBlock(action)
+        ir.basic_blocks[name] = basicblock
 
 def ir_create(json_dict):
     ir = Program("program", "ir_meta.yml")
@@ -233,6 +227,5 @@ def ir_create(json_dict):
     #render_deparsers(ir, json_dict)
     render_pipelines(ir, json_dict)
     render_basic_blocks(ir, json_dict)
-    #dump_ir(ir)
     return ir
 

@@ -382,3 +382,14 @@ class Else:
         builder.decreaseIndent()
         builder.emitIndent()
         builder.append("end")
+
+class Reg:
+    def __init__(self, name, rw, value):
+        pass
+
+    def emitDecl(self, builder):
+        pass
+
+    def emit(self, builder):
+        pass
+

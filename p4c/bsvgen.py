@@ -117,7 +117,11 @@ def main():
 
     # entry point for backend
     builder = SourceCodeBuilder()
-    ir.emit(builder, noisyFlag)
+    try:
+        ir.emit(builder, noisyFlag)
+    except CompilationException, e:
+        print "BUG:", e.show()
+        sys.exit(1)
 
     if os.path.dirname(options.output) and \
         not os.path.exists(os.path.dirname(options.output)):
