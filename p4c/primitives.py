@@ -78,8 +78,8 @@ class RegisterRead(Primitive):
 
     def buildTXRX(self):
         TMP1 = "RX #(%(type)s) rx_%(name)s <- mkRX;"
-        TMP2 = "let rx_info_%(name)s = rx_%(name)s.u;"
         TMP3 = "TX #(%(type)s) tx_%(name)s <- mkTX;"
+        TMP2 = "let rx_info_%(name)s = rx_%(name)s.u;"
         TMP4 = "let tx_info_%(name)s = tx_%(name)s.u;"
         stmt = []
         name = self.parameters[1]['value']

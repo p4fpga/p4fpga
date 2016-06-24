@@ -21,11 +21,11 @@
 # SOFTWARE.
 
 import os
+from collections import OrderedDict
 from meta_ir.instance import MetaIRInstance
 from bsvgen_common import emit_license
 
 class Program(MetaIRInstance):
-    ''' TODO '''
     def __init__(self, name, inputfile):
         """
         @brief mid-end IR constructor
@@ -41,10 +41,10 @@ class Program(MetaIRInstance):
         self.add_content(inputfile)
 
         # objects
-        self.structs = {}
-        self.tables = {}
-        self.basic_blocks = {}
-        self.controls = {}
+        self.structs = OrderedDict()
+        self.tables = OrderedDict()
+        self.basic_blocks = OrderedDict()
+        self.controls = OrderedDict()
         self.other_modules = {}
         self.other_processors = {}
         self.start_processor = []
@@ -77,23 +77,9 @@ class Program(MetaIRInstance):
         """
         Build IR objects in P4 program
         """
-        #for name, val in self.struct.items():
-        #    self.bir_structs[name] = BSVBIRStruct(name, val)
-        #for name, val in self.table.items():
-        #    print 'table', name
-        #    self.bir_tables[name] = BSVTable(name, val)
-        #for name, val in self.other_module.items():
-        #    for operation in val['operations']:
-        #        module = "{}.{}".format(name, operation)
-        #        self.bir_other_modules[module] = self._load_module(name, operation)
-        #for name, val in self.basic_block.items():
-        #    self.bir_basic_blocks[name] = BSVBasicBlock(name, val,
-        #                                                self.bir_structs,
-        #                                                self.bir_tables,
-        #                                                self.bir_other_modules,
-        #                                                bir_parser)
 
     def emit_structs(self, builder):
+        # structs for packet header
         for it in self.structs.values():
             it.emit(builder)
 

@@ -25,17 +25,26 @@ from lib.utils import CamelCase
 import lib.ast as ast
 import primitives as prm
 from lib.exceptions import CompilationException
+from bsvgen_struct import Struct, StructM
 
 logger = logging.getLogger(__name__)
 
 class BasicBlock(object):
-    def __init__(self, basicblock_attrs):
+    def __init__(self, basicblock_attrs, header_types, header_instances):
         self.name = basicblock_attrs['name']
         self.primitives = []
+        self.meta_read = set()
+        self.meta_write = set()
         for p in basicblock_attrs['primitives']:
-            obj = self.buildPrimitives(p)
+            obj, meta_read, meta_write = self.buildPrimitives(p)
             assert obj is not None
             self.primitives.append(obj)
+            self.meta_read |= meta_read
+            self.meta_write |= meta_write
+        req_name = "%sReqT" % (CamelCase(self.name))
+        self.request = StructM(req_name, self.meta_read, header_types, header_instances)
+        rsp_name = "%sRspT" % (CamelCase(self.name))
+        self.response = StructM(rsp_name, self.meta_write, header_types, header_instances)
 
     #
     # A few source-level optimizations that I have encountered
@@ -86,33 +95,54 @@ class BasicBlock(object):
         self.primitives = newPrimitives
 
     def buildPrimitives(self, p):
+        def check_field(p, idx):
+            if p['parameters'][idx]['type'] == 'field':
+                return p['parameters'][idx]['value']
+            return None
+        def set_add(setv, p):
+            assert type(setv) is set
+            if p is not None:
+                setv.add(tuple(p))
         """
         json dict -> python object
         very dumb job.
         """
+        field_read = set()
+        field_write = set()
+        obj = None
         if p['op'] == "register_read":
-            return prm.RegisterRead(p['op'], p['parameters'])
+            set_add(field_write, check_field(p, 0))
+            set_add(field_read, check_field(p, 2))
+            obj = prm.RegisterRead(p['op'], p['parameters'])
         elif p['op'] == 'register_write':
-            return prm.RegisterWrite(p['op'], p['parameters'])
+            set_add(field_read, check_field(p, 1))
+            set_add(field_read, check_field(p, 2))
+            obj = prm.RegisterWrite(p['op'], p['parameters'])
         elif p['op'] == 'modify_field':
-            return prm.ModifyField(p['op'], p['parameters'])
+            set_add(field_write, check_field(p, 0))
+            set_add(field_read, check_field(p, 1))
+            obj = prm.ModifyField(p['op'], p['parameters'])
         elif p['op'] == 'remove_header':
-            return prm.RemoveHeader(p['op'], p['parameters'])
+            obj = prm.RemoveHeader(p['op'], p['parameters'])
         elif p['op'] == 'add_header':
-            return prm.AddHeader(p['op'], p['parameters'])
+            obj = prm.AddHeader(p['op'], p['parameters'])
         elif p['op'] == 'drop':
-            return prm.Drop(p['op'], p['parameters'])
+            obj = prm.Drop(p['op'], p['parameters'])
         elif p['op'] == 'no_op':
-            return prm.Nop(p['op'], p['parameters'])
+            obj = prm.Nop(p['op'], p['parameters'])
         elif p['op'] == 'add_to_field':
-            return prm.AddToField(p['op'], p['parameters'])
+            set_add(field_write, check_field(p, 0))
+            set_add(field_read, check_field(p, 1))
+            obj = prm.AddToField(p['op'], p['parameters'])
         elif p['op'] == 'subtract_from_field':
-            return prm.SubtractFromField(p['op'], p['parameters'])
+            set_add(field_write, check_field(p, 0))
+            set_add(field_read, check_field(p, 1))
+            obj = prm.SubtractFromField(p['op'], p['parameters'])
         elif p['op'] == 'clone_ingress_pkt_to_egress':
-            return prm.CloneIngressPktToEgress(p['op'], p['parameters'])
+            obj = prm.CloneIngressPktToEgress(p['op'], p['parameters'])
         else:
             raise Exception("Unsupported primitive", p['op'])
-        return None
+        return obj, field_read, field_write
 
     def buildClientInterfaces(self):
         """ Client interface for register """
@@ -141,8 +171,8 @@ class BasicBlock(object):
         stmt = []
         rname = self.name + "_request"
         cname = CamelCase(self.name)
-        ctype = "TTReqT" #FIXME
-        pdict = {"type": ctype, "field": []}
+        ctype = "%sReqT"%(cname)
+        pdict = {"type": ctype, "field": self.request.build_req()}
         casePatStmts = []
         for p in self.primitives:
             if p.isRegRead():
@@ -170,7 +200,9 @@ class BasicBlock(object):
             if p.isRegRead():
                 stmt += p.buildReadResponse()
         stmt.append(ast.Template(TMP1))
-        stmt.append(ast.Template(TMP2, {"type": "RespT", "field": []}))
+        rsp_prefix = CamelCase(self.name)
+        stmt.append(ast.Template(TMP2, {"type": "%sRespT"%(rsp_prefix),
+                                        "field": self.response.build_rsp()}))
         stmt.append(ast.Template(TMP3, {"name": self.name}))
         rule = ast.Rule(rname, [], stmt)
         rules.append(rule)
@@ -191,9 +223,13 @@ class BasicBlock(object):
             stmt += p.buildInterfaceDef();
         return stmt
 
-    def build(self):
+    def optimize(self):
         """ perform any optimization before code generation """
         self.bypass_RAW()
+
+    def emitStruct(self, builder):
+        self.request.emit(builder)
+        self.response.emit(builder)
 
     def emitInterface(self, builder):
         logger.info("emitBasicBlockIntf: {}".format(self.name))
@@ -217,7 +253,8 @@ class BasicBlock(object):
 
     def emit(self, builder):
         assert isinstance(builder, SourceCodeBuilder)
-        self.build()
+        self.optimize()
+        self.emitStruct(builder)
         self.emitInterface(builder)
         self.emitModule(builder)
 

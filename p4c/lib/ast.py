@@ -269,10 +269,10 @@ class StructMember:
         self.type = t
         self.name = name
     def __repr__(self):
-        return '{field: Bit#(%s) %s}' % (self.type, self.name)
+        return '{field: %s: %s}' % (self.type, self.name)
     def emit(self, builder):
         builder.emitIndent()
-        builder.append("%s: %s;"%(self.name, self.type))
+        builder.append("%s %s;"%(self.type, self.name))
         builder.newline()
 
 class Struct:

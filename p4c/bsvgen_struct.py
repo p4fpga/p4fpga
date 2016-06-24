@@ -37,21 +37,17 @@ endinstance"""
 class Struct(object):
     def __init__(self, struct_attrs):
         self.name = struct_attrs['name']
-        self.fields = struct_attrs['fields']
         self.stmt = []
+        fields = struct_attrs['fields']
         e = []
-        for f, l in self.fields:
-            e.append(ast.StructMember(l, f))
+        for f, l in fields:
+            e.append(ast.StructMember("Bits#(%s)"%(l), f))
         self.struct = ast.Struct(CamelCase(self.name), e)
+        self._add_defaults()
 
-    def buildStruct(self):
-        stmt = []
-        stmt.append(ast.Template(STRUCT_DEFAULT, {"name": CamelCase(self.name)}))
-        stmt.append(ast.Template(STRUCT_MASK, {"name": CamelCase(self.name)}))
-        return stmt
-
-    def build(self):
-        self.stmt = self.buildStruct()
+    def _add_defaults(self):
+        self.stmt.append(ast.Template(STRUCT_DEFAULT, {"name": CamelCase(self.name)}))
+        self.stmt.append(ast.Template(STRUCT_MASK, {"name": CamelCase(self.name)}))
 
     def emit(self, builder):
         assert isinstance(builder, SourceCodeBuilder)
@@ -61,4 +57,58 @@ class Struct(object):
             s.emit(builder)
             builder.newline()
         builder.newline()
+
+class StructM(object):
+    def __init__(self, name, members, header_types, headers):
+        def field_width(field, header_types, headers):
+            header_type = None
+            for h in headers:
+                if h['name'] == field[0]:
+                    header_type = h['header_type']
+            for f in header_types:
+                if f['name'] == header_type:
+                    for p in f['fields']:
+                        if p[0] == field[1]:
+                            return p[1]
+            return None
+
+        self.name = name
+        self.members = members
+        e = []
+        e.append(ast.StructMember("PacketInstance", "pkt"))
+        for m in members:
+            e.append(ast.StructMember("Bits#(%s)"%(field_width(m, header_types, headers)), m[1]))
+        self.struct = ast.Struct(name, e)
+
+    def build_req(self):
+        e = ["pkt: .pkt"]
+        for m in self.members:
+            e.append("%s:.%s" % (m[1], m[1]))
+        return ", ".join(e)
+
+    def build_rsp(self):
+        e = ["pkt: pkt"]
+        for m in self.members:
+            e.append("%s: %s" % (m[1], m[1]))
+        return ", ".join(e)
+
+    def emit(self, builder):
+        assert isinstance(builder, SourceCodeBuilder)
+        self.struct.emit(builder)
+        builder.newline()
+
+class StructT(object):
+    def __init__(self, name):
+        self.name = name
+        self.struct = self._build()
+
+    def _build(self):
+        e = []
+        e.append(ast.StructMember("PacketInstance", "pkt"))
+        e.append(ast.StructMember("MetadataT", "meta"))
+        struct = ast.Struct(self.name, e)
+        return struct
+
+    def emit(self, builder):
+        self.struct.emit(builder)
 

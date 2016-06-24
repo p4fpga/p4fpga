@@ -25,14 +25,18 @@ from bsvgen_program import Program
 from bsvgen_control import Control
 from bsvgen_basic_block import BasicBlock
 from bsvgen_table import Table
-from bsvgen_struct import Struct
+from bsvgen_struct import Struct, StructT
 from lib.utils import CamelCase
+
+def render_runtime_types(ir):
+    # metadata structs
+    ir.structs['metadata_request'] = StructT("MetadataReqT")
+    ir.structs['metadata_response'] = StructT("MetadataRspT")
 
 def render_header_types(ir, json_dict):
     for s in json_dict["header_types"]:
         name = s['name']
         struct = Struct(s)
-        struct.build()
         ir.structs[name] = struct
 
 def render_parsers(ir, json_dict):
@@ -219,13 +223,16 @@ def render_basic_blocks(ir, json_dict):
         ** optimization to be done.
     '''
     actions = json_dict["actions"]
+    header_types = json_dict['header_types']
+    headers = json_dict['headers']
     for action in actions:
         name = action["name"]
-        basicblock = BasicBlock(action)
+        basicblock = BasicBlock(action, header_types, headers)
         ir.basic_blocks[name] = basicblock
 
 def ir_create(json_dict):
     ir = Program("program", "ir_meta.yml")
+    render_runtime_types(ir)
     render_header_types(ir, json_dict)
     #render_parsers(ir, json_dict)
     #render_deparsers(ir, json_dict)
