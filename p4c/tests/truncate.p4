@@ -14,39 +14,42 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-/* Sample P4 program */
-header_type ethernet_t {
+header_type hdrA_t {
     fields {
-        dstAddr : 48;
-        srcAddr : 48;
-        etherType : 16;
+        f1 : 8;
+        f2 : 64;
     }
 }
 
+header hdrA_t hdrA;
+
 parser start {
-    return parse_ethernet;
-}
-
-header ethernet_t ethernet;
-
-parser parse_ethernet {
-    extract(ethernet);
+    extract(hdrA);
     return ingress;
 }
 
-action action_0(){
-    no_op();
+action _nop() {
+
 }
 
-table table_0 {
-   reads {
-      ethernet.etherType : ternary;
-   }
-   actions {
-      action_0;
-   }
+action _truncate(new_length, port) {
+    modify_field(standard_metadata.egress_spec, port);
+    truncate(new_length);
+}
+
+table t_ingress {
+    reads {
+        hdrA.f1 : exact;
+    }
+    actions {
+        _nop; _truncate;
+    }
+    size : 128;
 }
 
 control ingress {
-    apply(table_0);
+    apply(t_ingress);
+}
+
+control egress {
 }

@@ -14,39 +14,39 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-/* Sample P4 program */
+// Standard L2 Ethernet header
 header_type ethernet_t {
     fields {
-        dstAddr : 48;
-        srcAddr : 48;
-        etherType : 16;
+        dst_addr        : 48; // width in bits
+        src_addr        : 48;
+        ethertype       : 16;
     }
-}
-
-parser start {
-    return parse_ethernet;
 }
 
 header ethernet_t ethernet;
 
-parser parse_ethernet {
+// just ethernet
+parser start {
     extract(ethernet);
     return ingress;
 }
 
-action action_0(){
-    no_op();
+action route_eth(egress_spec, src_addr) {
+    modify_field(standard_metadata.egress_spec, egress_spec);
+    modify_field(ethernet.src_addr, src_addr);
 }
+action noop() { }
 
-table table_0 {
-   reads {
-      ethernet.etherType : ternary;
-   }
-   actions {
-      action_0;
-   }
+table routing {
+    reads {
+	ethernet.dst_addr : lpm;
+    }
+    actions {
+	route_eth;
+	noop;
+    }
 }
 
 control ingress {
-    apply(table_0);
+    apply(routing);
 }

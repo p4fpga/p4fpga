@@ -57,8 +57,6 @@ parser parse_ethernet {
 
 header ipv4_t ipv4;
 
-/* Not yet supported on EBPF target
-
 field_list ipv4_checksum_list {
         ipv4.version;
         ipv4.ihl;
@@ -85,7 +83,6 @@ calculated_field ipv4.hdrChecksum  {
     verify ipv4_checksum;
     update ipv4_checksum;
 }
-*/
 
 parser parse_ipv4 {
     extract(ipv4);
@@ -165,7 +162,7 @@ table ipv4_fib {
 table ipv4_fib_lpm {
     reads {
         ingress_metadata.vrf : exact;
-        ipv4.dstAddr : exact; // lpm not supported
+        ipv4.dstAddr : lpm;
     }
     actions {
         on_miss;

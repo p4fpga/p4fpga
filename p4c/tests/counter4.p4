@@ -14,15 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-/* Sample P4 program */
+/*
+ * Simple program, just a direct mapped RAM
+ */
+
 header_type ethernet_t {
     fields {
         dstAddr : 48;
-        srcAddr : 48;
-        etherType : 16;
     }
 }
-
 parser start {
     return parse_ethernet;
 }
@@ -33,20 +33,29 @@ parser parse_ethernet {
     extract(ethernet);
     return ingress;
 }
-
-action action_0(){
-    no_op();
+action act(idx) {
+    modify_field(ethernet.dstAddr, idx);
+    count(cntDum, idx);  
+}
+table tab1 {
+    reads {
+        ethernet.dstAddr : exact;
+    }
+    actions {
+        act;
+    }
+  size: 70000;
 }
 
-table table_0 {
-   reads {
-      ethernet.etherType : ternary;
-   }
-   actions {
-      action_0;
-   }
-}
+counter cntDum {
+	type: packets;
+	static: tab1;
+        instance_count: 200;
 
+}
 control ingress {
-    apply(table_0);
+    apply(tab1);
+}
+control egress {
+
 }

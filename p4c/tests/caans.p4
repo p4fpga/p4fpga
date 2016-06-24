@@ -274,6 +274,7 @@ action handle_phase1a() {
     register_write(ballots_register, paxos.inst, paxos1a.ballot);
     remove_header(paxos1a);
     add_header(paxos1b);
+	// modify_field(paxos1b.ballot, paxos1a.ballot);
     register_read(paxos1b.ballot, ballots_register, paxos.inst);
     register_read(paxos1b.vballot, vballots_register, paxos.inst);
     register_read(paxos1b.paxosval, values_register, paxos.inst);
@@ -287,7 +288,9 @@ action handle_phase2a() {
     register_write(values_register, paxos.inst, paxos2a.paxosval);
     remove_header(paxos2a);
     add_header(paxos2b);
-    register_read(paxos2b.ballot, ballots_register, paxos.inst);
+	// modify_field(paxos2b.ballot, paxos2a.ballot);
+	// modify_field(paxos2b.paxosval, paxos2a.paxosval);
+	register_read(paxos2b.ballot, ballots_register, paxos.inst);
     register_read(paxos2b.paxosval, values_register, paxos.inst);
     register_read(paxos2b.acptid, acceptor_id, 0);
     modify_field(udp.checksum, 0);

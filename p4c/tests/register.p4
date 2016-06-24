@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-/* Sample P4 program */
 header_type ethernet_t {
     fields {
         dstAddr : 48;
@@ -23,30 +22,68 @@ header_type ethernet_t {
     }
 }
 
+header_type intrinsic_metadata_t {
+    fields {
+        mcast_grp : 4;
+        egress_rid : 4;
+        mcast_hash : 16;
+        lf_field_list: 32;
+    }
+}
+
+header_type meta_t {
+    fields {
+        register_tmp : 32;
+    }
+}
+
+metadata meta_t meta;
+
 parser start {
     return parse_ethernet;
 }
 
 header ethernet_t ethernet;
+metadata intrinsic_metadata_t intrinsic_metadata;
 
 parser parse_ethernet {
     extract(ethernet);
     return ingress;
 }
 
-action action_0(){
-    no_op();
+action _drop() {
+    drop();
 }
 
-table table_0 {
-   reads {
-      ethernet.etherType : ternary;
-   }
-   actions {
-      action_0;
-   }
+action _nop() {
+}
+
+register my_register {
+    width: 32;
+    static: m_table;
+    instance_count: 16384;
+}
+
+action m_action(register_idx) {
+    // modify_field_rng_uniform(meta.register_tmp, 100, 200);
+    // register_write(my_register, register_idx, meta.register_tmp);
+    register_read(meta.register_tmp, my_register, register_idx);
+    // TODO
+}
+
+table m_table {
+    reads {
+        ethernet.srcAddr : exact;
+    }
+    actions {
+        m_action; _nop;
+    }
+    size : 16384;
 }
 
 control ingress {
-    apply(table_0);
+    apply(m_table);
+}
+
+control egress {
 }

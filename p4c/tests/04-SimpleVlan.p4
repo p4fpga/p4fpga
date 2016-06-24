@@ -14,39 +14,68 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-/* Sample P4 program */
 header_type ethernet_t {
     fields {
-        dstAddr : 48;
-        srcAddr : 48;
-        etherType : 16;
+        dstAddr   : 48;
+        srcAddr   : 48;
+        ethertype : 16;
     }
 }
+
+header_type vlan_tag_t {
+    fields {
+        pcp       : 3;
+        cfi       : 1;
+        vlan_id   : 12;
+        ethertype : 16;
+    }
+}
+
+header ethernet_t ethernet;
+header vlan_tag_t vlan_tag;
 
 parser start {
     return parse_ethernet;
 }
 
-header ethernet_t ethernet;
-
 parser parse_ethernet {
     extract(ethernet);
-    return ingress;
+    return select(latest.ethertype) {
+        0x8100, 0x9100 : parse_vlan_tag;
+        default:         ingress;
+    }
 }
 
-action action_0(){
-    no_op();
+parser parse_vlan_tag {
+    extract(vlan_tag);
+    return ingress; 
 }
 
-table table_0 {
-   reads {
-      ethernet.etherType : ternary;
-   }
-   actions {
-      action_0;
-   }
+action nop() {
+}
+
+table t1 {
+    reads {
+        ethernet.dstAddr : exact;
+    }
+    actions {
+        nop;
+    }
+}
+
+table t2 {
+    reads {
+        ethernet.srcAddr : exact;
+    }
+    actions {
+        nop;
+    }
 }
 
 control ingress {
-    apply(table_0);
+    apply(t1);
+}
+
+control egress {
+    apply(t2);
 }

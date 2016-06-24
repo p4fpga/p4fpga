@@ -14,39 +14,46 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-/* Sample P4 program */
-header_type ethernet_t {
-    fields {
-        dstAddr : 48;
-        srcAddr : 48;
-        etherType : 16;
-    }
-}
-
 parser start {
-    return parse_ethernet;
-}
-
-header ethernet_t ethernet;
-
-parser parse_ethernet {
-    extract(ethernet);
     return ingress;
 }
 
-action action_0(){
-    no_op();
+header_type m_t {
+    fields {
+        f1 : 32;
+        f2 : 32;
+    }
 }
 
-table table_0 {
-   reads {
-      ethernet.etherType : ternary;
-   }
-   actions {
-      action_0;
-   }
+metadata m_t m;
+
+action a1() {
+    modify_field(m.f1, 1);
+}
+
+table t1 {
+    actions {
+        a1;
+    }
+}
+
+action a2() {
+    modify_field(m.f2, 2);
+}
+
+table t2 {
+    reads {
+        m.f1 : exact;
+    }
+    actions {
+        a2;
+    }
 }
 
 control ingress {
-    apply(table_0);
+    apply(t1);
+    apply(t2);
+}
+
+control egress {
 }
