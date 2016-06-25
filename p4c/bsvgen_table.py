@@ -63,20 +63,29 @@ class Table(object):
                     self.actions)
 
     def buildMatchKey(self):
-        key = []
-        return "FIXME"
+        keys = []
+        for k in self.key:
+            keys.append(k['target'])
+        return keys
 
     def buildRuleMatchRequest(self):
         TMP1 = "let data = rx_info_%(name)s.get;"
         TMP2 = "match {.pkt, .meta} = data;"
         TMP3 = "%(type)s req = %(type)s {%(field)s};"
         TMP4 = "matchTable.lookupPort.request.put(pack(req));"
+        TMP5 = "let %(name)s = fromMaybe(?, meta.%(name)s);"
+        TMP6 = "{%(field)s}"
         rname = "rl_handle_request"
         stmt = []
         stmt.append(ast.Template(TMP1, {"name": "metadata"}))
         stmt.append(ast.Template(TMP2))
-        stmt.append(ast.Template(TMP3, {"type": self.req_name, "field": self.buildMatchKey()}))
-        stmt.append(ast.Template(TMP4, []))
+        keys = self.buildMatchKey()
+        fields = []
+        for k in keys:
+            stmt.append(ast.Template(TMP5, {"name": "$".join(k)}))
+            fields.append("%s: %s"%("$".join(k), "$".join(k)))
+        stmt.append(ast.Template(TMP3, {"type": self.req_name, "field": ",".join(fields)}))
+        stmt.append(ast.Template(TMP4))
         stmt.append(ast.Template("packet_ff.enq(pkt);"))
         stmt.append(ast.Template("metadata_ff[0].enq(meta);"))
         cond = []
@@ -101,7 +110,8 @@ class Table(object):
 
         for idx, action in enumerate(self.actions):
             action_stmt = []
-            action_stmt.append(ast.Template(TMP8, {"type": CamelCase(action), "field": "FIXME"}))
+            action_stmt.append(ast.Template(TMP8, {"type": CamelCase(action),
+                                                   "field": "FIXME"}))
             action_stmt.append(ast.Template(TMP9, {"id": idx}))
             case_stmt.casePatItem[action] = action.upper()
             case_stmt.casePatStmt[action] = action_stmt
@@ -129,7 +139,7 @@ class Table(object):
         case_stmt = ast.Case("v")
 
         action_stmt = []
-        action_stmt.append(ast.Template("FIXME: modify metadata from basic block"))
+        action_stmt.append(ast.Template("//FIXME: modify metadata from basic block"))
         action_stmt.append(ast.Template(TMP4 % {"name": CamelCase(self.name)}))
         action_stmt.append(ast.Template(TMP5 % {"name": "metadata"}))
 

@@ -179,7 +179,7 @@ class BasicBlock(object):
         stmt = []
         rname = self.name + "_request"
         cname = CamelCase(self.name)
-        ctype = "%sReqT"%(cname)
+        ctype = "BB%sRequest"%(cname)
         pdict = {"type": ctype, "field": self.request.build_req()}
         casePatStmts = []
         for p in self.primitives:
@@ -199,7 +199,7 @@ class BasicBlock(object):
 
     def buildHandleResponse(self):
         TMP1 = "let pkt <- toGet(curr_packet_ff).get;"
-        TMP2 = "BasicBlockResponse rsp = tagged %(type)s {%(field)s};"
+        TMP2 = "BBResponse rsp = tagged %(type)s {%(field)s};"
         TMP3 = "%(name)s_response_ff.enq(rsp);"
         rules = []
         stmt = []
@@ -209,7 +209,7 @@ class BasicBlock(object):
                 stmt += p.buildReadResponse()
         stmt.append(ast.Template(TMP1))
         rsp_prefix = CamelCase(self.name)
-        stmt.append(ast.Template(TMP2, {"type": "%sRespT"%(rsp_prefix),
+        stmt.append(ast.Template(TMP2, {"type": "BB%sResponse"%(rsp_prefix),
                                         "field": self.response.build_rsp()}))
         stmt.append(ast.Template(TMP3, {"name": self.name}))
         rule = ast.Rule(rname, [], stmt)
