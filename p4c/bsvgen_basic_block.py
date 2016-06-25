@@ -261,7 +261,7 @@ class BasicBlock(object):
 
     def emit(self, builder):
         assert isinstance(builder, SourceCodeBuilder)
-        self.emitStruct(builder)
+        #self.emitStruct(builder)
         self.emitInterface(builder)
         self.emitModule(builder)
 

@@ -24,6 +24,7 @@ import os
 from collections import OrderedDict
 from meta_ir.instance import MetaIRInstance
 from bsvgen_common import emit_license
+import lib.ast as ast
 
 class Program(MetaIRInstance):
     def __init__(self, name, inputfile):
@@ -79,11 +80,32 @@ class Program(MetaIRInstance):
         """
 
     def emit_structs(self, builder):
-        # structs for packet header
+        # emit structs for regular packet header
         for it in self.structs.values():
             it.emit(builder)
 
+    def emit_union_bb_request(self, builder):
+        # emit union for basicblock req & rsp
+        stmt = []
+        requests = []
+        for it in self.basic_blocks.values():
+            requests.append(it.request)
+        union = ast.TypeDef ("union tagged", "BBRequest", requests)
+        union.emit(builder)
+
+    def emit_union_bb_response(self, builder):
+        stmt = []
+        responses = []
+        for it in self.basic_blocks.values():
+            responses.append(it.request)
+        union = ast.TypeDef ("union tagged", "BBRequest", responses)
+        union.emit(builder)
+
     def emit_basic_blocks(self, builder):
+        # emit with info from multiple basic blocks
+        self.emit_union_bb_request(builder)
+        self.emit_union_bb_response(builder)
+
         for it in self.basic_blocks.values():
             it.emit(builder)
 

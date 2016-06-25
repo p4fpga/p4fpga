@@ -48,6 +48,9 @@ class Control (object):
         stmt = []
         return stmt
 
+    def buildBasicBlocks(self):
+        pass
+
     def buildConnection(self):
         TMP1 = "Vector#(numClients, Server#(MetadataRequest, MetadataResponse)) mds = replicate(toServer(default_req_ff, default_rsp_ff));"
         TMP2 = "mkConnection(mds, mdc);"

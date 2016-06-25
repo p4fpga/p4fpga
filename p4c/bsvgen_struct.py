@@ -51,7 +51,7 @@ class Struct(object):
 
     def emit(self, builder):
         assert isinstance(builder, SourceCodeBuilder)
-        self.struct.emit(builder)
+        self.struct.emitTypeDefStruct(builder)
         for s in self.stmt:
             builder.emitIndent()
             s.emit(builder)
@@ -103,6 +103,11 @@ class StructM(object):
         self.struct.emit(builder)
         builder.newline()
 
+    def emit_typedef_struct (self, builder):
+        assert isinstance(builder, SourceCodeBuilder)
+        self.struct.emitTypeDefStruct(builder)
+        builder.newline()
+
 class StructT(object):
     def __init__(self, name):
         self.name = name
@@ -116,5 +121,5 @@ class StructT(object):
         return struct
 
     def emit(self, builder):
-        self.struct.emit(builder)
+        self.struct.emitTypeDefStruct(builder)
 
