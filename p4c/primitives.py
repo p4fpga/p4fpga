@@ -17,6 +17,14 @@ import lib.ast as ast
 from lib.utils import CamelCase
 import primitives as prm
 
+def get_reg_array_size(name, json_dict):
+    for array in json_dict['register_arrays']:
+        if array['name'] == name:
+            bitwidth = array['bitwidth']
+            size = array['size']
+            return bitwidth, size
+
+
 class Primitive(object):
     """
     base class for primitive
@@ -27,7 +35,7 @@ class Primitive(object):
 
     def build(self): return []
     def buildFFs(self): return []
-    def buildTXRX(self): return []
+    def buildTXRX(self, json_dict): return []
     def buildInterface(self, json_dict): return []
     def buildInterfaceDef(self): return []
 
@@ -76,15 +84,15 @@ class RegisterRead(Primitive):
         stmt.append(ast.Template(TMP1, {"name": name}))
         return stmt
 
-    def buildTXRX(self):
-        TMP1 = "RX #(%(type)sReqT) rx_%(name)s <- mkRX;"
-        TMP2 = "TX #(%(type)sRspT) tx_%(name)s <- mkTX;"
+    def buildTXRX(self, json_dict):
+        TMP1 = "RX #(RegRequest#(%(asz)s, %(dsz)s)) rx_%(name)s <- mkRX;"
+        TMP2 = "TX #(RegResponse#(%(dsz)s)) tx_%(name)s <- mkTX;"
         TMP3 = "let rx_info_%(name)s = rx_%(name)s.u;"
         TMP4 = "let tx_info_%(name)s = tx_%(name)s.u;"
         stmt = []
         name = self.parameters[1]['value']
-        ptype = CamelCase(name)
-        pdict = {'type': ptype, 'name': name}
+        dsz, asz= get_reg_array_size(name, json_dict)
+        pdict = {'name': name, 'asz': asz, 'dsz': dsz}
         stmt.append(ast.Template(TMP1, pdict))
         stmt.append(ast.Template(TMP2, pdict))
         stmt.append(ast.Template(TMP3, pdict))
@@ -92,20 +100,15 @@ class RegisterRead(Primitive):
         return stmt
 
     def buildInterface(self, json_dict):
-        TMP1 = "Client#(RegRequest#(%(asz)s, %(dsz)s), RegResponse#(%(dsz2)s))"
+        TMP1 = "Client#(RegRequest#(%(asz)s, %(dsz)s), RegResponse#(%(dsz)s))"
         stmt = []
-        iname = self.parameters[1]['value']
+        name = self.parameters[1]['value']
         tname = self.parameters[0]['value'][1]
         ptype = CamelCase(tname)
-        register_arrays = json_dict['register_arrays']
-        for array in register_arrays:
-            if array['name'] == iname:
-                bitwidth = array['bitwidth']
-                size = array['size']
-                intf = ast.Interface(tname, typeDefType = TMP1 % ({"asz": size,
-                                                                   "dsz": bitwidth,
-                                                                   "dsz2": bitwidth}))
-                stmt.append(intf)
+        dsz, asz= get_reg_array_size(name, json_dict)
+        pdict = {'name': name, 'asz': asz, 'dsz': dsz}
+        intf = ast.Interface(tname, typeDefType = TMP1 % pdict)
+        stmt.append(intf)
         return stmt
 
     def buildInterfaceDef(self):
@@ -148,15 +151,15 @@ class RegisterWrite(Primitive):
         stmt.append(ast.Template(TMP2, {"name": name}))
         return stmt
 
-    def buildTXRX(self):
-        TMP1 = "RX #(%(type)sReqT) rx_%(name)s <- mkRX;"
-        TMP2 = "TX #(%(type)sRspT) tx_%(name)s <- mkTX;"
+    def buildTXRX(self, json_dict):
+        TMP1 = "RX #(RegRequest#(%(asz)s, %(dsz)s)) rx_%(name)s <- mkRX;"
+        TMP2 = "TX #(RegResponse#(%(dsz)s)) tx_%(name)s <- mkTX;"
         TMP3 = "let rx_info_%(name)s = rx_%(name)s.u;"
         TMP4 = "let tx_info_%(name)s = tx_%(name)s.u;"
         stmt = []
-        dst_name = self.parameters[0]['value']
-        ptype = CamelCase(dst_name)
-        pdict = {'type': ptype, 'name': dst_name}
+        name = self.parameters[0]['value']
+        dsz, asz= get_reg_array_size(name, json_dict)
+        pdict = {'name': name, 'asz': asz, 'dsz': dsz}
         stmt.append(ast.Template(TMP1, pdict))
         stmt.append(ast.Template(TMP2, pdict))
         stmt.append(ast.Template(TMP3, pdict))
@@ -164,20 +167,14 @@ class RegisterWrite(Primitive):
         return stmt
 
     def buildInterface(self, json_dict):
-        TMP1 = "Client#(RegRequest#(%(asz)s, %(dsz)s), RegResponse#(%(dsz2)s))"
+        TMP1 = "Client#(RegRequest#(%(asz)s, %(dsz)s), RegResponse#(%(dsz)s))"
         stmt = []
-        iname = self.parameters[0]['value']
+        name = self.parameters[0]['value']
         tname = self.parameters[2]['value'][1]
-        ptype = CamelCase(iname)
-        register_arrays = json_dict['register_arrays']
-        for array in register_arrays:
-            if array['name'] == iname:
-                bitwidth = array['bitwidth']
-                size = array['size']
-                intf = ast.Interface(iname, typeDefType = TMP1 % ({"asz": size,
-                                                                   "dsz": bitwidth,
-                                                                   "dsz2": bitwidth}))
-                stmt.append(intf)
+        dsz, asz= get_reg_array_size(name, json_dict)
+        pdict = {'name': name, 'asz': asz, 'dsz': dsz}
+        intf = ast.Interface(name, typeDefType = TMP1 % pdict)
+        stmt.append(intf)
         return stmt
 
     def buildInterfaceDef(self):

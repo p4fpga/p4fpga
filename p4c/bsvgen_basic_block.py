@@ -54,6 +54,7 @@ class BasicBlock(object):
         self.clientInterfaces = self.buildClientInterfaces(json_dict)
         self.serverInterfaces = self.buildServerInterfaces(json_dict)
 
+        self.json_dict = json_dict
     #
     # A few source-level optimizations that I have encountered
     # - bypass_RAW: replace register_read with modify_field
@@ -245,7 +246,7 @@ class BasicBlock(object):
         stmt = []
         stmt += self.buildTXRX()
         for p in self.primitives:
-            stmt += p.buildTXRX()
+            stmt += p.buildTXRX(self.json_dict)
         stmt += self.buildHandleRequest()
         stmt += self.buildHandleResponse()
         for p in self.primitives:
