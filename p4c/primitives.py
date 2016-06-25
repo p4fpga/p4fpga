@@ -28,7 +28,7 @@ class Primitive(object):
     def build(self): return []
     def buildFFs(self): return []
     def buildTXRX(self): return []
-    def buildInterface(self): return []
+    def buildInterface(self, json_dict): return []
     def buildInterfaceDef(self): return []
 
     def isRegRead(self): return False
@@ -91,12 +91,21 @@ class RegisterRead(Primitive):
         stmt.append(ast.Template(TMP4, pdict))
         return stmt
 
-    def buildInterface(self):
+    def buildInterface(self, json_dict):
+        TMP1 = "Client#(RegRequest#(%(asz)s, %(dsz)s), RegResponse#(%(dsz2)s))"
         stmt = []
         iname = self.parameters[1]['value']
+        print iname
         ptype = CamelCase(iname)
-        intf = ast.Interface(iname, typeDefType = "FIXME")
-        stmt.append(intf)
+        register_arrays = json_dict['register_arrays']
+        for array in register_arrays:
+            if array['name'] == iname:
+                bitwidth = array['bitwidth']
+                size = array['size']
+                intf = ast.Interface(iname, typeDefType = TMP1 % ({"asz": size,
+                                                                   "dsz": bitwidth,
+                                                                   "dsz2": bitwidth}))
+                stmt.append(intf)
         return stmt
 
     def buildInterfaceDef(self):
@@ -153,12 +162,20 @@ class RegisterWrite(Primitive):
         stmt.append(ast.Template(TMP4, pdict))
         return stmt
 
-    def buildInterface(self):
+    def buildInterface(self, json_dict):
+        TMP1 = "Client#(RegRequest#(%(asz)s, %(dsz)s), RegResponse#(%(dsz2)s))"
         stmt = []
         iname = self.parameters[0]['value']
-        ptype = CamelCase(iname) #FIXME: type must be Client#()
-        intf = ast.Interface(iname, typeDefType = "FIXME")
-        stmt.append(intf)
+        ptype = CamelCase(iname)
+        register_arrays = json_dict['register_arrays']
+        for array in register_arrays:
+            if array['name'] == iname:
+                bitwidth = array['bitwidth']
+                size = array['size']
+                intf = ast.Interface(iname, typeDefType = TMP1 % ({"asz": size,
+                                                                   "dsz": bitwidth,
+                                                                   "dsz2": bitwidth}))
+                stmt.append(intf)
         return stmt
 
     def buildInterfaceDef(self):

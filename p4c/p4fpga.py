@@ -223,11 +223,9 @@ def render_basic_blocks(ir, json_dict):
         ** optimization to be done.
     '''
     actions = json_dict["actions"]
-    header_types = json_dict['header_types']
-    headers = json_dict['headers']
     for action in actions:
         name = action["name"]
-        basicblock = BasicBlock(action, header_types, headers)
+        basicblock = BasicBlock(action, json_dict)
         ir.basic_blocks[name] = basicblock
 
 def ir_create(json_dict):

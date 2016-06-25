@@ -30,7 +30,7 @@ from bsvgen_struct import Struct, StructM
 logger = logging.getLogger(__name__)
 
 class BasicBlock(object):
-    def __init__(self, basicblock_attrs, header_types, header_instances):
+    def __init__(self, basicblock_attrs, json_dict):
         self.name = basicblock_attrs['name']
         self.primitives = []
         self.meta_read = set()
@@ -41,10 +41,18 @@ class BasicBlock(object):
             self.primitives.append(obj)
             self.meta_read |= meta_read
             self.meta_write |= meta_write
+        # perform RAW optimization
+        self.optimize()
+
+        header_types = json_dict['header_types']
+        header_instances = json_dict['headers']
         req_name = "%sReqT" % (CamelCase(self.name))
         self.request = StructM(req_name, self.meta_read, header_types, header_instances)
         rsp_name = "%sRspT" % (CamelCase(self.name))
         self.response = StructM(rsp_name, self.meta_write, header_types, header_instances)
+
+        self.clientInterfaces = self.buildClientInterfaces(json_dict)
+        self.serverInterfaces = self.buildServerInterfaces(json_dict)
 
     #
     # A few source-level optimizations that I have encountered
@@ -144,14 +152,14 @@ class BasicBlock(object):
             raise Exception("Unsupported primitive", p['op'])
         return obj, field_read, field_write
 
-    def buildClientInterfaces(self):
+    def buildClientInterfaces(self, json_dict):
         """ Client interface for register """
         stmt = []
         for p in self.primitives:
-            stmt += p.buildInterface()
+            stmt += p.buildInterface(json_dict)
         return stmt
 
-    def buildServerInterfaces(self):
+    def buildServerInterfaces(self, json_dict):
         """ Server interface for metadata """
         stmt = []
         return stmt
@@ -235,8 +243,8 @@ class BasicBlock(object):
         logger.info("emitBasicBlockIntf: {}".format(self.name))
         iname = CamelCase(self.name)
         stmt = []
-        stmt += self.buildClientInterfaces()
-        stmt += self.buildServerInterfaces()
+        stmt += self.clientInterfaces
+        stmt += self.serverInterfaces
         intf = ast.Interface(iname, subinterfaces=stmt)
         intf.emit(builder)
 
@@ -253,7 +261,6 @@ class BasicBlock(object):
 
     def emit(self, builder):
         assert isinstance(builder, SourceCodeBuilder)
-        self.optimize()
         self.emitStruct(builder)
         self.emitInterface(builder)
         self.emitModule(builder)
