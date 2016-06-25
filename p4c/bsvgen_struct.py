@@ -83,13 +83,13 @@ class StructM(object):
     def build_req(self):
         e = ["pkt: .pkt"]
         for m in self.members:
-            e.append("%s:.%s" % (m[1], "$".join(m)))
+            e.append("%s:.%s" % (m[1], m[1]))
         return ", ".join(e)
 
     def build_rsp(self):
         e = ["pkt: pkt"]
         for m in self.members:
-            e.append("%s: %s" % (m[1], "$".join(m)))
+            e.append("%s: %s" % (m[1], m[1]))
         return ", ".join(e)
 
     def get_members(self):
