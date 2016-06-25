@@ -100,7 +100,7 @@ class Program(MetaIRInstance):
         stmt = []
         responses = []
         for it in self.basic_blocks.values():
-            responses.append(it.request)
+            responses.append(it.response)
         union = ast.TypeDef ("union tagged", "BBResponse", responses)
         union.emit(builder)
 
