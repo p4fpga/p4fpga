@@ -56,7 +56,7 @@ class RegisterRead(Primitive):
         return stmt
 
     def buildReadRequest(self):
-        TMP1 = "let %(name)s_req = %(type)s { addr: %(addr)s, data: ?, write: False };"
+        TMP1 = "let %(name)s_req = %(type)sReqT { addr: %(addr)s, data: ?, write: False };"
         TMP2 = "tx_info_%(name)s.enq(%(name)s_req);"
         name = self.parameters[1]['value']
         ptype = CamelCase(name)
@@ -71,15 +71,15 @@ class RegisterRead(Primitive):
 
     def buildReadResponse(self):
         TMP1 = "let %(name)s = rx_info_%(name)s.get;"
-        name = self.parameters[1]['value']
+        name = self.parameters[0]['value'][1]
         stmt = []
         stmt.append(ast.Template(TMP1, {"name": name}))
         return stmt
 
     def buildTXRX(self):
-        TMP1 = "RX #(%(type)s) rx_%(name)s <- mkRX;"
-        TMP3 = "TX #(%(type)s) tx_%(name)s <- mkTX;"
-        TMP2 = "let rx_info_%(name)s = rx_%(name)s.u;"
+        TMP1 = "RX #(%(type)sReqT) rx_%(name)s <- mkRX;"
+        TMP2 = "TX #(%(type)sRspT) tx_%(name)s <- mkTX;"
+        TMP3 = "let rx_info_%(name)s = rx_%(name)s.u;"
         TMP4 = "let tx_info_%(name)s = tx_%(name)s.u;"
         stmt = []
         name = self.parameters[1]['value']
@@ -95,13 +95,14 @@ class RegisterRead(Primitive):
         TMP1 = "Client#(RegRequest#(%(asz)s, %(dsz)s), RegResponse#(%(dsz2)s))"
         stmt = []
         iname = self.parameters[1]['value']
-        ptype = CamelCase(iname)
+        tname = self.parameters[0]['value'][1]
+        ptype = CamelCase(tname)
         register_arrays = json_dict['register_arrays']
         for array in register_arrays:
             if array['name'] == iname:
                 bitwidth = array['bitwidth']
                 size = array['size']
-                intf = ast.Interface(iname, typeDefType = TMP1 % ({"asz": size,
+                intf = ast.Interface(tname, typeDefType = TMP1 % ({"asz": size,
                                                                    "dsz": bitwidth,
                                                                    "dsz2": bitwidth}))
                 stmt.append(intf)
@@ -111,8 +112,9 @@ class RegisterRead(Primitive):
         TMP1 = "interface %(name)s = toClient #(tx_info_%(name)s.e, rx_info_%(name)s.e);"
         stmt = []
         name = self.parameters[1]['value']
+        tname = self.parameters[0]['value'][1]
         ptype = CamelCase(name)
-        pdict = {"name": name}
+        pdict = {"name": name, "tname": tname}
         stmt.append(ast.Template(TMP1, pdict))
         return stmt
 
@@ -129,7 +131,7 @@ class RegisterWrite(Primitive):
         return stmt
 
     def buildWriteRequest(self):
-        TMP1 = "let %(name)s_req = %(type)s { addr: %(addr)s, data: %(data)s, write: True };"
+        TMP1 = "let %(name)s_req = %(type)sReqT { addr: %(addr)s, data: %(data)s, write: True };"
         TMP2 = "tx_info_%(name)s.enq(%(name)s_req);"
         name = self.parameters[0]['value']
         ptype = CamelCase(name)
@@ -147,9 +149,9 @@ class RegisterWrite(Primitive):
         return stmt
 
     def buildTXRX(self):
-        TMP1 = "RX #(%(type)s) rx_%(name)s <- mkRX;"
-        TMP2 = "let rx_info_%(name)s = rx_%(name)s.u;"
-        TMP3 = "TX #(%(type)s) tx_%(name)s <- mkTX;"
+        TMP1 = "RX #(%(type)sReqT) rx_%(name)s <- mkRX;"
+        TMP2 = "TX #(%(type)sRspT) tx_%(name)s <- mkTX;"
+        TMP3 = "let rx_info_%(name)s = rx_%(name)s.u;"
         TMP4 = "let tx_info_%(name)s = tx_%(name)s.u;"
         stmt = []
         dst_name = self.parameters[0]['value']
@@ -165,6 +167,7 @@ class RegisterWrite(Primitive):
         TMP1 = "Client#(RegRequest#(%(asz)s, %(dsz)s), RegResponse#(%(dsz2)s))"
         stmt = []
         iname = self.parameters[0]['value']
+        tname = self.parameters[2]['value'][1]
         ptype = CamelCase(iname)
         register_arrays = json_dict['register_arrays']
         for array in register_arrays:
@@ -181,8 +184,9 @@ class RegisterWrite(Primitive):
         TMP1 = "interface %(name)s = toClient #(tx_info_%(name)s.e, rx_info_%(name)s.e);"
         stmt = []
         name = self.parameters[0]['value']
+        tname = self.parameters[2]['value'][1]
         ptype = CamelCase(name)
-        pdict = {"name": name}
+        pdict = {"name": name, "tname": tname}
         stmt.append(ast.Template(TMP1, pdict))
         return stmt
 

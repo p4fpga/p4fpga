@@ -282,7 +282,7 @@ class Struct:
         self.elements = elements
     def __repr__(self):
         return '{struct: %s}' % (self.elements)
-    def emit(self, builder):
+    def emitTypeDefStruct (self, builder):
         builder.emitIndent()
         builder.append("typedef struct {")
         builder.newline()
@@ -290,8 +290,20 @@ class Struct:
         for p in self.elements:
             p.emit(builder)
         builder.decreaseIndent()
+        builder.emitIndent()
         builder.append("} %(name)s deriving (Bits, Eq);" %({'name': self.name}))
         builder.newline()
+
+    def emit (self, builder):
+        builder.emitIndent()
+        builder.append("struct {")
+        builder.newline()
+        builder.increaseIndent()
+        for p in self.elements:
+            p.emit(builder)
+        builder.decreaseIndent()
+        builder.emitIndent()
+        builder.append("} %(name)s;" %({'name': self.name}))
 
 class TypeDef:
     def __init__(self, tdtype, name, params):
@@ -302,6 +314,16 @@ class TypeDef:
 
     def __repr__(self):
         return '{typedef: %s %s}' % (self.tdtype, self.name)
+    def emit(self, builder):
+        builder.emitIndent()
+        builder.append("typedef %(type)s {" % {"type": self.tdtype})
+        builder.newline()
+        builder.increaseIndent()
+        for p in self.params:
+            p.emit(builder)
+        builder.decreaseIndent()
+        builder.append("} %(name)s deriving (Bits, Eq);" % {"name": self.name})
+        builder.newline()
 
 class Param:
     def __init__(self, name, t):

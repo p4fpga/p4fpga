@@ -156,16 +156,37 @@ class BasicBlock(object):
         """ Client interface for register """
         stmt = []
         for p in self.primitives:
+            print p
             stmt += p.buildInterface(json_dict)
         return stmt
 
     def buildServerInterfaces(self, json_dict):
         """ Server interface for metadata """
+        TMP1 = "Server#(BBRequest, BBResponse)"
         stmt = []
+        iname = "prev_control_state"
+        stmt.append(ast.Interface(iname, typeDefType=TMP1))
         return stmt
 
-    def buildFFs(self):
-        return []
+    def buildServerInterfaceDef(self):
+        TMP1 = "interface %(name)s = toServer #(tx_info_%(name)s.e, rx_info_%(name)s.e);"
+        stmt = []
+        pdict = {"name": "prev_control_state"}
+        stmt.append(ast.Template(TMP1, pdict))
+        return stmt
+
+    def buildTXRX(self):
+        TMP1 = "RX #(BBRequest) rx_%(name)s <- mkRX;"
+        TMP2 = "TX #(BBResponse) tx_%(name)s <- mkTX;"
+        TMP3 = "let rx_info_%(name)s = rx_%(name)s.u;"
+        TMP4 = "let tx_info_%(name)s = tx_%(name)s.u;"
+        stmt = []
+        pdict = {'name': "prev_control_state"}
+        stmt.append(ast.Template(TMP1, pdict))
+        stmt.append(ast.Template(TMP2, pdict))
+        stmt.append(ast.Template(TMP3, pdict))
+        stmt.append(ast.Template(TMP4, pdict))
+        return stmt
 
     def buildPacketFF(self):
         TMP1 = "curr_packet_ff.enq(pkt);"
@@ -179,7 +200,7 @@ class BasicBlock(object):
         stmt = []
         rname = self.name + "_request"
         cname = CamelCase(self.name)
-        ctype = "BB%sRequest"%(cname)
+        ctype = "%sReqT"%(cname)
         pdict = {"type": ctype, "field": self.request.build_req()}
         casePatStmts = []
         for p in self.primitives:
@@ -209,7 +230,7 @@ class BasicBlock(object):
                 stmt += p.buildReadResponse()
         stmt.append(ast.Template(TMP1))
         rsp_prefix = CamelCase(self.name)
-        stmt.append(ast.Template(TMP2, {"type": "BB%sResponse"%(rsp_prefix),
+        stmt.append(ast.Template(TMP2, {"type": "%sRspT"%(rsp_prefix),
                                         "field": self.response.build_rsp()}))
         stmt.append(ast.Template(TMP3, {"name": self.name}))
         rule = ast.Rule(rname, [], stmt)
@@ -222,13 +243,14 @@ class BasicBlock(object):
         then build the action module
         """
         stmt = []
-        stmt += self.buildFFs()
+        stmt += self.buildTXRX()
         for p in self.primitives:
             stmt += p.buildTXRX()
         stmt += self.buildHandleRequest()
         stmt += self.buildHandleResponse()
         for p in self.primitives:
             stmt += p.buildInterfaceDef();
+        stmt += self.buildServerInterfaceDef()
         return stmt
 
     def optimize(self):
@@ -261,7 +283,6 @@ class BasicBlock(object):
 
     def emit(self, builder):
         assert isinstance(builder, SourceCodeBuilder)
-        #self.emitStruct(builder)
         self.emitInterface(builder)
         self.emitModule(builder)
 

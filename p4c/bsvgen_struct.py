@@ -34,6 +34,18 @@ instance DefaultMask#(%(name)s);
   defaultMask = unpack(maxBound);
 endinstance"""
 
+def field_width(field, header_types, headers):
+    header_type = None
+    for h in headers:
+        if h['name'] == field[0]:
+            header_type = h['header_type']
+    for f in header_types:
+        if f['name'] == header_type:
+            for p in f['fields']:
+                if p[0] == field[1]:
+                    return p[1]
+    return None
+
 class Struct(object):
     def __init__(self, struct_attrs):
         self.name = struct_attrs['name']
@@ -60,18 +72,6 @@ class Struct(object):
 
 class StructM(object):
     def __init__(self, name, members, header_types, headers):
-        def field_width(field, header_types, headers):
-            header_type = None
-            for h in headers:
-                if h['name'] == field[0]:
-                    header_type = h['header_type']
-            for f in header_types:
-                if f['name'] == header_type:
-                    for p in f['fields']:
-                        if p[0] == field[1]:
-                            return p[1]
-            return None
-
         self.name = name
         self.members = members
         e = []
@@ -119,6 +119,33 @@ class StructT(object):
         e.append(ast.StructMember("MetadataT", "meta"))
         struct = ast.Struct(self.name, e)
         return struct
+
+    def emit(self, builder):
+        self.struct.emitTypeDefStruct(builder)
+
+class StructMetadata(object):
+    """
+    TODO: improve to share code with StructM
+    """
+    def __init__(self, name, ir, header_types, headers):
+        self.name = name
+
+        metadata = set()
+        fields = []
+        for it in ir.basic_blocks.values():
+            for f in it.request.members:
+                if f not in metadata:
+                    width = field_width(f, header_types, headers)
+                    name = "$".join(f)
+                    fields.append(ast.StructMember("Maybe#(Bits#(%s))"%(width), name))
+                    metadata.add(f)
+            for f in it.response.members:
+                if f not in metadata:
+                    width = field_width(f, header_types, headers)
+                    name = "$".join(f)
+                    fields.append(ast.StructMember("Maybe#(Bits#(%s))"%(width), name))
+                    metadata.add(f)
+        self.struct = ast.Struct(self.name, fields)
 
     def emit(self, builder):
         self.struct.emitTypeDefStruct(builder)

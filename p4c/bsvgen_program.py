@@ -79,11 +79,13 @@ class Program(MetaIRInstance):
         Build IR objects in P4 program
         """
 
+    # struct
     def emit_structs(self, builder):
         # emit structs for regular packet header
         for it in self.structs.values():
             it.emit(builder)
 
+    # tagged union BBRequest
     def emit_union_bb_request(self, builder):
         # emit union for basicblock req & rsp
         stmt = []
@@ -93,26 +95,31 @@ class Program(MetaIRInstance):
         union = ast.TypeDef ("union tagged", "BBRequest", requests)
         union.emit(builder)
 
+    # tagged union BBResponse
     def emit_union_bb_response(self, builder):
         stmt = []
         responses = []
         for it in self.basic_blocks.values():
             responses.append(it.request)
-        union = ast.TypeDef ("union tagged", "BBRequest", responses)
+        union = ast.TypeDef ("union tagged", "BBResponse", responses)
         union.emit(builder)
 
+    # Basic blocks
     def emit_basic_blocks(self, builder):
         # emit with info from multiple basic blocks
+        #self.emit_metadata(builder)
         self.emit_union_bb_request(builder)
         self.emit_union_bb_response(builder)
 
         for it in self.basic_blocks.values():
             it.emit(builder)
 
+    # Table
     def emit_tables(self, builder):
         for it in self.tables:
             it.emit(builder)
 
+    # Ingress and Egress
     def emit_controls(self, builder):
         for it in self.controls.values():
             it.emit(builder)
