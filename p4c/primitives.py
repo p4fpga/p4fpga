@@ -95,7 +95,6 @@ class RegisterRead(Primitive):
         TMP1 = "Client#(RegRequest#(%(asz)s, %(dsz)s), RegResponse#(%(dsz2)s))"
         stmt = []
         iname = self.parameters[1]['value']
-        print iname
         ptype = CamelCase(iname)
         register_arrays = json_dict['register_arrays']
         for array in register_arrays:

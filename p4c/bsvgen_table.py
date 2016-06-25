@@ -42,7 +42,7 @@ IRQ_TEMPLATE = """Vector#(%(sz)s, Bool) readyBits = map(fifoNotEmpty, %(fifo)s);
 
 class Table(object):
     required_attributes = ["name", "match_type", "max_size", "key", "actions"]
-    def __init__(self, table_attrs):
+    def __init__(self, table_attrs, basic_block_map):
         self.name = table_attrs["name"]
         self.match_type = table_attrs['match_type']
         self.depth = table_attrs['max_size']
@@ -53,6 +53,7 @@ class Table(object):
         self.request = StructT(self.req_name)
         self.rsp_name = "%sRspT" % (CamelCase(self.name))
         self.response = StructT(self.rsp_name)
+        self.basic_block_map = basic_block_map
 
     def __repr__(self):
         return "{} ({}, {}, {}, {})".format(
@@ -109,9 +110,11 @@ class Table(object):
         case_stmt = ast.Case("resp.p4_action")
 
         for idx, action in enumerate(self.actions):
+            basic_block = self.basic_block_map[action]
+            fields = basic_block.request.build_req()
             action_stmt = []
             action_stmt.append(ast.Template(TMP8, {"type": CamelCase(action),
-                                                   "field": "FIXME"}))
+                                                   "field": fields}))
             action_stmt.append(ast.Template(TMP9, {"id": idx}))
             case_stmt.casePatItem[action] = action.upper()
             case_stmt.casePatStmt[action] = action_stmt
@@ -131,20 +134,24 @@ class Table(object):
     def buildRuleMatchResponseStmt(self):
         TMP1 = "let v <- toGet(bbRespFifo[readyChannel]).get;"
         TMP2 = "let meta <- toGet(metadata_ff[1]).get;"
-        TMP3 = "tagged BB%(name)sResponse {FIXME}"
+        TMP3 = "tagged BB%(name)sResponse {%(field)s}"
         TMP4 = "MetadataRspT rsp = MetadataRspT {pkt: pkt, meta: meta};"
         TMP5 = "tx_info_%(name)s.put(rsp);"
+        TMP6 = "meta.%(name)s = tagged Valid %(name)s"
 
         stmt = []
         case_stmt = ast.Case("v")
 
-        action_stmt = []
-        action_stmt.append(ast.Template("//FIXME: modify metadata from basic block"))
-        action_stmt.append(ast.Template(TMP4 % {"name": CamelCase(self.name)}))
-        action_stmt.append(ast.Template(TMP5 % {"name": "metadata"}))
-
         for idx, action in enumerate(self.actions):
-            case_stmt.casePatItem[action] = TMP3 % {"name": CamelCase(action)}
+            basic_block = self.basic_block_map[action]
+            fields = basic_block.response.build_rsp()
+            action_stmt = []
+            for field in basic_block.response.get_members():
+                action_stmt.append(ast.Template(TMP6 % {"name": field}))
+            action_stmt.append(ast.Template(TMP4 % {"name": CamelCase(self.name)}))
+            action_stmt.append(ast.Template(TMP5 % {"name": "metadata"}))
+            case_stmt.casePatItem[action] = TMP3 % {"name": CamelCase(action),
+                                                    "field": fields}
             case_stmt.casePatStmt[action] = action_stmt
 
         stmt.append(ast.Template(TMP1))
@@ -185,7 +192,9 @@ class Table(object):
         stmt.append(ast.Template("packet_ff.enq(pkt);"))
         stmt.append(ast.Template("metadata_ff[0].enq(meta);"))
         for idx, action in enumerate(self.actions):
-            stmt.append(ast.Template(TMP8, {"type": CamelCase(action), "field": "FIXME"}))
+            basic_block = self.basic_block_map[action]
+            fields = basic_block.request.build_req()
+            stmt.append(ast.Template(TMP8, {"type": CamelCase(action), "field": fields}))
             stmt.append(ast.Template(TMP9, {"id": idx}))
 
         rname = "rl_handle_action_request"
@@ -196,20 +205,25 @@ class Table(object):
     def buildRuleActionResponse(self):
         TMP1 = "let v <- toGet(bbRespFifo[readyChannel]).get;"
         TMP2 = "let meta <- toGet(metadata_ff[1]).get;"
-        TMP3 = "tagged BB%(name)sResponse {FIXME}"
+        TMP3 = "tagged BB%(name)sResponse {%(field)s}"
         TMP4 = "MetadataRspT rsp = MetadataRspT {pkt: pkt, meta: meta};"
         TMP5 = "tx_info_%(name)s.put(rsp);"
+        TMP6 = "meta.%(name)s = tagged Valid %(name)s"
 
         stmt = []
         case_stmt = ast.Case("v")
 
-        action_stmt = []
-        action_stmt.append(ast.Template("// FIXME: modify metadata from basic block"))
-        action_stmt.append(ast.Template(TMP4 % {"name": CamelCase(self.name)}))
-        action_stmt.append(ast.Template(TMP5 % {"name": "metadata"}))
-
         for idx, action in enumerate(self.actions):
-            case_stmt.casePatItem[action] = TMP3 % {"name": CamelCase(action)}
+            basic_block = self.basic_block_map[action]
+            fields = basic_block.response.build_rsp()
+            action_stmt = []
+            for field in basic_block.response.get_members():
+                action_stmt.append(ast.Template(TMP6 % {"name": field}))
+            action_stmt.append(ast.Template(TMP4 % {"name": CamelCase(self.name)}))
+            action_stmt.append(ast.Template(TMP5 % {"name": "metadata"}))
+
+            case_stmt.casePatItem[action] = TMP3 % {"name": CamelCase(action),
+                                                    "field": fields}
             case_stmt.casePatStmt[action] = action_stmt
 
         stmt.append(ast.Template(TMP1))

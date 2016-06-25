@@ -83,14 +83,20 @@ class StructM(object):
     def build_req(self):
         e = ["pkt: .pkt"]
         for m in self.members:
-            e.append("%s:.%s" % (m[1], m[1]))
+            e.append("%s:.%s" % (m[1], "$".join(m)))
         return ", ".join(e)
 
     def build_rsp(self):
         e = ["pkt: pkt"]
         for m in self.members:
-            e.append("%s: %s" % (m[1], m[1]))
+            e.append("%s: %s" % (m[1], "$".join(m)))
         return ", ".join(e)
+
+    def get_members(self):
+        e = []
+        for m in self.members:
+            e.append("$".join(m))
+        return e
 
     def emit(self, builder):
         assert isinstance(builder, SourceCodeBuilder)

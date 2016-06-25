@@ -204,7 +204,8 @@ def render_pipelines(ir, json_dict):
 
         for t in pipeline["tables"]:
             tname = t['name']
-            control.tables[tname] = Table(t)
+            basic_blocks = ir.basic_blocks
+            control.tables[tname] = Table(t, basic_blocks)
 
         for c in pipeline["conditionals"]:
             cname = c['name']
@@ -234,7 +235,7 @@ def ir_create(json_dict):
     render_header_types(ir, json_dict)
     #render_parsers(ir, json_dict)
     #render_deparsers(ir, json_dict)
-    render_pipelines(ir, json_dict)
     render_basic_blocks(ir, json_dict)
+    render_pipelines(ir, json_dict)
     return ir
 
