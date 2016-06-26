@@ -213,8 +213,8 @@ class Control (object):
         table_intf = ast.Interface(iname, [], [], [])
         intf0 = ast.Interface("eventPktSend", None, [], "PipeOut#(MetadataRequest)")
         table_intf.subinterfaces.append(intf0)
-        method0 = ast.Method("add_entry", "Action", [])
-        table_intf.methodProto = [ method0 ]
+        #method0 = ast.Method("add_entry", "Action", [])
+        #table_intf.methodProto = [ method0 ]
         table_intf.emit(builder)
 
     def emitModule(self, builder):

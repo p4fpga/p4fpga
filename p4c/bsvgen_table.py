@@ -111,7 +111,7 @@ class Table(object):
 
         for idx, action in enumerate(self.actions):
             basic_block = self.basic_block_map[action]
-            fields = basic_block.request.build_req()
+            fields = basic_block.request.build_case_expr()
             action_stmt = []
             action_stmt.append(ast.Template(TMP8, {"type": CamelCase(action),
                                                    "field": fields}))
@@ -137,14 +137,14 @@ class Table(object):
         TMP3 = "tagged BB%(name)sResponse {%(field)s}"
         TMP4 = "MetadataRspT rsp = MetadataRspT {pkt: pkt, meta: meta};"
         TMP5 = "tx_info_%(name)s.put(rsp);"
-        TMP6 = "meta.%(name)s = tagged Valid %(name)s"
+        TMP6 = "meta.%(name)s = tagged Valid %(name)s;"
 
         stmt = []
         case_stmt = ast.Case("v")
 
         for idx, action in enumerate(self.actions):
             basic_block = self.basic_block_map[action]
-            fields = basic_block.response.build_rsp()
+            fields = basic_block.response.build_match_expr()
             action_stmt = []
             for field in basic_block.response.get_members():
                 action_stmt.append(ast.Template(TMP6 % {"name": field}))
@@ -193,7 +193,7 @@ class Table(object):
         stmt.append(ast.Template("metadata_ff[0].enq(meta);"))
         for idx, action in enumerate(self.actions):
             basic_block = self.basic_block_map[action]
-            fields = basic_block.request.build_req()
+            fields = basic_block.request.build_case_expr()
             stmt.append(ast.Template(TMP8, {"type": CamelCase(action), "field": fields}))
             stmt.append(ast.Template(TMP9, {"id": idx}))
 
@@ -215,7 +215,7 @@ class Table(object):
 
         for idx, action in enumerate(self.actions):
             basic_block = self.basic_block_map[action]
-            fields = basic_block.response.build_rsp()
+            fields = basic_block.response.build_match_expr()
             action_stmt = []
             for field in basic_block.response.get_members():
                 action_stmt.append(ast.Template(TMP6 % {"name": field}))
@@ -238,8 +238,8 @@ class Table(object):
     def buildModuleStmt(self):
         TMP1 = "Vector#(%(num)s, FIFOF#(BBRequest)) bbReqFifo <- replicateM(mkFIFOF);"
         TMP2 = "Vector#(%(num)s, FIFOF#(BBResponse)) bbRspFifo <- replicateM(mkFIFOF);"
-        TMP3 = "MatchTable#(%(sz)s, SizeOf#(%(reqT)s), SizeOf#(%(rspT)s) tbl <- mkMatchTable();"
-        TMP4 = "interface next_control_state_%(id)s = toClient(bbReqFifo[%(id)s], bbRespFifo[%(id)s]]);"
+        TMP3 = "MatchTable#(%(sz)s, SizeOf#(%(reqT)s), SizeOf#(%(rspT)s)) tbl <- mkMatchTable();"
+        TMP4 = "interface next_control_state_%(id)s = toClient(bbReqFifo[%(id)s], bbRespFifo[%(id)s]);"
         TMP5 = "interface prev_control_state_%(id)s = toServer(tx_info_%(name)s.e, rx_info_%(name)s.e);"
         TMP6 = "Vector#(2, FIFOF#(MetadataT)) metadata_ff <- replicateM(mkFIFOF);"
 

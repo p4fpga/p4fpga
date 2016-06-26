@@ -169,7 +169,7 @@ class BasicBlock(object):
         return stmt
 
     def buildServerInterfaceDef(self):
-        TMP1 = "interface %(name)s = toServer #(tx_info_%(name)s.e, rx_info_%(name)s.e);"
+        TMP1 = "interface %(name)s = toServer(tx_info_%(name)s.e, rx_info_%(name)s.e);"
         stmt = []
         pdict = {"name": "prev_control_state"}
         stmt.append(ast.Template(TMP1, pdict))
@@ -201,7 +201,7 @@ class BasicBlock(object):
         rname = self.name + "_request"
         cname = CamelCase(self.name)
         ctype = "%sReqT"%(cname)
-        pdict = {"type": ctype, "field": self.request.build_req()}
+        pdict = {"type": ctype, "field": self.request.build_match_expr()}
         casePatStmts = []
         for p in self.primitives:
             if p.isRegRead():
@@ -231,7 +231,7 @@ class BasicBlock(object):
         stmt.append(ast.Template(TMP1))
         rsp_prefix = CamelCase(self.name)
         stmt.append(ast.Template(TMP2, {"type": "%sRspT"%(rsp_prefix),
-                                        "field": self.response.build_rsp()}))
+                                        "field": self.response.build_case_expr()}))
         stmt.append(ast.Template(TMP3, {"name": self.name}))
         rule = ast.Rule(rname, [], stmt)
         rules.append(rule)

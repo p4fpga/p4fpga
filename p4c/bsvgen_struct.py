@@ -80,13 +80,13 @@ class StructM(object):
             e.append(ast.StructMember("Bits#(%s)"%(field_width(m, header_types, headers)), m[1]))
         self.struct = ast.Struct(name, e)
 
-    def build_req(self):
+    def build_match_expr(self):
         e = ["pkt: .pkt"]
         for m in self.members:
             e.append("%s:.%s" % (m[1], m[1]))
         return ", ".join(e)
 
-    def build_rsp(self):
+    def build_case_expr(self):
         e = ["pkt: pkt"]
         for m in self.members:
             e.append("%s: %s" % (m[1], m[1]))

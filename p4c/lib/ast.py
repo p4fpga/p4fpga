@@ -379,7 +379,7 @@ class Case:
             builder.appendLine("end")
         builder.decreaseIndent()
         builder.emitIndent()
-        builder.append("end")
+        builder.append("endcase")
 
 class If:
     def __init__(self, expression, stmt):
