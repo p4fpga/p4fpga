@@ -34,6 +34,11 @@ instance DefaultMask#(%(name)s);
   defaultMask = unpack(maxBound);
 endinstance"""
 
+EXTRACT_TEMP="""\
+function %(name)s extract_%(lname)s(Bit#(%(width)s) data);
+  return unpack(data);
+endfunction
+"""
 def field_width(field, header_types, headers):
     header_type = None
     for h in headers:
@@ -55,11 +60,15 @@ class Struct(object):
         for f, l in fields:
             e.append(ast.StructMember("Bit#(%s)"%(l), f))
         self.struct = ast.Struct(CamelCase(self.name), e)
-        self._add_defaults()
+        self._add_defaults(fields)
 
-    def _add_defaults(self):
+    def _add_defaults(self, fields):
         self.stmt.append(ast.Template(STRUCT_DEFAULT, {"name": CamelCase(self.name)}))
         self.stmt.append(ast.Template(STRUCT_MASK, {"name": CamelCase(self.name)}))
+        _sum = 0
+        for _, l in fields:
+            _sum += l
+        self.stmt.append(ast.Template(EXTRACT_TEMP, {"name": CamelCase(self.name), "lname": self.name, "width": _sum}))
 
     def emit(self, builder):
         assert isinstance(builder, SourceCodeBuilder)

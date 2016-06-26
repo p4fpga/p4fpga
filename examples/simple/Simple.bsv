@@ -34,6 +34,10 @@ endinstance
 instance DefaultMask#(StandardMetadataT);
   defaultMask = unpack(maxBound);
 endinstance
+function StandardMetadataT extract_standard_metadata_t(Bit#(160) data);
+    return unpack(data);
+endfunction
+
 
 typedef struct {
   Bit#(48) dstAddr;
@@ -46,6 +50,10 @@ endinstance
 instance DefaultMask#(EthernetT);
   defaultMask = unpack(maxBound);
 endinstance
+function EthernetT extract_ethernet_t(Bit#(112) data);
+    return unpack(data);
+endfunction
+
 
 typedef struct {
   Bit#(4) version;
@@ -67,6 +75,10 @@ endinstance
 instance DefaultMask#(Ipv4T);
   defaultMask = unpack(maxBound);
 endinstance
+function Ipv4T extract_ipv4_t(Bit#(160) data);
+    return unpack(data);
+endfunction
+
 
 typedef struct {
   PacketInstance pkt;
@@ -80,7 +92,6 @@ typedef struct {
   Maybe#(Bit#(9)) standard_metadata$egress_port;
   Maybe#(Bit#(9)) runtime_port;
   Maybe#(Bit#(32)) ipv4$dstAddr;
-  Maybe#(Bit#(16)) ethernet$etherType;
 } MetadataT deriving (Bits, Eq);
 typedef union tagged {
   struct {
@@ -136,14 +147,6 @@ module mkForward(Forward);
   let rx_info_prev_control_state = rx_prev_control_state.u;
   let tx_info_prev_control_state = tx_prev_control_state.u;
   FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;
-  Reg#(Bit#(9)) egress_port <- mkReg(0);
-
-  function Action funct_assign (Bit#(9) port);
-    action
-      egress_port <= port;
-    endaction
-  endfunction
-
   rule forward_request;
     let v = rx_info_prev_control_state.first;
     rx_info_prev_control_state.deq;
@@ -254,7 +257,6 @@ module mkRouting(Routing);
 endmodule
 interface Ingress;
   interface PipeOut#(MetadataRequest) eventPktSend;
-  method Action routingTable_add_entry(Bit#(32) dstAddr, RoutingActionT act, Bit#(9) port_);
 endinterface
 module mkIngress#(Vector#(numClients, Client#(MetadataRequest, MetadataResponse)) mdc)(Ingress);
   FIFOF#(MetadataRequest) default_req_ff <- mkFIFOF;

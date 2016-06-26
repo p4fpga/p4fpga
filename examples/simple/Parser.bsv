@@ -45,48 +45,6 @@ typedef enum {
    TYPE_IPV4
 } PacketType deriving (Bits, Eq);
 
-function EthernetT extract_ethernet_t(Bit#(112) data);
-  Vector#(112, Bit#(1)) dataVec = unpack(data);
-  Vector#(48, Bit#(1)) dstAddr = takeAt(0, dataVec);
-  Vector#(48, Bit#(1)) srcAddr = takeAt(48, dataVec);
-  Vector#(16, Bit#(1)) etherType = takeAt(96, dataVec);
-  EthernetT hdr = defaultValue;
-  hdr.dstAddr = pack(dstAddr);
-  hdr.srcAddr = pack(srcAddr);
-  hdr.etherType = pack(etherType);
-  return hdr;
-endfunction
-
-function Ipv4T extract_ipv4_t(Bit#(160) data);
-  Vector#(160, Bit#(1)) dataVec = unpack(data);
-  Vector#(4, Bit#(1)) version = takeAt(0, dataVec);
-  Vector#(4, Bit#(1)) ihl = takeAt(4, dataVec);
-  Vector#(8, Bit#(1)) diffserv = takeAt(8, dataVec);
-  Vector#(16, Bit#(1)) totalLen = takeAt(16, dataVec);
-  Vector#(16, Bit#(1)) identification = takeAt(32, dataVec);
-  Vector#(3, Bit#(1)) flags = takeAt(48, dataVec);
-  Vector#(13, Bit#(1)) fragOffset = takeAt(51, dataVec);
-  Vector#(8, Bit#(1)) ttl = takeAt(64, dataVec);
-  Vector#(8, Bit#(1)) protocol = takeAt(72, dataVec);
-  Vector#(16, Bit#(1)) hdrChecksum = takeAt(80, dataVec);
-  Vector#(32, Bit#(1)) srcAddr = takeAt(96, dataVec);
-  Vector#(32, Bit#(1)) dstAddr = takeAt(128, dataVec);
-  Ipv4T hdr = defaultValue;
-  hdr.version = pack(version);
-  hdr.ihl = pack(ihl);
-  hdr.diffserv = pack(diffserv);
-  hdr.totalLen = pack(totalLen);
-  hdr.identification = pack(identification);
-  hdr.flags = pack(flags);
-  hdr.fragOffset = pack(fragOffset);
-  hdr.ttl = pack(ttl);
-  hdr.protocol = pack(protocol);
-  hdr.hdrChecksum = pack(hdrChecksum);
-  hdr.srcAddr = pack(srcAddr);
-  hdr.dstAddr = pack(dstAddr);
-  return hdr;
-endfunction
-
 interface Parser;
    interface Put#(EtherData) frameIn;
    interface Get#(MetadataT) meta;
