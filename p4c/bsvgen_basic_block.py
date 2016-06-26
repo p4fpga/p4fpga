@@ -157,7 +157,6 @@ class BasicBlock(object):
         """ Client interface for register """
         stmt = []
         for p in self.primitives:
-            print p
             stmt += p.buildInterface(json_dict)
         return stmt
 

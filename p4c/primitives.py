@@ -67,7 +67,7 @@ class RegisterRead(Primitive):
         TMP1 = "let %(name)s_req = %(type)sReqT { addr: %(addr)s, data: ?, write: False };"
         TMP2 = "tx_info_%(name)s.enq(%(name)s_req);"
         name = self.parameters[1]['value']
-        ptype = CamelCase(name)
+        ptype = CamelCase(name) #FIXME
         if type(self.parameters[2]['value']) is list:
             addr = self.parameters[2]['value'][1]
         else:

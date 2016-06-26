@@ -212,6 +212,9 @@ def render_pipelines(ir, json_dict):
             tname = t['name']
             basic_blocks = ir.basic_blocks
             control.tables[tname] = Table(t, basic_blocks)
+            for idx, action in enumerate(t['actions']):
+                basic_block = ir.basic_blocks[action]
+                control.basic_blocks.append(basic_block)
 
         for c in pipeline["conditionals"]:
             cname = c['name']
@@ -221,6 +224,9 @@ def render_pipelines(ir, json_dict):
                                            'true_next': c['true_next'],
                                            'false_next': c['false_next']}
             control.entry.append(cname)
+
+        # registers
+        control.registers = json_dict['register_arrays']
 
         ir.controls[name] = control
 

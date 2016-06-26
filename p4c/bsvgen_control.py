@@ -29,6 +29,8 @@ class Control (object):
         self.init_table = None
         self.tables = dict()
         self.conditionals = dict()
+        self.basic_blocks = []
+        self.registers = []
         self.entry = []
 
     def buildFFs(self):
@@ -45,10 +47,34 @@ class Control (object):
         return stmt
 
     def buildRegisterArrays(self):
+        TMP1 = "RegisterIfc#(%(asz)s, %(dsz)s) %(name)s <- mkP4Register(%(client)s);"
         stmt = []
+        for r in self.registers:
+            dsz = r['bitwidth']
+            asz = r['size']
+            name = r['name']
+            stmt.append(ast.Template(TMP1, {"asz": asz, "dsz": dsz, "name": name, "client": "test"}))
         return stmt
 
     def buildBasicBlocks(self):
+        TMP1 = "%(type)s %(name)s <- mk%(type)s();"
+        stmt = []
+        stmt.append(ast.Template("// Basic Blocks"))
+        for b in self.basic_blocks:
+            name = b.name
+            stmt.append(ast.Template(TMP1, {"type": CamelCase(name), "name": name}))
+        return stmt
+
+    def buildBasicBlockConnection(self):
+        TMP1 = "mkConnection(%(tbl)s.next_control_state_%(id)s, %(bb)s.prev_control_state);"
+        stmt = []
+        for k, v in self.tables.items():
+            for idx, action in enumerate(v.actions):
+                stmt.append(ast.Template(TMP1, {"tbl": camelCase(k), "id": idx, "bb": action}))
+        return stmt
+
+    def buildRegisterMakeChan(self):
+        #mkChan(mkFIFOF, );
         pass
 
     def buildConnection(self):
@@ -174,9 +200,11 @@ class Control (object):
     def buildModuleStmt(self):
         stmt = []
         stmt += self.buildFFs()
-        stmt += self.buildRegisterArrays()
         stmt += self.buildConnection()
         stmt += self.buildTableInstance()
+        stmt += self.buildBasicBlocks()
+        stmt += self.buildRegisterArrays()
+        stmt += self.buildBasicBlockConnection()
         stmt += self.buildRules()
         return stmt
 
