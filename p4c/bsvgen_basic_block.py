@@ -58,10 +58,11 @@ class BasicBlock(object):
         header_instances = json_dict['headers']
 
         # add runtime data to basic block request
-        self.runtime_data = addRuntimeData(self.name, json_dict)
+        runtime_data = addRuntimeData(self.name, json_dict)
+        self.runtime_data = runtime_data
 
         req_name = "%sReqT" % (CamelCase(self.name))
-        self.request = StructM(req_name, self.meta_read, header_types, header_instances)
+        self.request = StructM(req_name, self.meta_read, header_types, header_instances, runtime_data)
 
         rsp_name = "%sRspT" % (CamelCase(self.name))
         self.response = StructM(rsp_name, self.meta_write, header_types, header_instances)
