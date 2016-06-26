@@ -142,7 +142,7 @@ class Table(object):
         TMP3 = "tagged %(name)sRspT {%(field)s}"
         TMP4 = "MetadataRspT rsp = MetadataRspT {pkt: pkt, meta: meta};"
         TMP5 = "tx_info_%(name)s.enq(rsp);"
-        TMP6 = "meta.%(name)s = tagged Valid %(name)s;"
+        TMP6 = "meta.%(mname)s = tagged Valid %(name)s;"
 
         stmt = []
         case_stmt = ast.Case("v")
@@ -151,8 +151,9 @@ class Table(object):
             basic_block = self.basic_block_map[action]
             fields = basic_block.response.build_match_expr()
             action_stmt = []
-            for field in basic_block.response.get_members():
-                action_stmt.append(ast.Template(TMP6 % {"name": field}))
+            for field in basic_block.response.members:
+                mname = "$".join(field)
+                action_stmt.append(ast.Template(TMP6 % {"mname": mname, "name": field[1]}))
             action_stmt.append(ast.Template(TMP4 % {"name": CamelCase(self.name)}))
             action_stmt.append(ast.Template(TMP5 % {"name": "metadata"}))
             case_stmt.casePatItem[action] = TMP3 % {"name": CamelCase(action),

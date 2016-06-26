@@ -35,6 +35,7 @@ instance DefaultMask#(%(name)s);
 endinstance"""
 
 def field_width(field, header_types, headers):
+    print field
     header_type = None
     for h in headers:
         if h['name'] == field[0]:
@@ -88,6 +89,7 @@ class StructM(object):
 
     def build_case_expr(self):
         e = ["pkt: pkt"]
+        #print self.members
         for m in self.members:
             e.append("%s: %s" % (m[1], m[1]))
         return ", ".join(e)
@@ -145,6 +147,11 @@ class StructMetadata(object):
                     name = "$".join(f)
                     fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
                     metadata.add(f)
+            # add runtime data to metadata
+            for f in it.runtime_data:
+                width = f[0]
+                name = "runtime_%s" %(f[1])
+                fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
         self.struct = ast.Struct(self.name, fields)
 
     def emit(self, builder):

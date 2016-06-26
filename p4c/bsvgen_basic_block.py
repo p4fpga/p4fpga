@@ -31,6 +31,16 @@ logger = logging.getLogger(__name__)
 
 class BasicBlock(object):
     def __init__(self, basicblock_attrs, json_dict):
+        def addRuntimeData(action, json_dict):
+            fields = set()
+            actions = json_dict['actions']
+            for at in actions:
+                if at['name'] == action:
+                    rdata = at['runtime_data']
+                    for d in rdata:
+                        fields.add((d['bitwidth'], d['name']))
+            return fields
+
         self.name = basicblock_attrs['name']
         self.primitives = []
         self.meta_read = set()
@@ -46,8 +56,13 @@ class BasicBlock(object):
 
         header_types = json_dict['header_types']
         header_instances = json_dict['headers']
+
+        # add runtime data to basic block request
+        self.runtime_data = addRuntimeData(self.name, json_dict)
+
         req_name = "%sReqT" % (CamelCase(self.name))
         self.request = StructM(req_name, self.meta_read, header_types, header_instances)
+
         rsp_name = "%sRspT" % (CamelCase(self.name))
         self.response = StructM(rsp_name, self.meta_write, header_types, header_instances)
 
