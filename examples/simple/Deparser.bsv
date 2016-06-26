@@ -65,8 +65,8 @@ instance ToTuple#(EthernetT, MetadataT);
    function Tuple2#(EthernetT, EthernetT) toTuple (MetadataT t);
       EthernetT data = defaultValue;
       EthernetT mask = defaultMask;
-      let ethernet = fromMaybe(?, t.ethernet);
-      data.etherType = ethernet.etherType;
+      //let ethernet = fromMaybe(?, t.ethernet);
+      data.etherType = fromMaybe(?, t.ethernet$etherType);
       mask.etherType = 0;
       return tuple2(data, mask);
    endfunction
@@ -76,8 +76,8 @@ instance ToTuple#(Ipv4T, MetadataT);
    function Tuple2#(Ipv4T, Ipv4T) toTuple (MetadataT t);
       Ipv4T data = defaultValue;
       Ipv4T mask = defaultMask;
-      let ipv4 = fromMaybe(?, t.ipv4);
-      data.dstAddr = ipv4.dstAddr;
+      //let ipv4 = fromMaybe(?, t.ipv4);
+      data.dstAddr = fromMaybe(?, t.ipv4$dstAddr);
       mask.dstAddr = 0;
       return tuple2(data, mask);
    endfunction
@@ -158,8 +158,9 @@ module mkDeparser(Deparser);
       DeparserState nextState = StateDeparseStart;
       case (state) matches
          StateDeparseEthernet: begin
-            M_EthernetT ethernet = fromMaybe(?, meta.ethernet);
-            nextState = compute_next_state_ethernet (ethernet.etherType);
+            //M_EthernetT ethernet = fromMaybe(?, meta.ethernet);
+            let ethernet_etherType = fromMaybe(?, meta.ethernet$etherType);
+            nextState = compute_next_state_ethernet (ethernet_etherType);
          end
          default: begin
             nextState = StateDeparseStart;

@@ -150,6 +150,8 @@ module mkForward(Forward);
     case (v) matches
       tagged ForwardReqT {pkt: .pkt, runtime_port: .runtime_port}: begin
         curr_packet_ff.enq(pkt);
+        //egress_port <= runtime_port;
+        funct_assign(runtime_port);
       end
     endcase
   endrule
@@ -295,11 +297,13 @@ module mkEgress#(Vector#(numClients, Client#(MetadataRequest, MetadataResponse))
   mkConnection(mds, mdc);
   // Basic Blocks
   rule default_next_state if (default_req_ff.notEmpty);
+  //first matches tagged DefaultRequest {pkt: .pkt, meta: .meta});
     default_req_ff.deq;
     let req = default_req_ff.first;
     let meta = req.meta;
     let pkt = req.pkt;
     //MetadataRequest req = tagged ForwardRequest {pkt: pkt, meta: meta};
+    //currPacketFifo.enq(req);
   endrule
 
 endmodule

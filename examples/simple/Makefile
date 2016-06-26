@@ -42,7 +42,7 @@ BURST_LEN_SIZE=12
 # P4FPGA
 ###########################################
 
-P4FILE=simple.p4
+P4FILE=Simple.p4
 CONNECTALFLAGS += -D PARSER=Parser
 CONNECTALFLAGS += -D DEPARSER=Deparser
 CONNECTALFLAGS += -D MATCHTABLE=MatchTableSim
@@ -58,9 +58,6 @@ simgen: codegen
 
 run:
 	(cd bluesim; ./bin/ubuntu.exe -p ../${T})
-
-runyml:
-	sudo ${PYPATH} python ${BIRDIR}/pif_ir/examples/bir/start.py simple.yml
 
 bitgen: codegen
 	make build.nfsume

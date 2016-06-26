@@ -2,6 +2,6 @@
 typedef enum {
   NOP,
   FORWARD
-} RouteActionT deriving (Bits, Eq);
+} RoutingActionT deriving (Bits, Eq);
 
 

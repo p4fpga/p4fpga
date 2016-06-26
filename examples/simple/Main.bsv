@@ -56,7 +56,7 @@ module mkMain#(MainIndication indication
 `endif
 
    HostChannel hostchan <- mkHostChannel();
-   Ingress0 ingress <- mkIngress0(vec(hostchan.next));
+   Ingress ingress <- mkIngress(vec(hostchan.next));
    TxChannel txchan <- mkTxChannel(txClock, txReset);
 
    SharedBuffer#(12, 128, 1) mem <- mkSharedBuffer(vec(txchan.readClient)
