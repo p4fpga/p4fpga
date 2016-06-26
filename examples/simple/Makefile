@@ -12,7 +12,6 @@ P4EXAMPLEDIR=$(SONICDIR)/p4
 P4FPGADIR?=$(DEV_ROOT)/p4fpga
 BIRDIR?=$(DEV_ROOT)/p4fpga/pif_ir
 OFTESTDIR?=$(DEV_ROOT)/p4fpga/pif_ir/submodules/oftest/src/python
-PYPATH?=PYTHONPATH=${BIRDIR}:${OFTESTDIR}
 
 ###########################################
 # Connectal Support
@@ -52,8 +51,7 @@ CONNECTALFLAGS += -D TYPEDEF=Simple
 ALL: codegen simgen
 
 codegen: $(P4FILE)
-	${PYPATH} python ${P4FPGADIR}/p4c/start.py -y -f ${P4FILE}
-	${PYPATH} python ${P4FPGADIR}/p4c/bsvgen.py -y $(P4FILE:p4=yml) -o $(P4FILE:p4=bsv)
+	python ${P4FPGADIR}/p4c/bsvgen.py -o $(P4FILE:p4=bsv) $(P4FILE)
 
 simgen: codegen
 	make build.bluesim

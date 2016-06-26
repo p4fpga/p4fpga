@@ -39,7 +39,7 @@ class Program(MetaIRInstance):
         super(Program, self).__init__(ir_meta_yml)
 
         self.name = name
-        self.add_content(inputfile)
+        #self.add_content(inputfile)
 
         # objects
         self.structs = OrderedDict()
