@@ -31,8 +31,8 @@ import lib.ast as ast
 
 def render_runtime_types(ir, json_dict):
     # metadata req/rsp
-    ir.structs['metadata_request'] = StructT("MetadataReqT")
-    ir.structs['metadata_response'] = StructT("MetadataRspT")
+    ir.structs['metadata_request'] = StructT("MetadataRequest")
+    ir.structs['metadata_response'] = StructT("MetadataResponse")
 
     # metadata
     header_types = json_dict['header_types']

@@ -140,7 +140,7 @@ class Table(object):
         TMP1 = "let v <- toGet(bbRspFifo[readyChannel]).get;"
         TMP2 = "let meta <- toGet(metadata_ff[1]).get;"
         TMP3 = "tagged %(name)sRspT {%(field)s}"
-        TMP4 = "MetadataRspT rsp = MetadataRspT {pkt: pkt, meta: meta};"
+        TMP4 = "MetadataResponse rsp = MetadataResponse {pkt: pkt, meta: meta};"
         TMP5 = "tx_info_%(name)s.enq(rsp);"
         TMP6 = "meta.%(mname)s = tagged Valid %(name)s;"
 
@@ -173,8 +173,8 @@ class Table(object):
         return rule
 
     def buildTXRX(self, pname):
-        TMP1 = "RX #(%(type)sReqT) rx_%(name)s <- mkRX;"
-        TMP3 = "TX #(%(type)sRspT) tx_%(name)s <- mkTX;"
+        TMP1 = "RX #(%(type)sRequest) rx_%(name)s <- mkRX;"
+        TMP3 = "TX #(%(type)sResponse) tx_%(name)s <- mkTX;"
         TMP2 = "let rx_info_%(name)s = rx_%(name)s.u;"
         TMP4 = "let tx_info_%(name)s = tx_%(name)s.u;"
         stmt = []
@@ -212,7 +212,7 @@ class Table(object):
         TMP1 = "let v <- toGet(bbRspFifo[readyChannel]).get;"
         TMP2 = "let meta <- toGet(metadata_ff[1]).get;"
         TMP3 = "tagged %(name)sRspT {%(field)s}"
-        TMP4 = "MetadataRspT rsp = MetadataRspT {pkt: pkt, meta: meta};"
+        TMP4 = "MetadataResponse rsp = MetadataResponse {pkt: pkt, meta: meta};"
         TMP5 = "tx_info_%(name)s.put(rsp);"
         TMP6 = "meta.%(name)s = tagged Valid %(name)s"
 
@@ -284,7 +284,7 @@ class Table(object):
     def emitInterface(self, builder):
         logger.info("emitTable: {}".format(self.name))
         TMP1 = "prev_control_state_%(id)s"
-        TMP2 = "Server #(MetadataReqT, MetadataRspT)"
+        TMP2 = "Server #(MetadataRequest, MetadataResponse)"
         TMP3 = "next_control_state_%(id)s"
         TMP4 = "Client #(BBRequest, BBResponse)"
         iname = CamelCase(self.name)

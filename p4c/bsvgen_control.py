@@ -17,6 +17,7 @@ import logging
 import lib.ast as ast
 from lib.utils import CamelCase, camelCase
 from lib.exceptions import CompilationException
+from collections import OrderedDict
 
 logger = logging.getLogger(__name__)
 
@@ -27,17 +28,17 @@ class Control (object):
     def __init__(self, name):
         self.name = name
         self.init_table = None
-        self.tables = dict()
-        self.conditionals = dict()
+        self.tables = OrderedDict()
+        self.conditionals = OrderedDict()
         self.basic_blocks = []
         self.registers = []
         self.entry = []
 
     def buildFFs(self):
-        TMP1 = "FIFO#(MetadataReqT) default_req_ff <- mkFIFO;"
-        TMP2 = "FIFO#(MetadataRspT) default_rsp_ff <- mkFIFO;"
-        TMP3 = "FIFO#(MetadataReqT) %(name)s_req_ff <- mkFIFO;"
-        TMP4 = "FIFO#(MetadataRspT) %(name)s_rsp_ff <- mkFIFO;"
+        TMP1 = "FIFOF#(MetadataRequest) default_req_ff <- mkFIFOF;"
+        TMP2 = "FIFOF#(MetadataResponse) default_rsp_ff <- mkFIFOF;"
+        TMP3 = "FIFOF#(MetadataRequest) %(name)s_req_ff <- mkFIFOF;"
+        TMP4 = "FIFOF#(MetadataResponse) %(name)s_rsp_ff <- mkFIFOF;"
         stmt = []
         stmt.append(ast.Template(TMP1))
         stmt.append(ast.Template(TMP2))
@@ -78,7 +79,7 @@ class Control (object):
         pass
 
     def buildConnection(self):
-        TMP1 = "Vector#(numClients, Server#(MetadataReqT, MetadataRspT)) mds = replicate(toServer(default_req_ff, default_rsp_ff));"
+        TMP1 = "Vector#(numClients, Server#(MetadataRequest, MetadataResponse)) mds = replicate(toServer(default_req_ff, default_rsp_ff));"
         TMP2 = "mkConnection(mds, mdc);"
         stmt = []
         stmt.append(ast.Template(TMP1))
@@ -86,21 +87,27 @@ class Control (object):
         return stmt
 
     def buildTableInstance(self):
-        TMP1 = "%(tblType)s %(tblName)s <- mk%(tblType)s(toGPClient(%(tblName)s_req_ff, %(tblName)s_rsp_ff));"
-        TMP2 = "%(bbType)s %(bbName)s <- mk%(bbType)s;"
-        TMP3 = "mkConnection(%(tblName)s.%(tblIntf)s, %(bbName)s.%(bbIntf)s);"
+        TMP1 = "%(tblType)s %(tblName)s <- mk%(tblType)s();"
+        TMP2 = "mkConnection(toClient(%(tblName)s_req_ff, %(tblName)s_rsp_ff), %(tblName)s.prev_control_state_%(id)s);"
         stmt = []
         for t in self.tables.values():
             stmt.append(ast.Template(TMP1, {"tblType": CamelCase(t.name),
                                             "tblName": camelCase(t.name)}))
-        #stmt.append(ast.Template(TMP2))
-        #stmt.append(ast.Template(TMP3))
+        for t in self.tables.values():
+            stmt.append(ast.Template(TMP2, {"tblName": camelCase(t.name),
+                                            "id": 0}))
         return stmt
 
     def buildDefaultRuleStmt(self, nextState):
         TMP1 = "default_req_ff.deq;"
+        TMP2 = "let req = default_req_ff.first;"
+        TMP3 = "let meta = req.meta;"
+        TMP4 = "let pkt = req.pkt;"
         stmt = []
         stmt.append(ast.Template(TMP1))
+        stmt.append(ast.Template(TMP2))
+        stmt.append(ast.Template(TMP3))
+        stmt.append(ast.Template(TMP4))
         return stmt
 
     def buildIfStmt(self, true=None, false=None):
@@ -114,7 +121,7 @@ class Control (object):
 
 
     def buildConditionalStmt(self, tblName, stmt):
-        TMP1 = "MetadataReqT req = tagged %(name)sRequest {pkt: pkt, meta: meta};"
+        TMP1 = "MetadataRequest req = tagged %(name)sRequest {pkt: pkt, meta: meta};"
         TMP2 = "%(name)s_req_ff.enq(req);"
         def search_conditional (name):
             for key, cond in self.conditionals.items():
@@ -124,14 +131,15 @@ class Control (object):
             return None
 
         if tblName is None:
-            stmt.append(ast.Template("MetadataReqT req = tagged ForwardRequest {pkt: pkt, meta: meta};"))
-            stmt.append(ast.Template("currPacketFifo.enq(req);"))
+            stmt.append(ast.Template("MetadataRequest req = tagged ForwardRequest {pkt: pkt, meta: meta};"))
+            #stmt.append(ast.Template("currPacketFifo.enq(req);"))
 
         if tblName in self.tables:
             next_tables = self.tables[tblName].next_tables
             for next_table in next_tables.values():
                 if next_table is None:
-                    stmt.append(ast.Template("currPacketFifo.enq(req);"))
+                    #stmt.append(ast.Template("currPacketFifo.enq(req);"))
+                    pass
                 elif next_table in self.conditionals:
                     self.buildConditionalStmt(next_table, stmt)
                 else:
@@ -165,18 +173,22 @@ class Control (object):
 
     def buildTableRuleStmt(self, tblName):
         TMP1 = "%(tblName)s_rsp_ff.deq;"
-        TMP2 = "let data = fromMaybe(?, meta.%(name)s);"
+        TMP2 = "let req = %(tblName)s_rsp_ff.first;"
+        TMP3 = "let meta = req.meta;"
+        TMP4 = "let pkt = req.pkt;"
         stmt = []
         stmt.append(ast.Template(TMP1, {"tblName": tblName}))
-        stmt.append(ast.Template(TMP2, {"name": "test"}))
+        stmt.append(ast.Template(TMP2, {"tblName": tblName}));
+        stmt.append(ast.Template(TMP3));
+        stmt.append(ast.Template(TMP4));
         _stmt = []
         self.buildConditionalStmt(tblName, _stmt)
         stmt += _stmt
         return stmt
 
     def buildRules(self):
-        TMP1 = "%(name)s_req_ff.first matches tagged %(type)sRequest {pkt: .pkt, meta: .meta}"
-        TMP2 = "%(name)s_rsp_ff.first matches tagged %(type)sRequest {pkt: .pkt, meta: .meta}"
+        TMP1 = "%(name)s_req_ff.notEmpty"#first matches tagged %(type)sRequest {pkt: .pkt, meta: .meta}"
+        TMP2 = "%(name)s_rsp_ff.notEmpty"#first matches tagged %(type)sRequest {pkt: .pkt, meta: .meta}"
         rules = []
         rname = "default_next_state"
         cond = TMP1 % ({"name": "default", "type": "Default"})
@@ -211,7 +223,7 @@ class Control (object):
     def emitInterface(self, builder):
         iname = CamelCase(self.name)
         table_intf = ast.Interface(iname, [], [], [])
-        intf0 = ast.Interface("eventPktSend", None, [], "PipeOut#(MetadataReqT)")
+        intf0 = ast.Interface("eventPktSend", None, [], "PipeOut#(MetadataRequest)")
         table_intf.subinterfaces.append(intf0)
         #method0 = ast.Method("add_entry", "Action", [])
         #table_intf.methodProto = [ method0 ]
@@ -221,7 +233,7 @@ class Control (object):
         mname = "mk{}".format(CamelCase(self.name))
         iname = CamelCase(self.name)
         params = []
-        decls = []
+        decls = ["Vector#(numClients, Client#(MetadataRequest, MetadataResponse)) mdc"]
         provisos = []
         stmt = self.buildModuleStmt()
         module = ast.Module(mname, params, iname, provisos, decls, stmt)
