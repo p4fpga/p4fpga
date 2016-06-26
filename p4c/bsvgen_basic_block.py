@@ -169,10 +169,16 @@ class BasicBlock(object):
         return stmt
 
     def buildServerInterfaceDef(self):
-        TMP1 = "interface %(name)s = toServer(tx_info_%(name)s.e, rx_info_%(name)s.e);"
+        TMP1 = "interface %(name)s = toServer(rx_%(name)s.e, tx_%(name)s.e);"
         stmt = []
         pdict = {"name": "prev_control_state"}
         stmt.append(ast.Template(TMP1, pdict))
+        return stmt
+
+    def buildFFs(self):
+        TMP1 = "FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;"
+        stmt = []
+        stmt.append(ast.Template(TMP1))
         return stmt
 
     def buildTXRX(self):
@@ -196,6 +202,8 @@ class BasicBlock(object):
 
     def buildHandleRequest(self):
         TMP1 = "tagged %(type)s {%(field)s}"
+        TMP2 = "let v = rx_info_prev_control_state.first;"
+        TMP3 = "rx_info_prev_control_state.deq;"
         rules = []
         stmt = []
         rname = self.name + "_request"
@@ -210,6 +218,9 @@ class BasicBlock(object):
                 casePatStmts += p.buildWriteRequest()
         casePatStmts += self.buildPacketFF()
 
+        stmt.append(ast.Template(TMP2))
+        stmt.append(ast.Template(TMP3))
+
         case_stmt = ast.Case("v")
         case_stmt.casePatItem[ctype] = ast.Template(TMP1, pdict)
         case_stmt.casePatStmt[ctype] = casePatStmts
@@ -221,7 +232,7 @@ class BasicBlock(object):
     def buildHandleResponse(self):
         TMP1 = "let pkt <- toGet(curr_packet_ff).get;"
         TMP2 = "BBResponse rsp = tagged %(type)s {%(field)s};"
-        TMP3 = "%(name)s_response_ff.enq(rsp);"
+        TMP3 = "tx_info_prev_control_state.enq(rsp);"
         rules = []
         stmt = []
         rname = self.name + "_response"
@@ -244,6 +255,7 @@ class BasicBlock(object):
         """
         stmt = []
         stmt += self.buildTXRX()
+        stmt += self.buildFFs()
         for p in self.primitives:
             stmt += p.buildTXRX(self.json_dict)
         stmt += self.buildHandleRequest()

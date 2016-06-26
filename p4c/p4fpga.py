@@ -211,7 +211,7 @@ def render_pipelines(ir, json_dict):
         for t in pipeline["tables"]:
             tname = t['name']
             basic_blocks = ir.basic_blocks
-            control.tables[tname] = Table(t, basic_blocks)
+            control.tables[tname] = Table(t, basic_blocks, json_dict)
             for idx, action in enumerate(t['actions']):
                 basic_block = ir.basic_blocks[action]
                 control.basic_blocks.append(basic_block)

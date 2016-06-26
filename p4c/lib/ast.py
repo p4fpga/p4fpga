@@ -251,18 +251,36 @@ class Rule:
 class EnumElement:
     def __init__(self, name, qualifiers, value):
         self.qualifiers = qualifiers
+        self.name = name
         self.value = value
     def __repr__(self):
-        return '{enumelt: %s}' % (self.name)
+        return '{enumelt: %s %s}' % (self.name, self.value)
+    def emit(self, builder, isLast):
+        builder.emitIndent()
+        builder.append("%s" % (self.name.upper()))
+        if not isLast:
+            builder.append(",")
+        builder.newline()
 
 class Enum:
-    def __init__(self, elements):
+    def __init__(self, name, elements):
         self.type = 'Enum'
+        self.name = name
         self.elements = elements
     def __repr__(self):
         return '{enum: %s}' % (self.elements)
-    def instantiate(self, paramBindings):
-        return self
+    def emit(self, builder):
+        builder.emitIndent()
+        builder.append("typedef enum {")
+        builder.newline()
+        builder.increaseIndent()
+        for p in self.elements[:-1]:
+            p.emit(builder, False)
+        for p in [self.elements[-1]]:
+            p.emit(builder, True)
+        builder.decreaseIndent()
+        builder.append("} %(name)s deriving (Bits, Eq);" % {"name": self.name})
+        builder.newline()
 
 class StructMember:
     def __init__(self, t, name):

@@ -23,7 +23,7 @@
 import os
 from collections import OrderedDict
 from meta_ir.instance import MetaIRInstance
-from bsvgen_common import emit_license
+from bsvgen_common import emit_license, emit_import
 import lib.ast as ast
 
 class Program(MetaIRInstance):
@@ -128,6 +128,7 @@ class Program(MetaIRInstance):
         """
         Emit Mid-end IR to BSV
         """
+        emit_import(builder)
         self.emit_structs(builder)
         self.emit_basic_blocks(builder)
         self.emit_controls(builder)

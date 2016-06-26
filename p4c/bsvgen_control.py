@@ -34,10 +34,10 @@ class Control (object):
         self.entry = []
 
     def buildFFs(self):
-        TMP1 = "FIFO#(MetadataRequest) default_req_ff <- mkFIFO;"
-        TMP2 = "FIFO#(MetadataResponse) default_rsp_ff <- mkFIFO;"
-        TMP3 = "FIFO#(MetadataRequest) %(name)s_req_ff <- mkFIFO;"
-        TMP4 = "FIFO#(MetadataResponse) %(name)s_rsp_ff <- mkFIFO;"
+        TMP1 = "FIFO#(MetadataReqT) default_req_ff <- mkFIFO;"
+        TMP2 = "FIFO#(MetadataRspT) default_rsp_ff <- mkFIFO;"
+        TMP3 = "FIFO#(MetadataReqT) %(name)s_req_ff <- mkFIFO;"
+        TMP4 = "FIFO#(MetadataRspT) %(name)s_rsp_ff <- mkFIFO;"
         stmt = []
         stmt.append(ast.Template(TMP1))
         stmt.append(ast.Template(TMP2))
@@ -78,7 +78,7 @@ class Control (object):
         pass
 
     def buildConnection(self):
-        TMP1 = "Vector#(numClients, Server#(MetadataRequest, MetadataResponse)) mds = replicate(toServer(default_req_ff, default_rsp_ff));"
+        TMP1 = "Vector#(numClients, Server#(MetadataReqT, MetadataRspT)) mds = replicate(toServer(default_req_ff, default_rsp_ff));"
         TMP2 = "mkConnection(mds, mdc);"
         stmt = []
         stmt.append(ast.Template(TMP1))
@@ -114,7 +114,7 @@ class Control (object):
 
 
     def buildConditionalStmt(self, tblName, stmt):
-        TMP1 = "MetadataRequest req = tagged %(name)sRequest {pkt: pkt, meta: meta};"
+        TMP1 = "MetadataReqT req = tagged %(name)sRequest {pkt: pkt, meta: meta};"
         TMP2 = "%(name)s_req_ff.enq(req);"
         def search_conditional (name):
             for key, cond in self.conditionals.items():
@@ -124,7 +124,7 @@ class Control (object):
             return None
 
         if tblName is None:
-            stmt.append(ast.Template("MetadataRequest req = tagged ForwardRequest {pkt: pkt, meta: meta};"))
+            stmt.append(ast.Template("MetadataReqT req = tagged ForwardRequest {pkt: pkt, meta: meta};"))
             stmt.append(ast.Template("currPacketFifo.enq(req);"))
 
         if tblName in self.tables:
@@ -211,7 +211,7 @@ class Control (object):
     def emitInterface(self, builder):
         iname = CamelCase(self.name)
         table_intf = ast.Interface(iname, [], [], [])
-        intf0 = ast.Interface("eventPktSend", None, [], "PipeOut#(MetadataRequest)")
+        intf0 = ast.Interface("eventPktSend", None, [], "PipeOut#(MetadataReqT)")
         table_intf.subinterfaces.append(intf0)
         #method0 = ast.Method("add_entry", "Action", [])
         #table_intf.methodProto = [ method0 ]

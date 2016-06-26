@@ -53,7 +53,7 @@ class Struct(object):
         fields = struct_attrs['fields']
         e = []
         for f, l in fields:
-            e.append(ast.StructMember("Bits#(%s)"%(l), f))
+            e.append(ast.StructMember("Bit#(%s)"%(l), f))
         self.struct = ast.Struct(CamelCase(self.name), e)
         self._add_defaults()
 
@@ -77,7 +77,7 @@ class StructM(object):
         e = []
         e.append(ast.StructMember("PacketInstance", "pkt"))
         for m in members:
-            e.append(ast.StructMember("Bits#(%s)"%(field_width(m, header_types, headers)), m[1]))
+            e.append(ast.StructMember("Bit#(%s)"%(field_width(m, header_types, headers)), m[1]))
         self.struct = ast.Struct(name, e)
 
     def build_match_expr(self):
@@ -137,16 +137,62 @@ class StructMetadata(object):
                 if f not in metadata:
                     width = field_width(f, header_types, headers)
                     name = "$".join(f)
-                    fields.append(ast.StructMember("Maybe#(Bits#(%s))"%(width), name))
+                    fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
                     metadata.add(f)
             for f in it.response.members:
                 if f not in metadata:
                     width = field_width(f, header_types, headers)
                     name = "$".join(f)
-                    fields.append(ast.StructMember("Maybe#(Bits#(%s))"%(width), name))
+                    fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
                     metadata.add(f)
         self.struct = ast.Struct(self.name, fields)
 
     def emit(self, builder):
+        self.struct.emitTypeDefStruct(builder)
+
+class StructTableReqT(object):
+    def __init__(self, name, key, header_types, headers):
+        self.name = name
+        fields = []
+        total_width = 0
+        for k in key:
+            width = field_width(k['target'], header_types, headers)
+            total_width += width
+            name = "$".join(k['target'])
+            fields.append(ast.StructMember("Bit#(%s)" %(width), name))
+        pad_width = 9 - total_width % 9
+        if pad_width != 0:
+            fields.append(ast.StructMember("Bit#(%s)" %(pad_width), "padding"))
+
+        self.struct = ast.Struct("%sReqT"%(CamelCase(self.name)), fields)
+
+    def emit(self, builder):
+        self.struct.emitTypeDefStruct(builder)
+
+class StructTableRspT(object):
+    def __init__(self, name, actions, action_info):
+        def findActionInfo(action_info, action):
+            for at in action_info:
+                if at['name'] == action[1]:
+                    return at
+        self.name = name
+        elements = []
+        atype = "%sActionT" %(CamelCase(name))
+        for idx, at in enumerate(actions):
+            elements.append(ast.EnumElement(at, "", idx))
+        self.enum = ast.Enum(atype, elements)
+        fields = []
+        fields.append(ast.StructMember(atype, "_action"))
+        for at in enumerate(actions):
+            info = findActionInfo(action_info, at)
+            runtime_data = info['runtime_data']
+            for data in runtime_data:
+                data_width = data['bitwidth']
+                data_name = data['name']
+                fields.append(ast.StructMember("Bit#(%s)" %(data_width), data_name))
+        self.struct = ast.Struct("%sRspT"%(CamelCase(self.name)), fields)
+
+    def emit(self, builder):
+        self.enum.emit(builder)
         self.struct.emitTypeDefStruct(builder)
 

@@ -23,7 +23,7 @@ import logging
 from lib.sourceCodeBuilder import SourceCodeBuilder
 from lib.utils import CamelCase
 import lib.ast as ast
-from bsvgen_struct import StructT
+from bsvgen_struct import StructT, StructTableReqT, StructTableRspT
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ IRQ_TEMPLATE = """Vector#(%(sz)s, Bool) readyBits = map(fifoNotEmpty, %(fifo)s);
 
 class Table(object):
     required_attributes = ["name", "match_type", "max_size", "key", "actions"]
-    def __init__(self, table_attrs, basic_block_map):
+    def __init__(self, table_attrs, basic_block_map, json_dict):
         self.name = table_attrs["name"]
         self.match_type = table_attrs['match_type']
         self.depth = table_attrs['max_size']
@@ -54,6 +54,7 @@ class Table(object):
         self.rsp_name = "%sRspT" % (CamelCase(self.name))
         self.response = StructT(self.rsp_name)
         self.basic_block_map = basic_block_map
+        self.json_dict = json_dict
 
     def __repr__(self):
         return "{} ({}, {}, {}, {})".format(
@@ -70,16 +71,20 @@ class Table(object):
         return keys
 
     def buildRuleMatchRequest(self):
-        TMP1 = "let data = rx_info_%(name)s.get;"
-        TMP2 = "match {.pkt, .meta} = data;"
+        TMP1 = "let data = rx_info_%(name)s.first;"
+        TMP2 = "let meta = data.meta;"
+        TMP8 = "let pkt = data.pkt;"
         TMP3 = "%(type)s req = %(type)s {%(field)s};"
         TMP4 = "matchTable.lookupPort.request.put(pack(req));"
         TMP5 = "let %(name)s = fromMaybe(?, meta.%(name)s);"
         TMP6 = "{%(field)s}"
+        TMP7 = "rx_info_%(name)s.deq;"
         rname = "rl_handle_request"
         stmt = []
         stmt.append(ast.Template(TMP1, {"name": "metadata"}))
+        stmt.append(ast.Template(TMP7, {"name": "metadata"}))
         stmt.append(ast.Template(TMP2))
+        stmt.append(ast.Template(TMP8))
         keys = self.buildMatchKey()
         fields = []
         for k in keys:
@@ -100,14 +105,14 @@ class Table(object):
         TMP4 = "%(type)s resp = unpack(data);"
         TMP7 = "metadata_ff[1].enq(meta);"
 
-        TMP8 = "BBRequest req = tagged BB%(type)sRequest {%(field)s};"
+        TMP8 = "BBRequest req = tagged %(type)sReqT {%(field)s};"
         TMP9 = "bbReqFifo[%(id)s].enq(req); //FIXME: replace with RXTX."
 
         stmt = []
         stmt.append(ast.Template(TMP1))
         stmt.append(ast.Template(TMP2))
         stmt.append(ast.Template(TMP3))
-        case_stmt = ast.Case("resp.p4_action")
+        case_stmt = ast.Case("resp._action")
 
         for idx, action in enumerate(self.actions):
             basic_block = self.basic_block_map[action]
@@ -132,11 +137,11 @@ class Table(object):
         return rule
 
     def buildRuleMatchResponseStmt(self):
-        TMP1 = "let v <- toGet(bbRespFifo[readyChannel]).get;"
+        TMP1 = "let v <- toGet(bbRspFifo[readyChannel]).get;"
         TMP2 = "let meta <- toGet(metadata_ff[1]).get;"
-        TMP3 = "tagged BB%(name)sResponse {%(field)s}"
+        TMP3 = "tagged %(name)sRspT {%(field)s}"
         TMP4 = "MetadataRspT rsp = MetadataRspT {pkt: pkt, meta: meta};"
-        TMP5 = "tx_info_%(name)s.put(rsp);"
+        TMP5 = "tx_info_%(name)s.enq(rsp);"
         TMP6 = "meta.%(name)s = tagged Valid %(name)s;"
 
         stmt = []
@@ -167,8 +172,8 @@ class Table(object):
         return rule
 
     def buildTXRX(self, pname):
-        TMP1 = "RX #(%(type)sRequest) rx_%(name)s <- mkRX;"
-        TMP3 = "TX #(%(type)sResponse) tx_%(name)s <- mkTX;"
+        TMP1 = "RX #(%(type)sReqT) rx_%(name)s <- mkRX;"
+        TMP3 = "TX #(%(type)sRspT) tx_%(name)s <- mkTX;"
         TMP2 = "let rx_info_%(name)s = rx_%(name)s.u;"
         TMP4 = "let tx_info_%(name)s = tx_%(name)s.u;"
         stmt = []
@@ -183,7 +188,7 @@ class Table(object):
         TMP1 = "let data = rx_info_%(name)s.get;"
         TMP2 = "match {.pkt, .meta} = data;"
 
-        TMP8 = "BBRequest req = tagged BB%(type)sRequest {%(field)s};"
+        TMP8 = "BBRequest req = tagged %(type)sReqT {%(field)s};"
         TMP9 = "bbReqFifo[%(id)s].enq(req); //FIXME: replace with RXTX."
 
         stmt = []
@@ -203,9 +208,9 @@ class Table(object):
         return rule
 
     def buildRuleActionResponse(self):
-        TMP1 = "let v <- toGet(bbRespFifo[readyChannel]).get;"
+        TMP1 = "let v <- toGet(bbRspFifo[readyChannel]).get;"
         TMP2 = "let meta <- toGet(metadata_ff[1]).get;"
-        TMP3 = "tagged BB%(name)sResponse {%(field)s}"
+        TMP3 = "tagged %(name)sRspT {%(field)s}"
         TMP4 = "MetadataRspT rsp = MetadataRspT {pkt: pkt, meta: meta};"
         TMP5 = "tx_info_%(name)s.put(rsp);"
         TMP6 = "meta.%(name)s = tagged Valid %(name)s"
@@ -238,10 +243,11 @@ class Table(object):
     def buildModuleStmt(self):
         TMP1 = "Vector#(%(num)s, FIFOF#(BBRequest)) bbReqFifo <- replicateM(mkFIFOF);"
         TMP2 = "Vector#(%(num)s, FIFOF#(BBResponse)) bbRspFifo <- replicateM(mkFIFOF);"
-        TMP3 = "MatchTable#(%(sz)s, SizeOf#(%(reqT)s), SizeOf#(%(rspT)s)) tbl <- mkMatchTable();"
-        TMP4 = "interface next_control_state_%(id)s = toClient(bbReqFifo[%(id)s], bbRespFifo[%(id)s]);"
-        TMP5 = "interface prev_control_state_%(id)s = toServer(tx_info_%(name)s.e, rx_info_%(name)s.e);"
+        TMP3 = "MatchTable#(%(sz)s, SizeOf#(%(reqT)s), SizeOf#(%(rspT)s)) matchTable <- mkMatchTable();"
+        TMP4 = "interface next_control_state_%(id)s = toClient(bbReqFifo[%(id)s], bbRspFifo[%(id)s]);"
+        TMP5 = "interface prev_control_state_%(id)s = toServer(rx_%(name)s.e, tx_%(name)s.e);"
         TMP6 = "Vector#(2, FIFOF#(MetadataT)) metadata_ff <- replicateM(mkFIFOF);"
+        TMP7 = "FIFOF#(PacketInstance) packet_ff <- mkFIFOF;"
 
         stmt = []
         stmt += self.buildTXRX("metadata")
@@ -249,6 +255,7 @@ class Table(object):
         num = len(self.actions)
         stmt.append(ast.Template(TMP1, {"num": num}))
         stmt.append(ast.Template(TMP2, {"num": num}))
+        stmt.append(ast.Template(TMP7))
 
         if len(self.key) != 0:
             reqT = "%sReqT" % (CamelCase(self.name))
@@ -300,15 +307,22 @@ class Table(object):
         module.emit(builder)
 
     def emitKeyType(self, builder):
-        pass
+        header_types = self.json_dict['header_types']
+        headers = self.json_dict['headers']
+        req_struct = StructTableReqT(self.name, self.key, header_types, headers)
+        req_struct.emit(builder)
+
+        action_info = self.json_dict['actions']
+        rsp_struct = StructTableRspT(self.name, self.actions, action_info)
+        rsp_struct.emit(builder)
 
     def emitValueType(self, builder):
         pass
 
     def emit(self, builder):
         assert isinstance(builder, SourceCodeBuilder)
-        self.emitKeyType(builder)
         self.emitValueType(builder)
+        self.emitKeyType(builder)
         self.emitInterface(builder)
         self.emitModule(builder)
 
