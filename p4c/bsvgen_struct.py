@@ -35,7 +35,6 @@ instance DefaultMask#(%(name)s);
 endinstance"""
 
 def field_width(field, header_types, headers):
-    print field
     header_type = None
     for h in headers:
         if h['name'] == field[0]:
@@ -94,11 +93,10 @@ class StructM(object):
 
     def build_case_expr(self):
         e = ["pkt: pkt"]
-        #print self.members
         for m in self.members:
             e.append("%s: %s" % (m[1], m[1]))
         for m in self.runtime_data:
-            e.append("runtime_%s: runtime_%s" % (m[1], m[1]))
+            e.append("runtime_%s: resp.runtime_%s" % (m[1], m[1]))
         return ", ".join(e)
 
     def get_members(self):
@@ -159,6 +157,14 @@ class StructMetadata(object):
                 width = f[0]
                 name = "runtime_%s" %(f[1])
                 fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
+
+        for f in ir.controls.values():
+            for _, v in f.tables.items():
+                for k in v.key:
+                    width = field_width(k['target'], header_types, headers)
+                    name = "$".join(k['target'])
+                    fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
+
         self.struct = ast.Struct(self.name, fields)
 
     def emit(self, builder):
@@ -202,7 +208,7 @@ class StructTableRspT(object):
             runtime_data = info['runtime_data']
             for data in runtime_data:
                 data_width = data['bitwidth']
-                data_name = data['name']
+                data_name = "runtime_%s"%(data['name'])
                 fields.append(ast.StructMember("Bit#(%s)" %(data_width), data_name))
         self.struct = ast.Struct("%sRspT"%(CamelCase(self.name)), fields)
 
