@@ -208,15 +208,16 @@ def render_pipelines(ir, json_dict):
 
         control.init_table = pipeline['init_table']
 
-        for t in pipeline["tables"]:
+        for t in sorted(pipeline["tables"]):
             tname = t['name']
             basic_blocks = ir.basic_blocks
             control.tables[tname] = Table(t, basic_blocks, json_dict)
-            for idx, action in enumerate(t['actions']):
+            for idx, action in sorted(enumerate(t['actions'])):
                 basic_block = ir.basic_blocks[action]
+                print action
                 control.basic_blocks.append(basic_block)
 
-        for c in pipeline["conditionals"]:
+        for c in sorted(pipeline["conditionals"]):
             cname = c['name']
             expr = []
             build_expression(c["expression"], expr)

@@ -121,11 +121,11 @@ class Control (object):
 
 
     def buildConditionalStmt(self, tblName, stmt):
-        TMP1 = "MetadataRequest req = tagged %(name)sRequest {pkt: pkt, meta: meta};"
+        TMP1 = "MetadataRequest req = MetadataRequest {pkt: pkt, meta: meta};"
         TMP2 = "%(name)s_req_ff.enq(req);"
         def search_conditional (name):
             for key, cond in self.conditionals.items():
-                print key, cond
+                #print key, cond
                 if key == name:
                     return cond
             return None
@@ -148,7 +148,7 @@ class Control (object):
         if tblName in self.conditionals:
             cond = search_conditional(tblName)
             expr = cond['expression']
-            print 'www', expr
+            #print 'www', expr
             true_next = cond['true_next']
             false_next = cond['false_next']
             if true_next in self.tables:
