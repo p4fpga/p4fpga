@@ -210,7 +210,7 @@ def render_pipelines(ir, json_dict):
 
         control.init_table = pipeline['init_table']
 
-        for t in sorted(pipeline["tables"]):
+        for t in sorted(pipeline["tables"], key=lambda k: k['name'], reverse=False):
             tname = t['name']
             basic_blocks = ir.basic_blocks
             control.tables[tname] = Table(t, basic_blocks, json_dict)
