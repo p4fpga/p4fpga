@@ -100,9 +100,9 @@ class Control (object):
 
     def buildDefaultRuleStmt(self, nextState):
         TMP1 = "default_req_ff.deq;"
-        TMP2 = "let req = default_req_ff.first;"
-        TMP3 = "let meta = req.meta;"
-        TMP4 = "let pkt = req.pkt;"
+        TMP2 = "let _req = default_req_ff.first;"
+        TMP3 = "let meta = _req.meta;"
+        TMP4 = "let pkt = _req.pkt;"
         stmt = []
         stmt.append(ast.Template(TMP1))
         stmt.append(ast.Template(TMP2))
@@ -125,13 +125,13 @@ class Control (object):
         TMP2 = "%(name)s_req_ff.enq(req);"
         def search_conditional (name):
             for key, cond in self.conditionals.items():
-                #print key, cond
+                print key, cond
                 if key == name:
                     return cond
             return None
 
         if tblName is None:
-            stmt.append(ast.Template("MetadataRequest req = tagged ForwardRequest {pkt: pkt, meta: meta};"))
+            stmt.append(ast.Template("MetadataRequest request = MetadataRequest {pkt: pkt, meta: meta};"))
             #stmt.append(ast.Template("currPacketFifo.enq(req);"))
 
         if tblName in self.tables:
@@ -148,6 +148,7 @@ class Control (object):
         if tblName in self.conditionals:
             cond = search_conditional(tblName)
             expr = cond['expression']
+            print 'www', expr
             true_next = cond['true_next']
             false_next = cond['false_next']
             if true_next in self.tables:
@@ -173,9 +174,9 @@ class Control (object):
 
     def buildTableRuleStmt(self, tblName):
         TMP1 = "%(tblName)s_rsp_ff.deq;"
-        TMP2 = "let req = %(tblName)s_rsp_ff.first;"
-        TMP3 = "let meta = req.meta;"
-        TMP4 = "let pkt = req.pkt;"
+        TMP2 = "let _req = %(tblName)s_rsp_ff.first;"
+        TMP3 = "let meta = _req.meta;"
+        TMP4 = "let pkt = _req.pkt;"
         stmt = []
         stmt.append(ast.Template(TMP1, {"tblName": tblName}))
         stmt.append(ast.Template(TMP2, {"tblName": tblName}));

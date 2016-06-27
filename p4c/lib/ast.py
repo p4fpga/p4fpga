@@ -27,6 +27,8 @@ import logging
 import os
 import sys
 import traceback
+from lib.utils import CamelCase
+from collections import OrderedDict
 
 logger = logging.getLogger(__name__)
 
@@ -260,7 +262,7 @@ class EnumElement:
         return '{enumelt: %s %s}' % (self.name, self.value)
     def emit(self, builder, isLast):
         builder.emitIndent()
-        builder.append("%s" % (self.name.upper()))
+        builder.append("%s" % (CamelCase(self.name).upper()))
         if not isLast:
             builder.append(",")
         builder.newline()
@@ -377,7 +379,7 @@ class Type:
 class Case:
     def __init__(self, expression):
         self.expression = expression
-        self.casePatItem = dict()
+        self.casePatItem = OrderedDict()
         self.casePatStmt = {} # {'casePat' : [stmt]}
         self.defaultItem = []
 

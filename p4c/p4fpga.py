@@ -220,7 +220,11 @@ def render_pipelines(ir, json_dict):
             cname = c['name']
             expr = []
             build_expression(c["expression"], expr)
-            control.conditionals[cname] = {'expression': " ".join(expr),
+            if expr[1] == "valid":
+                _expr = "isValid(%s)" % ("meta."+"_".join(expr[1:-1]))
+            else:
+                _expr = " ".join(expr)
+            control.conditionals[cname] = {'expression': _expr,
                                            'true_next': c['true_next'],
                                            'false_next': c['false_next']}
             control.entry.append(cname)

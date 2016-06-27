@@ -64,7 +64,7 @@ class RegisterRead(Primitive):
         return stmt
 
     def buildReadRequest(self):
-        TMP1 = "let %(name)s_req = %(type)sReqT { addr: %(addr)s, data: ?, write: False };"
+        TMP1 = "let %(name)s_req = RegRequest { addr: %(addr)s, data: ?, write: False };"
         TMP2 = "tx_info_%(name)s.enq(%(name)s_req);"
         name = self.parameters[1]['value']
         ptype = CamelCase(name) #FIXME
@@ -73,22 +73,29 @@ class RegisterRead(Primitive):
         else:
             addr = self.parameters[2]['value'][0]
         stmt = []
+        if addr != "0":
+            addr = "truncate(" + addr + ")"
         stmt.append(ast.Template(TMP1, {"name": name, "type": ptype, "addr": addr}))
         stmt.append(ast.Template(TMP2, {"name": name}))
         return stmt
 
     def buildReadResponse(self):
-        TMP1 = "let %(name)s = rx_info_%(name)s.get;"
+        TMP1 = "let v_%(name)s = rx_info_%(tname)s.first;"
+        TMP2 = "rx_info_%(tname)s.deq;"
+        TMP3 = "let %(name)s = v_%(name)s.data;"
         name = self.parameters[0]['value'][1]
+        tname = self.parameters[1]['value']
         stmt = []
-        stmt.append(ast.Template(TMP1, {"name": name}))
+        stmt.append(ast.Template(TMP1, {"name": name, "tname": tname}))
+        stmt.append(ast.Template(TMP2, {"name": name, "tname": tname}))
+        stmt.append(ast.Template(TMP3, {"name": name, "tname": tname}))
         return stmt
 
     def buildTXRX(self, json_dict):
-        TMP1 = "RX #(RegRequest#(%(asz)s, %(dsz)s)) rx_%(name)s <- mkRX;"
-        TMP2 = "TX #(RegResponse#(%(dsz)s)) tx_%(name)s <- mkTX;"
-        TMP3 = "let rx_info_%(name)s = rx_%(name)s.u;"
-        TMP4 = "let tx_info_%(name)s = tx_%(name)s.u;"
+        TMP1 = "TX #(RegRequest#(%(asz)s, %(dsz)s)) tx_%(name)s <- mkTX;"
+        TMP2 = "RX #(RegResponse#(%(dsz)s)) rx_%(name)s <- mkRX;"
+        TMP3 = "let tx_info_%(name)s = tx_%(name)s.u;"
+        TMP4 = "let rx_info_%(name)s = rx_%(name)s.u;"
         stmt = []
         name = self.parameters[1]['value']
         dsz, asz= get_reg_array_size(name, json_dict)
@@ -107,12 +114,13 @@ class RegisterRead(Primitive):
         ptype = CamelCase(tname)
         dsz, asz= get_reg_array_size(name, json_dict)
         pdict = {'name': name, 'asz': asz, 'dsz': dsz}
-        intf = ast.Interface(tname, typeDefType = TMP1 % pdict)
+        print tname
+        intf = ast.Interface(name, typeDefType = TMP1 % pdict)
         stmt.append(intf)
         return stmt
 
     def buildInterfaceDef(self):
-        TMP1 = "interface %(name)s = toClient #(tx_info_%(name)s.e, rx_info_%(name)s.e);"
+        TMP1 = "interface %(name)s = toClient(tx_%(name)s.e, rx_%(name)s.e);"
         stmt = []
         name = self.parameters[1]['value']
         tname = self.parameters[0]['value'][1]
@@ -134,7 +142,7 @@ class RegisterWrite(Primitive):
         return stmt
 
     def buildWriteRequest(self):
-        TMP1 = "let %(name)s_req = %(type)sReqT { addr: %(addr)s, data: %(data)s, write: True };"
+        TMP1 = "let %(name)s_req = RegRequest { addr: truncate(%(addr)s), data: %(data)s, write: True };"
         TMP2 = "tx_info_%(name)s.enq(%(name)s_req);"
         name = self.parameters[0]['value']
         ptype = CamelCase(name)
@@ -152,10 +160,10 @@ class RegisterWrite(Primitive):
         return stmt
 
     def buildTXRX(self, json_dict):
-        TMP1 = "RX #(RegRequest#(%(asz)s, %(dsz)s)) rx_%(name)s <- mkRX;"
-        TMP2 = "TX #(RegResponse#(%(dsz)s)) tx_%(name)s <- mkTX;"
-        TMP3 = "let rx_info_%(name)s = rx_%(name)s.u;"
-        TMP4 = "let tx_info_%(name)s = tx_%(name)s.u;"
+        TMP1 = "TX #(RegRequest#(%(asz)s, %(dsz)s)) tx_%(name)s <- mkTX;"
+        TMP2 = "RX #(RegResponse#(%(dsz)s)) rx_%(name)s <- mkRX;"
+        TMP3 = "let tx_info_%(name)s = tx_%(name)s.u;"
+        TMP4 = "let rx_info_%(name)s = rx_%(name)s.u;"
         stmt = []
         name = self.parameters[0]['value']
         dsz, asz= get_reg_array_size(name, json_dict)
@@ -178,7 +186,7 @@ class RegisterWrite(Primitive):
         return stmt
 
     def buildInterfaceDef(self):
-        TMP1 = "interface %(name)s = toClient #(tx_info_%(name)s.e, rx_info_%(name)s.e);"
+        TMP1 = "interface %(name)s = toClient(tx_%(name)s.e, rx_%(name)s.e);"
         stmt = []
         name = self.parameters[0]['value']
         tname = self.parameters[2]['value'][1]

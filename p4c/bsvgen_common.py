@@ -59,7 +59,8 @@ def emit_import(builder):
     import_modules = ["Connectable", "DefaultValue", "FIFO", "FIFOF", "FShow",
                       "GetPut", "List", "StmtFSM", "SpecialFIFOs", "Vector",
                       "Ethernet", "ClientServer", "DbgDefs", "PacketBuffer", 
-                      "Pipe", "MatchTable", "MatchTableSim", "Utils", "TxRx"]
+                      "Pipe", "MatchTable", "MatchTableSim", "Utils", "TxRx",
+                      "Register"]
     pmap['imports'] = "\n".join(["import {}::*;".format(x) for x in sorted(import_modules)])
     builder.append(IMPORT_TEMPLATE % (pmap))
 

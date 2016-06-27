@@ -186,17 +186,21 @@ class Table(object):
         return stmt
 
     def buildRuleActionRequest(self):
-        TMP1 = "let data = rx_info_%(name)s.get;"
-        TMP2 = "match {.pkt, .meta} = data;"
+        TMP1 = "let data = rx_info_%(name)s.first;"
+        TMP2 = "rx_info_%(name)s.deq;"
+        TMP3 = "let meta = data.meta;"
+        TMP4 = "let pkt = data.pkt;"
 
         TMP8 = "BBRequest req = tagged %(type)sReqT {%(field)s};"
         TMP9 = "bbReqFifo[%(id)s].enq(req); //FIXME: replace with RXTX."
 
         stmt = []
         stmt.append(ast.Template(TMP1, {"name": "metadata"}))
-        stmt.append(ast.Template(TMP2))
+        stmt.append(ast.Template(TMP2, {"name": "metadata"}))
+        stmt.append(ast.Template(TMP3))
+        stmt.append(ast.Template(TMP4))
         stmt.append(ast.Template("packet_ff.enq(pkt);"))
-        stmt.append(ast.Template("metadata_ff[0].enq(meta);"))
+        stmt.append(ast.Template("metadata_ff.enq(meta);"))
         for idx, action in enumerate(self.actions):
             basic_block = self.basic_block_map[action]
             fields = basic_block.request.build_case_expr()
@@ -210,11 +214,11 @@ class Table(object):
 
     def buildRuleActionResponse(self):
         TMP1 = "let v <- toGet(bbRspFifo[readyChannel]).get;"
-        TMP2 = "let meta <- toGet(metadata_ff[1]).get;"
+        TMP2 = "let meta <- toGet(metadata_ff).get;"
         TMP3 = "tagged %(name)sRspT {%(field)s}"
         TMP4 = "MetadataResponse rsp = MetadataResponse {pkt: pkt, meta: meta};"
         TMP5 = "tx_info_%(name)s.put(rsp);"
-        TMP6 = "meta.%(name)s = tagged Valid %(name)s"
+        TMP6 = "meta.%(name)s = tagged Valid %(name)s;"
 
         stmt = []
         case_stmt = ast.Case("v")
@@ -248,6 +252,7 @@ class Table(object):
         TMP4 = "interface next_control_state_%(id)s = toClient(bbReqFifo[%(id)s], bbRspFifo[%(id)s]);"
         TMP5 = "interface prev_control_state_%(id)s = toServer(rx_%(name)s.e, tx_%(name)s.e);"
         TMP6 = "Vector#(2, FIFOF#(MetadataT)) metadata_ff <- replicateM(mkFIFOF);"
+        TMP8 = "FIFOF#(MetadataT) metadata_ff <- mkFIFOF;"
         TMP7 = "FIFOF#(PacketInstance) packet_ff <- mkFIFOF;"
 
         stmt = []
@@ -273,6 +278,7 @@ class Table(object):
             stmt.append(self.buildRuleExecuteAction())
             stmt.append(self.buildRuleMatchResponse())
         else:
+            stmt.append(ast.Template(TMP8))
             stmt.append(self.buildRuleActionRequest())
             stmt.append(self.buildRuleActionResponse())
 
