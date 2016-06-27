@@ -190,6 +190,7 @@ class Table(object):
         TMP2 = "rx_info_%(name)s.deq;"
         TMP3 = "let meta = data.meta;"
         TMP4 = "let pkt = data.pkt;"
+        TMP5 = "let %(field)s = fromMaybe(?, meta.%(field)s);"
 
         TMP8 = "BBRequest req = tagged %(type)sReqT {%(field)s};"
         TMP9 = "bbReqFifo[%(id)s].enq(req); //FIXME: replace with RXTX."
@@ -201,6 +202,12 @@ class Table(object):
         stmt.append(ast.Template(TMP4))
         stmt.append(ast.Template("packet_ff.enq(pkt);"))
         stmt.append(ast.Template("metadata_ff.enq(meta);"))
+
+        for idx, action in enumerate(self.actions):
+            basic_block = self.basic_block_map[action]
+            for f in basic_block.request.members:
+                stmt.append(ast.Template(TMP5, {"field": "$".join(f)}))
+
         for idx, action in enumerate(self.actions):
             basic_block = self.basic_block_map[action]
             fields = basic_block.request.build_case_expr()

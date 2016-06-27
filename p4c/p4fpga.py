@@ -241,7 +241,8 @@ def render_basic_blocks(ir, json_dict):
         ** optimization to be done.
     '''
     actions = json_dict["actions"]
-    for action in actions:
+    # sort actions by name to ensure generated code are consistent every time.
+    for action in sorted(actions, key=lambda k: k['name'], reverse=False):
         name = action["name"]
         basicblock = BasicBlock(action, json_dict)
         ir.basic_blocks[name] = basicblock

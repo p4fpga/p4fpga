@@ -241,7 +241,7 @@ class Control (object):
         module.emit(builder)
 
     def emit(self, builder):
-        for t in self.tables.values():
+        for t in sorted(self.tables.values()):
             t.emit(builder)
         self.emitInterface(builder)
         self.emitModule(builder)
