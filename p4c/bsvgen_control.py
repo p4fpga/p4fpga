@@ -119,8 +119,7 @@ class Control (object):
             _if.stmt += self.buildIfStmt(true, false)
         return _if
 
-
-    def buildConditionalStmt(self, tblName, stmt):
+    def buildConditionalStmt(self, tblName, stmt, metadata=set()):
         TMP1 = "MetadataRequest req = MetadataRequest {pkt: pkt, meta: meta};"
         TMP2 = "%(name)s_req_ff.enq(req);"
         def search_conditional (name):
@@ -141,7 +140,7 @@ class Control (object):
                     #stmt.append(ast.Template("currPacketFifo.enq(req);"))
                     pass
                 elif next_table in self.conditionals:
-                    self.buildConditionalStmt(next_table, stmt)
+                    self.buildConditionalStmt(next_table, stmt, metadata)
                 else:
                     raise Exception("ERROR: ConditionalStmt", tblName, next_table)
 
@@ -151,6 +150,12 @@ class Control (object):
             #print 'www', expr
             true_next = cond['true_next']
             false_next = cond['false_next']
+            _meta = cond['metadata']
+            for m in _meta:
+                if type(m) is list:
+                    metadata.add(tuple(m))
+                else:
+                    metadata.add(m)
             if true_next in self.tables:
                 _stmt = []
                 _stmt.append(ast.Template(TMP1, {"name": CamelCase(true_next)}))
@@ -164,11 +169,11 @@ class Control (object):
 
             if true_next in self.conditionals:
                 _stmt = []
-                self.buildConditionalStmt(true_next, _stmt)
+                self.buildConditionalStmt(true_next, _stmt, metadata)
                 stmt.append(ast.If(expr, _stmt))
             if false_next in self.conditionals:
                 _stmt = []
-                self.buildConditionalStmt(false_next, _stmt)
+                self.buildConditionalStmt(false_next, _stmt, metadata)
                 stmt.append(ast.Else(_stmt))
         return stmt
 
@@ -177,19 +182,25 @@ class Control (object):
         TMP2 = "let _req = %(tblName)s_rsp_ff.first;"
         TMP3 = "let meta = _req.meta;"
         TMP4 = "let pkt = _req.pkt;"
+        TMP5 = "let %(name)s = fromMaybe(?, meta.%(name)s);"
         stmt = []
         stmt.append(ast.Template(TMP1, {"tblName": tblName}))
         stmt.append(ast.Template(TMP2, {"tblName": tblName}));
         stmt.append(ast.Template(TMP3));
         stmt.append(ast.Template(TMP4));
         _stmt = []
-        self.buildConditionalStmt(tblName, _stmt)
+        metadata = set()
+        self.buildConditionalStmt(tblName, _stmt, metadata)
+        for m in metadata:
+            if type(m) is tuple:
+                stmt.append(ast.Template(TMP5, {"name": "$".join(m)}))
+        #print 'yyy', metadata
         stmt += _stmt
         return stmt
 
     def buildRules(self):
-        TMP1 = "%(name)s_req_ff.notEmpty"#first matches tagged %(type)sRequest {pkt: .pkt, meta: .meta}"
-        TMP2 = "%(name)s_rsp_ff.notEmpty"#first matches tagged %(type)sRequest {pkt: .pkt, meta: .meta}"
+        TMP1 = "%(name)s_req_ff.notEmpty"
+        TMP2 = "%(name)s_rsp_ff.notEmpty"
         rules = []
         rname = "default_next_state"
         cond = TMP1 % ({"name": "default", "type": "Default"})

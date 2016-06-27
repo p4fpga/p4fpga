@@ -150,7 +150,7 @@ def render_deparsers(ir, json_dict):
     # TODO: generate IR_basic_block objects
     pass
 
-def build_expression(json_data, sb=[]):
+def build_expression(json_data, sb=[], metadata=[]):
     if not json_data:
         return
     json_type = json_data["type"]
@@ -163,28 +163,30 @@ def build_expression(json_data, sb=[]):
         sb.append("(")
         if (op == "?"):
             json_cond = json_data["cond"]
-            build_expression(value["left"], sb)
+            build_expression(value["left"], sb, metadata)
             sb.append(op)
-            build_expression(value["right"], sb)
+            build_expression(value["right"], sb, metadata)
             sb.append(")")
         else:
             if ((op == "+") or op == "-") and json_left is None:
                 print "expr push back load const"
             else:
-                build_expression(json_left, sb)
+                build_expression(json_left, sb, metadata)
             sb.append(op)
-            build_expression(json_right, sb)
+            build_expression(json_right, sb, metadata)
             sb.append(")")
     elif (json_type == "header"):
         if type(json_value) == list:
-            sb.append(".".join(json_value))
+            sb.append("$".join(json_value))
         else:
             sb.append(json_value)
+        metadata.append(json_value)
     elif (json_type == "field"):
         if type(json_value) == list:
-            sb.append(".".join(json_value))
+            sb.append("$".join(json_value))
         else:
             sb.append(json_value)
+        metadata.append(json_value)
     elif (json_type == "bool"):
         sb.append(json_value)
     elif (json_type == "hexstr"):
@@ -220,14 +222,17 @@ def render_pipelines(ir, json_dict):
         for c in sorted(pipeline["conditionals"]):
             cname = c['name']
             expr = []
-            build_expression(c["expression"], expr)
+            metadata = []
+            build_expression(c["expression"], expr, metadata)
             if expr[1] == "valid":
                 _expr = "isValid(%s)" % ("meta."+"_".join(expr[1:-1]))
             else:
                 _expr = " ".join(expr)
+            #print 'zaaa', cname, metadata
             control.conditionals[cname] = {'expression': _expr,
                                            'true_next': c['true_next'],
-                                           'false_next': c['false_next']}
+                                           'false_next': c['false_next'],
+                                           'metadata': metadata}
             control.entry.append(cname)
 
         # registers
