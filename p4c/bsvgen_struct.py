@@ -192,8 +192,8 @@ class StructTableReqT(object):
             total_width += width
             name = "$".join(k['target'])
             fields.append(ast.StructMember("Bit#(%s)" %(width), name))
-        pad_width = 9 - total_width % 9
-        if pad_width != 0:
+        if (total_width % 9):
+            pad_width = 9 - total_width % 9
             fields.append(ast.StructMember("Bit#(%s)" %(pad_width), "padding"))
 
         self.struct = ast.Struct("%sReqT"%(CamelCase(self.name)), fields)
