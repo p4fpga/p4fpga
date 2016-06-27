@@ -47,6 +47,9 @@ class ModifyField(Primitive):
         self.op = op
         self.parameters = parameters
 
+    def __repr__(self):
+        return "%s %s" %(self.op, self.parameters)
+
     def build(self):
         stmt = []
         return stmt
@@ -83,7 +86,7 @@ class RegisterRead(Primitive):
         TMP1 = "let v_%(name)s = rx_info_%(tname)s.first;"
         TMP2 = "rx_info_%(tname)s.deq;"
         TMP3 = "let %(name)s = v_%(name)s.data;"
-        name = self.parameters[0]['value'][1]
+        name = "$".join(self.parameters[0]['value'])
         tname = self.parameters[1]['value']
         stmt = []
         stmt.append(ast.Template(TMP1, {"name": name, "tname": tname}))
@@ -114,7 +117,6 @@ class RegisterRead(Primitive):
         ptype = CamelCase(tname)
         dsz, asz= get_reg_array_size(name, json_dict)
         pdict = {'name': name, 'asz': asz, 'dsz': dsz}
-        print tname
         intf = ast.Interface(name, typeDefType = TMP1 % pdict)
         stmt.append(intf)
         return stmt
@@ -136,6 +138,12 @@ class RegisterWrite(Primitive):
 
     def isRegWrite(self):
         return True
+
+    def getDstReg(self):
+        return "$".join(self.parameters[2]['value'])
+
+    def getName(self):
+        return self.parameters[0]['value']
 
     def build(self):
         stmt = []
@@ -166,14 +174,17 @@ class RegisterWrite(Primitive):
         TMP2 = "RX #(RegResponse#(%(dsz)s)) rx_%(name)s <- mkRX;"
         TMP3 = "let tx_info_%(name)s = tx_%(name)s.u;"
         TMP4 = "let rx_info_%(name)s = rx_%(name)s.u;"
+        TMP5 = "Reg#(Bit#(%(dsz)s)) rg_%(field)s <- mkReg(0);"
         stmt = []
         name = self.parameters[0]['value']
+        field = "$".join(self.parameters[2]['value'])
         dsz, asz= get_reg_array_size(name, json_dict)
-        pdict = {'name': name, 'asz': asz, 'dsz': dsz}
+        pdict = {'name': name, 'asz': asz, 'dsz': dsz, 'field': field}
         stmt.append(ast.Template(TMP1, pdict))
         stmt.append(ast.Template(TMP2, pdict))
         stmt.append(ast.Template(TMP3, pdict))
         stmt.append(ast.Template(TMP4, pdict))
+        stmt.append(ast.Template(TMP5, pdict))
         return stmt
 
     def buildInterface(self, json_dict):

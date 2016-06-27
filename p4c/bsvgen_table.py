@@ -19,6 +19,7 @@
 # DEALINGS IN THE SOFTWARE.
 #
 
+import math
 import logging
 from lib.sourceCodeBuilder import SourceCodeBuilder
 from lib.utils import CamelCase
@@ -273,7 +274,9 @@ class Table(object):
         if len(self.key) != 0:
             reqT = "%sReqT" % (CamelCase(self.name))
             rspT = "%sRspT" % (CamelCase(self.name))
-            pdict = {"sz": self.depth, "reqT": reqT, "rspT": rspT}
+            # size must be 256 or multiple of 256
+            size = int(256 * math.ceil(float(self.depth)/256))
+            pdict = {"sz": size, "reqT": reqT, "rspT": rspT}
             stmt.append(ast.Template(TMP3, pdict))
 
         pdict = {"sz": num, "szminus1": num-1, "fifo": "bbRspFifo"}

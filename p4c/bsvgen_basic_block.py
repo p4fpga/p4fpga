@@ -26,6 +26,7 @@ import lib.ast as ast
 import primitives as prm
 from lib.exceptions import CompilationException
 from bsvgen_struct import Struct, StructM
+from collections import OrderedDict
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,10 @@ class BasicBlock(object):
             self.meta_read |= meta_read
             self.meta_write |= meta_write
         # perform RAW optimization
+        # build mapping between dst_field and src_field
+        self.bypass_map = None
         self.optimize()
+        #print self.bypass_map
 
         header_types = json_dict['header_types']
         header_instances = json_dict['headers']
@@ -62,10 +66,10 @@ class BasicBlock(object):
         self.runtime_data = runtime_data
 
         req_name = "%sReqT" % (CamelCase(self.name))
-        self.request = StructM(req_name, self.meta_read, header_types, header_instances, runtime_data)
+        self.request = StructM(req_name, self.meta_read, header_types, header_instances, runtime_data=runtime_data)
 
         rsp_name = "%sRspT" % (CamelCase(self.name))
-        self.response = StructM(rsp_name, self.meta_write, header_types, header_instances)
+        self.response = StructM(rsp_name, self.meta_write, header_types, header_instances, bypass_map=self.bypass_map)
 
         self.clientInterfaces = self.buildClientInterfaces(json_dict)
         self.serverInterfaces = self.buildServerInterfaces(json_dict)
@@ -94,6 +98,7 @@ class BasicBlock(object):
             return None
 
         newPrimitives = []
+        bypass_map = OrderedDict()
 
         rset = set()
         wset = set()
@@ -108,6 +113,10 @@ class BasicBlock(object):
                     param.append(p.parameters[0])
                     param.append(dst_field)
                     _p = prm.ModifyField("modify_field", param)
+                    _src = "$".join(dst_field['value'])
+                    _dst = "$".join(p.parameters[0]['value'])
+                    bypass_map[_dst] = _src
+                    logger.info("BYPASS: %s", _p)
                     newPrimitives.append(_p)
                 else:
                     newPrimitives.append(p)
@@ -118,6 +127,7 @@ class BasicBlock(object):
                 newPrimitives.append(p)
 
         self.primitives = newPrimitives
+        self.bypass_map = bypass_map
 
     def buildPrimitives(self, p):
         def check_field(p, idx):
@@ -220,6 +230,7 @@ class BasicBlock(object):
         TMP1 = "tagged %(type)s {%(field)s}"
         TMP2 = "let v = rx_info_prev_control_state.first;"
         TMP3 = "rx_info_prev_control_state.deq;"
+        TMP4 = "rg_%(field)s <= %(field)s;"
         rules = []
         stmt = []
         rname = self.name + "_request"
@@ -232,6 +243,7 @@ class BasicBlock(object):
                 casePatStmts += p.buildReadRequest()
             if p.isRegWrite():
                 casePatStmts += p.buildWriteRequest()
+                casePatStmts += [ast.Template(TMP4, {"name": p.getName(), "field": p.getDstReg()})]
         casePatStmts += self.buildPacketFF()
 
         stmt.append(ast.Template(TMP2))
@@ -255,6 +267,8 @@ class BasicBlock(object):
         for p in self.primitives:
             if p.isRegRead():
                 stmt += p.buildReadResponse()
+        # optimized bypass register
+        # field must include bypass register
         stmt.append(ast.Template(TMP1))
         rsp_prefix = CamelCase(self.name)
         stmt.append(ast.Template(TMP2, {"type": "%sRspT"%(rsp_prefix),

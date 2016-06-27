@@ -23,6 +23,7 @@ import logging
 from lib.sourceCodeBuilder import SourceCodeBuilder
 from lib.utils import CamelCase
 import lib.ast as ast
+from collections import OrderedDict
 
 STRUCT_DEFAULT="""\
 instance DefaultValue#(%(name)s);
@@ -80,10 +81,11 @@ class Struct(object):
         builder.newline()
 
 class StructM(object):
-    def __init__(self, name, members, header_types, headers, runtime_data=[]):
+    def __init__(self, name, members, header_types, headers, runtime_data=[], bypass_map=None):
         self.name = name
         self.members = members
         self.runtime_data = runtime_data
+        self.bypass_map = bypass_map
         e = []
         e.append(ast.StructMember("PacketInstance", "pkt"))
         for m in members:
@@ -106,7 +108,15 @@ class StructM(object):
         e = ["pkt: pkt"]
         for m in self.members:
             _m = "$".join(m)
-            e.append("%s: %s" % (_m, _m))
+            #-- begin optimization
+            # bypass RAW optimization
+            source_field = _m
+            if self.bypass_map:
+                if _m in self.bypass_map:
+                    #print 'zz', _m, self.bypass_map[_m]
+                    source_field = "rg_%s"%(self.bypass_map[_m])
+            #-- end optimization
+            e.append("%s: %s" % (_m, source_field))
         for m in self.runtime_data:
             e.append("runtime_%s: resp.runtime_%s" % (m[1], m[1]))
         return ", ".join(e)
