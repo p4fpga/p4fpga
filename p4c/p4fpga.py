@@ -216,7 +216,6 @@ def render_pipelines(ir, json_dict):
             control.tables[tname] = Table(t, basic_blocks, json_dict)
             for idx, action in sorted(enumerate(t['actions'])):
                 basic_block = ir.basic_blocks[action]
-                print action
                 control.basic_blocks.append(basic_block)
 
         for c in sorted(pipeline["conditionals"]):

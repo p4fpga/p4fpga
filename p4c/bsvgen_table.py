@@ -153,7 +153,7 @@ class Table(object):
             action_stmt = []
             for field in basic_block.response.members:
                 mname = "$".join(field)
-                action_stmt.append(ast.Template(TMP6 % {"mname": mname, "name": field[1]}))
+                action_stmt.append(ast.Template(TMP6 % {"mname": mname, "name": "$".join(field)}))
             action_stmt.append(ast.Template(TMP4 % {"name": CamelCase(self.name)}))
             action_stmt.append(ast.Template(TMP5 % {"name": "metadata"}))
             case_stmt.casePatItem[action] = TMP3 % {"name": CamelCase(action),
