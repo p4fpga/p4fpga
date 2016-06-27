@@ -217,7 +217,7 @@ class Table(object):
         TMP2 = "let meta <- toGet(metadata_ff).get;"
         TMP3 = "tagged %(name)sRspT {%(field)s}"
         TMP4 = "MetadataResponse rsp = MetadataResponse {pkt: pkt, meta: meta};"
-        TMP5 = "tx_info_%(name)s.put(rsp);"
+        TMP5 = "tx_info_%(name)s.enq(rsp);"
         TMP6 = "meta.%(name)s = tagged Valid %(name)s;"
 
         stmt = []

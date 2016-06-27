@@ -54,7 +54,7 @@ class Control (object):
             dsz = r['bitwidth']
             asz = r['size']
             name = r['name']
-            stmt.append(ast.Template(TMP1, {"asz": asz, "dsz": dsz, "name": name, "client": "test"}))
+            stmt.append(ast.Template(TMP1, {"asz": asz, "dsz": dsz, "name": name, "client": "nil"}))
         return stmt
 
     def buildBasicBlocks(self):
@@ -71,7 +71,7 @@ class Control (object):
         stmt = []
         for k, v in self.tables.items():
             for idx, action in enumerate(v.actions):
-                stmt.append(ast.Template(TMP1, {"tbl": camelCase(k), "id": idx, "bb": action}))
+                stmt.append(ast.Template(TMP1, {"tbl": k, "id": idx, "bb": action}))
         return stmt
 
     def buildRegisterMakeChan(self):
@@ -92,9 +92,9 @@ class Control (object):
         stmt = []
         for t in self.tables.values():
             stmt.append(ast.Template(TMP1, {"tblType": CamelCase(t.name),
-                                            "tblName": camelCase(t.name)}))
+                                            "tblName": t.name}))
         for t in self.tables.values():
-            stmt.append(ast.Template(TMP2, {"tblName": camelCase(t.name),
+            stmt.append(ast.Template(TMP2, {"tblName": t.name,
                                             "id": 0}))
         return stmt
 
