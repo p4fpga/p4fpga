@@ -69,7 +69,7 @@ class RegisterRead(Primitive):
         name = self.parameters[1]['value']
         ptype = CamelCase(name) #FIXME
         if type(self.parameters[2]['value']) is list:
-            addr = self.parameters[2]['value'][1]
+            addr = "$".join(self.parameters[2]['value'])
         else:
             addr = self.parameters[2]['value'][0]
         stmt = []
@@ -147,11 +147,13 @@ class RegisterWrite(Primitive):
         name = self.parameters[0]['value']
         ptype = CamelCase(name)
         if type(self.parameters[1]['value']) is list:
-            addr = self.parameters[1]['value'][1]
+            #addr = self.parameters[1]['value'][1]
+            addr = "$".join(self.parameters[1]['value'])
         else:
             addr = self.parameters[1]['value'][0]
         if type(self.parameters[2]['value']) is list:
-            data = self.parameters[2]['value'][1]
+            #data = self.parameters[2]['value'][1]
+            data = "$".join(self.parameters[2]['value'])
         else:
             data = self.parameters[2]['value'][0]
         stmt = []

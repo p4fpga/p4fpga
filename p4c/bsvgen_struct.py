@@ -87,7 +87,8 @@ class StructM(object):
         e = []
         e.append(ast.StructMember("PacketInstance", "pkt"))
         for m in members:
-            e.append(ast.StructMember("Bit#(%s)"%(field_width(m, header_types, headers)), m[1]))
+            _m = "$".join(m)
+            e.append(ast.StructMember("Bit#(%s)"%(field_width(m, header_types, headers)), _m))
         for r in runtime_data:
             e.append(ast.StructMember("Bit#(%s)"%(r[0]), "runtime_%s"%(r[1])))
         self.struct = ast.Struct(name, e)
@@ -95,7 +96,8 @@ class StructM(object):
     def build_match_expr(self):
         e = ["pkt: .pkt"]
         for m in self.members:
-            e.append("%s: .%s" % (m[1], m[1]))
+            _m = "$".join(m)
+            e.append("%s: .%s" % (_m, _m))
         for m in self.runtime_data:
             e.append("runtime_%s: .runtime_%s" % (m[1], m[1]))
         return ", ".join(e)
@@ -103,7 +105,8 @@ class StructM(object):
     def build_case_expr(self):
         e = ["pkt: pkt"]
         for m in self.members:
-            e.append("%s: %s" % (m[1], m[1]))
+            _m = "$".join(m)
+            e.append("%s: %s" % (_m, _m))
         for m in self.runtime_data:
             e.append("runtime_%s: resp.runtime_%s" % (m[1], m[1]))
         return ", ".join(e)
