@@ -121,12 +121,29 @@ class Method:
     def instantiate(self):
         return self
 
+class ActionBlock:
+    def __init__(self, stmt):
+        self.stmt = stmt
+    def emit(self, builder):
+        builder.emitIndent()
+        builder.append("action")
+        builder.newline()
+        builder.increaseIndent()
+        for s in self.stmt:
+            s.emit(builder)
+            builder.newline()
+        builder.decreaseIndent()
+        builder.emitIndent()
+        builder.append("endaction")
+        builder.newline()
+
 class Function:
-    def __init__(self, name, return_type, params):
+    def __init__(self, name, return_type, params, stmt=[]):
         self.type = 'Function'
         self.name = name
         self.return_type = return_type
         self.params = params
+        self.stmt = stmt
     def __repr__(self):
         if not self.params:
             return '<function: %s %s NONE>' % (self.name, self.return_type)
@@ -134,7 +151,16 @@ class Function:
         return '<function: %s %s %s>' % (self.name, self.return_type, sparams)
 
     def emit(self, builder):
-        builder.append("function {} {}".format(self.return_type, self.name))
+        builder.emitIndent()
+        builder.append("function {} {}({});".format(self.return_type, self.name, self.params))
+        builder.newline()
+        builder.increaseIndent()
+        for s in self.stmt:
+            s.emit(builder)
+            builder.newline()
+        builder.decreaseIndent()
+        builder.emitIndent()
+        builder.append("endfunction")
         builder.newline()
 
 class Variable:
@@ -403,6 +429,7 @@ class Case:
         builder.decreaseIndent()
         builder.emitIndent()
         builder.append("endcase")
+        builder.newline()
 
 class If:
     def __init__(self, expression, stmt):

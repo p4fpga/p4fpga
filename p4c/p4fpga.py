@@ -23,6 +23,7 @@ from collections import OrderedDict
 from pprint import pprint
 from bsvgen_program import Program
 from bsvgen_control import Control
+from bsvgen_parser import Parser
 from bsvgen_basic_block import BasicBlock
 from bsvgen_table import Table
 from bsvgen_struct import Struct, StructT, StructMetadata
@@ -50,6 +51,8 @@ def render_parsers(ir, json_dict):
     stack = []
     visited = set()
     parse_rules = OrderedDict()
+    transitions = OrderedDict()
+    transition_key = OrderedDict()
 
     parsers = json_dict["parsers"]
     assert (len(parsers) == 1), "only one parser is supported."
@@ -62,6 +65,32 @@ def render_parsers(ir, json_dict):
         for state in lst_parse_states:
             if state["name"] == name:
                 return state
+        return None
+
+    def name_to_transition_key (name):
+        for state in lst_parse_states:
+            if state["name"] == name:
+                return state['transition_key']
+        return None
+
+    def key_to_width (key):
+        header = key[0]
+        field = key[1]
+        for h in json_dict['headers']:
+            if h['name'] == header:
+                hty = h['header_type']
+                for t in json_dict['header_types']:
+                    if t['name'] == hty:
+                        fields = t['fields']
+                        for f in fields:
+                            if f[0] == field:
+                                return f[1]
+        return None
+
+    def name_to_transitions (name):
+        for state in lst_parse_states:
+            if state["name"] == name:
+                return state['transitions']
         return None
 
     def state_to_header (state):
@@ -93,31 +122,34 @@ def render_parsers(ir, json_dict):
     def expand_parse_state (curr_offset, header_width):
         ''' expand parse_state to multiple cycles if needed '''
         parse_steps = []
-        first_step = True
-        last_step = False
-        step_id = 0
+        isFirstBeat = True
+        isLastBeat = False
+        step_idx = 0
         while curr_offset < header_width:
+            #print curr_offset
             parse_step = OrderedDict()
-            parse_step["id"] = step_id
-            parse_step["carry_len"] = curr_offset - 128
-            parse_step["curr_len"] = curr_offset
+            parse_step["idx"] = step_idx
+            parse_step['width'] = header_width
+            parse_step["nhlen"] = curr_offset - 128
+            parse_step["pktLen"] = curr_offset
             if (curr_offset > header_width):
-                parse_step["carry_out_len"] = curr_offset - header_width
-            parse_step["first_step"] = first_step
-            if first_step:
-                first_step = False
-            parse_step["last_step"] = last_step
+                parse_step["hNextLen"] = curr_offset - header_width
+            parse_step["isFirstBeat"] = isFirstBeat
+            if isFirstBeat:
+                isFirstBeat = False
+            parse_step["isLastBeat"] = isLastBeat
             curr_offset += 128
-            step_id += 1
+            step_idx += 1
             parse_steps.append(parse_step)
         parse_step = OrderedDict()
-        parse_step["id"] = step_id
-        parse_step["carry_len"] = curr_offset - 128
-        parse_step["curr_len"] = curr_offset
-        parse_step["carry_out_len"] = curr_offset - header_width
-        parse_step["carry_out_offset"] = header_width
-        parse_step["first_step"] = first_step
-        parse_step["last_step"] = True
+        parse_step["idx"] = step_idx
+        parse_step['width'] = header_width
+        parse_step["nhlen"] = curr_offset - 128
+        parse_step["pktLen"] = curr_offset
+        parse_step["hNextLen"] = curr_offset - header_width
+        parse_step["hNextOffset"] = header_width
+        parse_step["isFirstBeat"] = isFirstBeat
+        parse_step["isLastBeat"] = True
         parse_steps.append(parse_step)
         return parse_steps
 
@@ -132,8 +164,14 @@ def render_parsers(ir, json_dict):
         header = state_to_header(state)
         if header:
             width = header_to_width(header)
-            num_steps = expand_parse_state(prev_bits, width)
+            num_steps = expand_parse_state(curr_bits, width)
             parse_rules[name] = num_steps
+            transitions[name] = name_to_transitions(name)
+            keys = name_to_transition_key(name)
+            for k in keys:
+                w = key_to_width(k['value'])
+                k['width'] = w
+            transition_key[name] = keys
 
         for t in state["transitions"]:
             next_state_name = t["next_state"]
@@ -144,7 +182,7 @@ def render_parsers(ir, json_dict):
 
     obj_init_state = name_to_parse_state(str_init_state)
     walk_parse_states(0, obj_init_state)
-    ir["parse_rules"] = parse_rules
+    ir.parsers['parser'] = Parser(parse_rules, transitions, transition_key)
 
 def render_deparsers(ir, json_dict):
     # TODO: generate IR_basic_block objects
@@ -254,7 +292,7 @@ def render_basic_blocks(ir, json_dict):
 def ir_create(json_dict):
     ir = Program("program", "ir_meta.yml")
     render_header_types(ir, json_dict)
-    #render_parsers(ir, json_dict)
+    render_parsers(ir, json_dict)
     #render_deparsers(ir, json_dict)
     render_basic_blocks(ir, json_dict)
     render_pipelines(ir, json_dict)
