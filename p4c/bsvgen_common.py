@@ -25,7 +25,7 @@ def CamelCase(name):
     return output
 
 LICENSE ='''\
-// Copyright (c) 2016 Cornell University
+// Copyright (c) 2016 P4FPGA Project
 
 // Permission is hereby granted, free of charge, to any person
 // obtaining a copy of this software and associated documentation
