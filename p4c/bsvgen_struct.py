@@ -221,7 +221,7 @@ class StructTableRspT(object):
         elements = []
         atype = "%sActionT" %(CamelCase(name))
         for idx, at in enumerate(actions):
-            elements.append(ast.EnumElement(at, "", idx))
+            elements.append(ast.EnumElement(CamelCase(at).upper(), "", idx))
         self.enum = ast.Enum(atype, elements)
         fields = []
         fields.append(ast.StructMember(atype, "_action"))

@@ -24,6 +24,7 @@ from lib.sourceCodeBuilder import SourceCodeBuilder
 from lib.utils import CamelCase
 import lib.ast as ast
 import pprint
+from p4fpga import DP_WIDTH
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ class Parser(object):
 
     def funct_succeed(self):
         TMP1 = "data_in_ff.deq;"
-        TMP2 = "rg_offset <= next_offset;"
+        TMP2 = "rg_offset <= offset;"
         fname = "succeed_and_next"
         rtype = "Action"
         params = "Bit#(32) offset"
@@ -72,10 +73,23 @@ class Parser(object):
     def funct_push_phv(self):
         fname = "push_phv"
         rtype = "Action"
-        params = "PacketType ty"
+        params = "ParserState ty"
         stmt = []
         #stmt.append(ast.Template(TMP1))
         #stmt.append(ast.Template(TMP2))
+        ablock = [ast.ActionBlock(stmt)]
+        funct = ast.Function(fname, rtype, params, ablock)
+        return funct
+
+    def funct_report_parse_action(self):
+        TMP1 = "$display(\"(%%d) Parser State %%h offset %%h, %%h\", $time, state, offset, data);"
+        fname = "report_parse_action"
+        rtype = "Action"
+        params = "ParserState state, Bit#(32) offset, Bit#(128) data"
+        if_stmt = ast.If("cr_verbosity[0] > 0", [])
+        if_stmt.stmt.append(ast.Template(TMP1))
+        stmt = []
+        stmt.append(if_stmt)
         ablock = [ast.ActionBlock(stmt)]
         funct = ast.Function(fname, rtype, params, ablock)
         return funct
@@ -87,14 +101,13 @@ class Parser(object):
             TMP3 = "return nextState;"
             pdict = {'width': width, 'name': name}
             fname = "compute_next_state_%(name)s" % pdict
-            rtype = "ParseState"
+            rtype = "ParserState"
             params = "Bit#(%(width)s) v" % pdict
             stmt = []
             stmt.append(ast.Template(TMP1))
             caseExpr = "byteSwap(v)"
             case_stmt = ast.Case(caseExpr)
             for t in transition:
-                print t
                 value = t['value'].replace("0x", "'h")
                 next_state = t['next_state']
                 name = "State%s" % (CamelCase(next_state)) if next_state != None else "StateParseStart"
@@ -136,30 +149,38 @@ class Parser(object):
     def rule_parse(self, rule_attrs, transition_key):
         TMP1 = "rl_parse_%(name)s_%(idx)s"
         TMP2 = "(rg_parse_state == %(state)s) && (rg_offset == %(offset)s)"
-        TMP3 = "report_parse_action(rg_parse_state, rg_offset, din);"
-        TMP4 = "Bit#(%(width)s) tmp_%(name)s = takeAt(0, unpack(din));"
-        TMP5 = "let %(name)s = extract_%(name)s(tmp_%(name)s);"
-        TMP6 = "let next_state = compute_next_state_%(name)s(%(field)s);"
-        TMP7 = "rg_next_state <= next_state;"
-        TMP8 = "rg_tmp_%(name)s <= zeroExtend(%(name)s);"
-        TMP81 = "rg_tmp_%(name)s <= zeroExtend({din, %(name)s});"
-        TMP9 = "parse_state_w <= %(state)s;"
-        TMP10 = "succeed_and_next(%(offset)s);"
-        print rule_attrs
-        first = rule_attrs['isFirstBeat']
-        last = rule_attrs['isLastBeat']
+        TMP3 = "report_parse_action(rg_parse_state, rg_offset, data_this_cycle);"
+        TMP4 = "Vector#(%(prevLen)s, Bit#(1)) tmp_dataVec = unpack(truncate(rg_tmp_parse_ethernet));"
+        TMP5 = "Bit#(%(prevLen)s) data_last_cycle = pack(takeAt(0, tmp_dataVec));"
+        TMP6 = "Bit#(%(rcvdLen)s) data = {data_this_cycle, data_last_cycle};"
+        TMP7 = "Vector#(%(rcvdLen)s, Bit#(1)) dataVec = unpack(data);"
+        #TMP4 = "Bit#(%(width)s) tmp_%(name)s = pack(takeAt(0, unpack(_tmp)));"
+        #TMP5 = "let %(name)s = extract_%(name)s(tmp_%(name)s);"
+        #TMP6 = "let next_state = compute_next_state_%(name)s(%(field)s);"
+        #TMP7 = "rg_parse_state <= next_state;"
+        #TMP8 = "rg_tmp_%(next_state)s <= zeroExtend(%(name)s);"
+        #TMP9 = "parse_state_w <= %(state)s;"
+        #TMP10 = "succeed_and_next(rg_offset + %(dp_width)s);"
+        #TMP11 = "rg_tmp_%(name)s <= zeroExtend({data_this_cycle, rg_tmp_%(name)s});"
+        #print rule_attrs
+        first = rule_attrs['firstBeat']
+        last = rule_attrs['lastBeat']
         name = rule_attrs['name']
         idx = rule_attrs['idx']
-        offset = rule_attrs['pktLen']
+        rcvdLen = rule_attrs['rcvdLen']
+        offset = rule_attrs['offset']
         width = rule_attrs['width']
+        #next_states = rule_attrs['next_states']
         keys = []
         for key in transition_key[name]:
-            keys.append("parse_%s" % ("$".join(key['value'])))
+            keys.append("parse_%s" % (".".join(key['value'])))
         pdict = {"name": name, 
                 "idx": idx,
                 "state": "State"+CamelCase(name),
                 "offset": offset,
+                "rcvdLen": rcvdLen,
                 "width": width,
+                "dp_width": DP_WIDTH,
                 "field": ",".join(keys)}
         rname = TMP1 % pdict
         rcond = TMP2 % pdict
@@ -170,11 +191,14 @@ class Parser(object):
             stmt.append(ast.Template(TMP5, pdict))
             stmt.append(ast.Template(TMP6, pdict))
             stmt.append(ast.Template(TMP7, pdict))
-            stmt.append(ast.Template(TMP8, pdict))
+            #for t in next_states:
+            #    print t
+            #stmt.append(ast.Template(TMP8, pdict))
             stmt.append(ast.Template(TMP9, pdict))
             stmt.append(ast.Template(TMP10, pdict))
         else:
-            stmt.append(ast.Template(TMP81, pdict))
+            stmt.append(ast.Template(TMP11, pdict))
+            stmt.append(ast.Template(TMP10, pdict))
             pass
         rule = ast.Rule(rname, rcond, stmt)
         return rule
@@ -183,7 +207,7 @@ class Parser(object):
         TMP1 = "FIFOF#(EtherData) data_in_ff <- mkFIFOF;"
         TMP2 = "FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;"
         TMP3 = "Reg#(ParserState) rg_parse_state <- mkReg(StateParseStart);"
-        TMP4 = "Wire#(PacketType) parse_state_w <- mkDWire(TYPE_ERROR);"
+        TMP4 = "Wire#(ParserState) parse_state_w <- mkDWire(StateParseStart);"
         TMP5 = "Reg#(Bit#(32)) rg_offset <- mkReg(0);"
         TMP6 = "PulseWire parse_done <- mkPulseWire();"
         stmt = []
@@ -201,15 +225,25 @@ class Parser(object):
         stmt.append(self.funct_succeed())
         stmt.append(self.funct_failed())
         stmt.append(self.funct_push_phv())
+        stmt.append(self.funct_report_parse_action())
         stmt += self.funct_compute_next_states(self.rules, self.transition_key, self.transitions)
         stmt.append(self.rule_start())
-        stmt.append(ast.Template("let din = data_in_ff.first.data;"))
+        stmt.append(ast.Template("let data_this_cycle = data_in_ff.first.data;"))
         for state, parse_steps in self.rules.items():
             for rule_attrs in parse_steps:
                 rule_attrs['name'] = state
+                print rule_attrs
                 transition_key = self.transition_key
                 stmt.append(self.rule_parse(rule_attrs, transition_key))
         return stmt
+
+    def emitTypes(self, builder):
+        elem = []
+        elem.append(ast.EnumElement("StateParseStart", None, None))
+        for state in self.rules.keys():
+            elem.append(ast.EnumElement("State%s" % (CamelCase(state)), None, None))
+        state = ast.Enum("ParserState", elem)
+        state.emit(builder)
 
     def emitModule(self, builder):
         logger.info("emitModule: Parser")
@@ -224,5 +258,6 @@ class Parser(object):
 
     def emit(self, builder):
         assert isinstance(builder, SourceCodeBuilder)
+        self.emitTypes(builder)
         self.emitInterface(builder)
         self.emitModule(builder)

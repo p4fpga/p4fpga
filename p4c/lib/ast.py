@@ -288,7 +288,7 @@ class EnumElement:
         return '{enumelt: %s %s}' % (self.name, self.value)
     def emit(self, builder, isLast):
         builder.emitIndent()
-        builder.append("%s" % (CamelCase(self.name).upper()))
+        builder.append(self.name)
         if not isLast:
             builder.append(",")
         builder.newline()

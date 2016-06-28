@@ -19,6 +19,8 @@
 #
 # TODO: replace this module with a more proper c++ pass.
 
+DP_WIDTH = 128
+
 from collections import OrderedDict
 from pprint import pprint
 from bsvgen_program import Program
@@ -47,7 +49,6 @@ def render_header_types(ir, json_dict):
         ir.structs[name] = struct
 
 def render_parsers(ir, json_dict):
-    # TODO: generate IR_basic_block objects
     stack = []
     visited = set()
     parse_rules = OrderedDict()
@@ -62,16 +63,27 @@ def render_parsers(ir, json_dict):
     lst_parse_states = parser["parse_states"]
 
     def name_to_parse_state (name):
+        """
+        map parse state to object
+        """
         for state in lst_parse_states:
             if state["name"] == name:
                 return state
         return None
 
     def name_to_transition_key (name):
+        """
+        map parse state to keys used for transition to next state.
+        """
+        keys = []
         for state in lst_parse_states:
             if state["name"] == name:
-                return state['transition_key']
-        return None
+                keys = state['transition_key']
+
+        for k in keys:
+            w = key_to_width(k['value'])
+            k['width'] = w
+        return keys
 
     def key_to_width (key):
         header = key[0]
@@ -119,69 +131,72 @@ def render_parsers(ir, json_dict):
                 return header_type_to_width(hty)
         return None
 
-    def expand_parse_state (curr_offset, header_width):
+    def expand_parse_state (rcvdLen, offset, header_width):
         ''' expand parse_state to multiple cycles if needed '''
         parse_steps = []
-        isFirstBeat = True
-        isLastBeat = False
+        firstBeat = True
+        lastBeat = False
         step_idx = 0
-        while curr_offset < header_width:
-            #print curr_offset
+        while rcvdLen < header_width:
+            #print rcvdLen
             parse_step = OrderedDict()
             parse_step["idx"] = step_idx
-            parse_step['width'] = header_width
-            parse_step["nhlen"] = curr_offset - 128
-            parse_step["pktLen"] = curr_offset
-            if (curr_offset > header_width):
-                parse_step["hNextLen"] = curr_offset - header_width
-            parse_step["isFirstBeat"] = isFirstBeat
-            if isFirstBeat:
-                isFirstBeat = False
-            parse_step["isLastBeat"] = isLastBeat
-            curr_offset += 128
+            parse_step["width"] = header_width
+            parse_step["rcvdLen"] = rcvdLen
+            if (rcvdLen > header_width):
+                parse_step["nextLen"] = rcvdLen - header_width
+            parse_step["firstBeat"] = firstBeat
+            if firstBeat:
+                firstBeat = False
+            parse_step["lastBeat"] = lastBeat
+            parse_step["offset"] = offset
+            rcvdLen += DP_WIDTH
+            offset += DP_WIDTH
             step_idx += 1
             parse_steps.append(parse_step)
         parse_step = OrderedDict()
         parse_step["idx"] = step_idx
         parse_step['width'] = header_width
-        parse_step["nhlen"] = curr_offset - 128
-        parse_step["pktLen"] = curr_offset
-        parse_step["hNextLen"] = curr_offset - header_width
-        parse_step["hNextOffset"] = header_width
-        parse_step["isFirstBeat"] = isFirstBeat
-        parse_step["isLastBeat"] = True
+        parse_step["rcvdLen"] = rcvdLen
+        bits_to_next_state = rcvdLen - header_width
+        parse_step["nextLen"] = bits_to_next_state
+        #print bits_to_next_state
+        parse_step["firstBeat"] = firstBeat
+        parse_step["lastBeat"] = True
+        parse_step["offset"] = offset
+        offset += DP_WIDTH
         parse_steps.append(parse_step)
-        return parse_steps
+        return parse_steps, bits_to_next_state
 
-    def walk_parse_states (prev_bits, state):
+    def walk_parse_states (bits_from_prev_state, offset_from_start, state):
         name = state["name"]
         visited.add(name)
         stack.append(name)
 
-        curr_bits = prev_bits
-        curr_bits += 128
+        bits_in_curr_state = bits_from_prev_state
+        bits_in_curr_state += DP_WIDTH
 
+        bits_to_next_state = 0
         header = state_to_header(state)
         if header:
-            width = header_to_width(header)
-            num_steps = expand_parse_state(curr_bits, width)
+            header_sz = header_to_width(header)
+            # compute constants needed for multi-cycle headers
+            num_steps, bits_to_next_state = expand_parse_state(bits_in_curr_state, offset_from_start, header_sz)
+            # collect info for generating parser
+            offset_from_start += DP_WIDTH * len(num_steps)
             parse_rules[name] = num_steps
             transitions[name] = name_to_transitions(name)
-            keys = name_to_transition_key(name)
-            for k in keys:
-                w = key_to_width(k['value'])
-                k['width'] = w
-            transition_key[name] = keys
+            transition_key[name] = name_to_transition_key(name)
 
         for t in state["transitions"]:
             next_state_name = t["next_state"]
             if next_state_name:
                 next_state = name_to_parse_state(next_state_name)
-                walk_parse_states(0, next_state)
+                walk_parse_states(bits_to_next_state, offset_from_start, next_state)
         stack.pop()
 
     obj_init_state = name_to_parse_state(str_init_state)
-    walk_parse_states(0, obj_init_state)
+    walk_parse_states(0, 0, obj_init_state)
     ir.parsers['parser'] = Parser(parse_rules, transitions, transition_key)
 
 def render_deparsers(ir, json_dict):
