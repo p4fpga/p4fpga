@@ -142,7 +142,8 @@ class Control (object):
                 elif next_table in self.conditionals:
                     self.buildConditionalStmt(next_table, stmt, metadata)
                 else:
-                    raise Exception("ERROR: ConditionalStmt", tblName, next_table)
+                    self.buildConditionalStmt(next_table, stmt, metadata)
+                    #raise Exception("ERROR: ConditionalStmt", tblName, next_table)
 
         if tblName in self.conditionals:
             cond = search_conditional(tblName)

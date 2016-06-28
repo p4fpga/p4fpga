@@ -41,6 +41,7 @@ class Primitive(object):
 
     def isRegRead(self): return False
     def isRegWrite(self): return False
+    def getDstReg(self, json_dict): return None
 
 class ModifyField(Primitive):
     def __init__(self, op, parameters):
@@ -139,8 +140,10 @@ class RegisterWrite(Primitive):
     def isRegWrite(self):
         return True
 
-    def getDstReg(self):
-        return "$".join(self.parameters[2]['value'])
+    def getDstReg(self, json_dict):
+        name = self.parameters[0]['value']
+        dsz, _ = get_reg_array_size(name, json_dict)
+        return (dsz, "$".join(self.parameters[2]['value']))
 
     def getName(self):
         return self.parameters[0]['value']
@@ -155,12 +158,10 @@ class RegisterWrite(Primitive):
         name = self.parameters[0]['value']
         ptype = CamelCase(name)
         if type(self.parameters[1]['value']) is list:
-            #addr = self.parameters[1]['value'][1]
             addr = "$".join(self.parameters[1]['value'])
         else:
             addr = self.parameters[1]['value'][0]
         if type(self.parameters[2]['value']) is list:
-            #data = self.parameters[2]['value'][1]
             data = "$".join(self.parameters[2]['value'])
         else:
             data = self.parameters[2]['value'][0]
@@ -174,7 +175,6 @@ class RegisterWrite(Primitive):
         TMP2 = "RX #(RegResponse#(%(dsz)s)) rx_%(name)s <- mkRX;"
         TMP3 = "let tx_info_%(name)s = tx_%(name)s.u;"
         TMP4 = "let rx_info_%(name)s = rx_%(name)s.u;"
-        TMP5 = "Reg#(Bit#(%(dsz)s)) rg_%(field)s <- mkReg(0);"
         stmt = []
         name = self.parameters[0]['value']
         field = "$".join(self.parameters[2]['value'])
@@ -184,7 +184,6 @@ class RegisterWrite(Primitive):
         stmt.append(ast.Template(TMP2, pdict))
         stmt.append(ast.Template(TMP3, pdict))
         stmt.append(ast.Template(TMP4, pdict))
-        stmt.append(ast.Template(TMP5, pdict))
         return stmt
 
     def buildInterface(self, json_dict):

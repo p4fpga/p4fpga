@@ -38,8 +38,8 @@ endinstance"""
 EXTRACT_TEMP="""\
 function %(name)s extract_%(lname)s(Bit#(%(width)s) data);
   return unpack(data);
-endfunction
-"""
+endfunction"""
+
 def field_width(field, header_types, headers):
     header_type = None
     for h in headers:

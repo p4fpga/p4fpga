@@ -243,7 +243,7 @@ class BasicBlock(object):
                 casePatStmts += p.buildReadRequest()
             if p.isRegWrite():
                 casePatStmts += p.buildWriteRequest()
-                casePatStmts += [ast.Template(TMP4, {"name": p.getName(), "field": p.getDstReg()})]
+                casePatStmts += [ast.Template(TMP4, {"name": p.getName(), "field": p.getDstReg(self.json_dict)[1]})]
         casePatStmts += self.buildPacketFF()
 
         stmt.append(ast.Template(TMP2))
@@ -279,6 +279,7 @@ class BasicBlock(object):
         return rules
 
     def buildModuleStmt(self):
+        TMP1 = "Reg#(Bit#(%(dsz)s)) rg_%(field)s <- mkReg(0);"
         """
         first performing a RAW renaming within the same block
         then build the action module
@@ -286,8 +287,16 @@ class BasicBlock(object):
         stmt = []
         stmt += self.buildTXRX()
         stmt += self.buildFFs()
+        #-- begin optimization
+        regs = set()
         for p in self.primitives:
             stmt += p.buildTXRX(self.json_dict)
+            _reg = p.getDstReg(self.json_dict)
+            if _reg != None:
+                regs.add(_reg)
+        for r in regs:
+            stmt.append(ast.Template(TMP1, {'dsz': r[0], 'field': r[1]}))
+        #-- end optimization
         stmt += self.buildHandleRequest()
         stmt += self.buildHandleResponse()
         for p in self.primitives:
