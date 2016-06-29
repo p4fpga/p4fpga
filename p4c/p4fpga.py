@@ -54,6 +54,7 @@ def render_parsers(ir, json_dict):
     parse_rules = OrderedDict()
     transitions = OrderedDict()
     transition_key = OrderedDict()
+    parse_ops = OrderedDict()
 
     parsers = json_dict["parsers"]
     assert (len(parsers) == 1), "only one parser is supported."
@@ -99,10 +100,16 @@ def render_parsers(ir, json_dict):
                                 return f[1]
         return None
 
-    def name_to_transitions (name):
+    def name_to_transitions(name):
         for state in lst_parse_states:
             if state["name"] == name:
                 return state['transitions']
+        return None
+
+    def name_to_parse_ops(name):
+        for state in lst_parse_states:
+            if state['name'] == name:
+                return state['parse_ops']
         return None
 
     def state_to_header (state):
@@ -129,6 +136,13 @@ def render_parsers(ir, json_dict):
             if h["name"] == header:
                 hty = h["header_type"]
                 return header_type_to_width(hty)
+        return None
+
+    def header_to_header_type(header):
+        assert type(header) == str
+        for h in json_dict["headers"]:
+            if h["name"] == header:
+                return h["header_type"]
         return None
 
     def expand_parse_state (rcvdLen, offset, header_width):
@@ -188,6 +202,8 @@ def render_parsers(ir, json_dict):
             parse_rules[name] = num_steps
             transitions[name] = name_to_transitions(name)
             transition_key[name] = name_to_transition_key(name)
+            header = state_to_header(state)
+            parse_ops[name] = header_to_header_type(header)
 
         for t in state["transitions"]:
             next_state_name = t["next_state"]
@@ -198,7 +214,7 @@ def render_parsers(ir, json_dict):
 
     obj_init_state = name_to_parse_state(str_init_state)
     walk_parse_states(0, 0, obj_init_state)
-    ir.parsers['parser'] = Parser(parse_rules, transitions, transition_key)
+    ir.parsers['parser'] = Parser(parse_rules, transitions, transition_key, parse_ops)
 
 def render_deparsers(ir, json_dict):
     # TODO: generate IR_basic_block objects

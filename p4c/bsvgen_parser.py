@@ -29,10 +29,11 @@ from p4fpga import DP_WIDTH
 logger = logging.getLogger(__name__)
 
 class Parser(object):
-    def __init__(self, parse_rules, transitions, transition_key):
+    def __init__(self, parse_rules, transitions, transition_key, extract_headers):
         self.rules = parse_rules
         self.transitions = transitions
         self.transition_key = transition_key
+        self.extract_headers = extract_headers
 
     def emitInterface(self, builder):
         logger.info("emitParser")
@@ -124,9 +125,10 @@ class Parser(object):
         for name, rule in rules.items():
             transition = transitions[name]
             key = transition_key[name]
+            width = 0
             for k in key:
                 width = k['width']
-            funct.append(compute_next_state(name, width, transition))
+                funct.append(compute_next_state(name, width, transition))
         return funct
 
     def rule_start(self):
@@ -154,13 +156,15 @@ class Parser(object):
         TMP5 = "Bit#(%(prevLen)s) data_last_cycle = pack(takeAt(0, tmp_dataVec));"
         TMP6 = "Bit#(%(rcvdLen)s) data = {data_this_cycle, data_last_cycle};"
         TMP7 = "Vector#(%(rcvdLen)s, Bit#(1)) dataVec = unpack(data);"
-        TMP8 = "let %(name)s = extract_%(name)s(tmp_%(name)s);"
+        TMP8 = "let %(name)s = extract_%(header)s(pack(takeAt(0, dataVec)));"
         TMP9 = "let next_state = compute_next_state_%(name)s(%(field)s);"
+        TMP9_0 = "let next_state = StateParseStart;"
         TMP10 = "rg_parse_state <= next_state;"
         TMP11 = "rg_tmp_%(next_state)s <= zeroExtend(pack(unparsed));"
         TMP12 = "parse_state_w <= %(state)s;"
         TMP13 = "succeed_and_next(rg_offset + %(dp_width)s);"
         TMP14 = "Vector#(%(nextLen)s, Bit#(1)) unparsed = takeAt(%(width)s, dataVec);"
+        TMP15 = "rg_tmp_%(name)s <= zeroExtend(data);"
         #print rule_attrs
         first = rule_attrs['firstBeat']
         last = rule_attrs['lastBeat']
@@ -181,9 +185,10 @@ class Parser(object):
                 continue
             next_states.add(next_state)
 
-        pdict = {"name": name, 
+        pdict = {"name": name,
                 "idx": idx,
                 "state": "State"+CamelCase(name),
+                "header": self.extract_headers[name],
                 "offset": offset,
                 "rcvdLen": rcvdLen,
                 "prevLen": rcvdLen - DP_WIDTH,
@@ -201,7 +206,10 @@ class Parser(object):
             stmt.append(ast.Template(TMP6, pdict))
             stmt.append(ast.Template(TMP7, pdict))
             stmt.append(ast.Template(TMP8, pdict))
-            stmt.append(ast.Template(TMP9, pdict))
+            if pdict['field'] != "":
+                stmt.append(ast.Template(TMP9, pdict))
+            else:
+                stmt.append(ast.Template(TMP9_0))
             stmt.append(ast.Template(TMP10, pdict))
             stmt.append(ast.Template(TMP14, pdict))
             for s in next_states:
@@ -212,13 +220,28 @@ class Parser(object):
             stmt.append(ast.Template(TMP4, pdict))
             stmt.append(ast.Template(TMP5, pdict))
             stmt.append(ast.Template(TMP6, pdict))
-            stmt.append(ast.Template(TMP7, pdict))
-            #stmt.append(ast.Template(TMP11, pdict))
-            stmt.append(ast.Template(TMP10, pdict))
+            stmt.append(ast.Template(TMP15, {'name': name}))
             stmt.append(ast.Template(TMP13, pdict))
             pass
         rule = ast.Rule(rname, rcond, stmt)
         return rule
+
+    def buildVerbosity(self):
+        TMP1 = "Reg#(int) cr_verbosity[2] <- mkCRegU(2);"
+        TMP2 = "FIFOF#(int) cr_verbosity_ff <- mkFIFOF;"
+        TMP3 = "let x = cr_verbosity_ff.first;"
+        TMP4 = "cr_verbosity_ff.deq;"
+        TMP5 = "cr_verbosity[1] <= x;"
+        stmt = []
+        stmt.append(ast.Template(TMP1))
+        stmt.append(ast.Template(TMP2))
+        rl_stmt = []
+        rl_stmt.append(ast.Template(TMP3))
+        rl_stmt.append(ast.Template(TMP4))
+        rl_stmt.append(ast.Template(TMP5))
+        rule = ast.Rule("set_verbosity", [], rl_stmt)
+        stmt.append(rule)
+        return stmt
 
     def buildFFs(self):
         TMP1 = "FIFOF#(EtherData) data_in_ff <- mkFIFOF;"
@@ -237,7 +260,7 @@ class Parser(object):
         return stmt
 
     def buildTmpRegs(self):
-        TMP1 = "Reg#(Bit#(%(sz)s)) %(name)s <- mkReg(0);"
+        TMP1 = "Reg#(Bit#(%(sz)s)) rg_tmp_%(name)s <- mkReg(0);"
         stmt = []
         for state, parse_steps in self.rules.items():
             for rule_attrs in parse_steps:
@@ -249,6 +272,7 @@ class Parser(object):
 
     def buildModuleStmt(self):
         stmt = []
+        stmt += self.buildVerbosity()
         stmt += self.buildFFs()
         stmt += self.buildTmpRegs()
         stmt.append(self.funct_succeed())
