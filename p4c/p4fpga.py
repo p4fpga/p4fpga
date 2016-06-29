@@ -55,6 +55,7 @@ def render_parsers(ir, json_dict):
     transitions = OrderedDict()
     transition_key = OrderedDict()
     header_type = OrderedDict()
+    header_instance = OrderedDict()
 
     parsers = json_dict["parsers"]
     assert (len(parsers) == 1), "only one parser is supported."
@@ -202,8 +203,9 @@ def render_parsers(ir, json_dict):
             parse_rules[name] = num_steps
             transitions[name] = name_to_transitions(name)
             transition_key[name] = name_to_transition_key(name)
-            header = state_to_header(state)
+            header_instance[name] = header
             header_type[name] = header_to_header_type(header)
+            #TODO: handle multiple instances of header type
 
         for t in state["transitions"]:
             next_state_name = t["next_state"]
@@ -214,7 +216,7 @@ def render_parsers(ir, json_dict):
 
     obj_init_state = name_to_parse_state(str_init_state)
     walk_parse_states(0, 0, obj_init_state)
-    ir.parsers['parser'] = Parser(parse_rules, transitions, transition_key, header_type)
+    ir.parsers['parser'] = Parser(parse_rules, transitions, transition_key, header_type, header_instance)
 
 def render_deparsers(ir, json_dict):
     # TODO: generate IR_basic_block objects

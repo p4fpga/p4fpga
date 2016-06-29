@@ -29,11 +29,12 @@ from p4fpga import DP_WIDTH
 logger = logging.getLogger(__name__)
 
 class Parser(object):
-    def __init__(self, parse_rules, transitions, transition_key, extract_headers):
+    def __init__(self, parse_rules, transitions, transition_key, header_types, header_instances):
         self.rules = parse_rules
         self.transitions = transitions
         self.transition_key = transition_key
-        self.extract_headers = extract_headers
+        self.header_types = header_types
+        self.header_instances = header_instances
 
     def emitInterface(self, builder):
         logger.info("emitParser")
@@ -156,7 +157,7 @@ class Parser(object):
         TMP5 = "Bit#(%(prevLen)s) data_last_cycle = pack(takeAt(0, tmp_dataVec));"
         TMP6 = "Bit#(%(rcvdLen)s) data = {data_this_cycle, data_last_cycle};"
         TMP7 = "Vector#(%(rcvdLen)s, Bit#(1)) dataVec = unpack(data);"
-        TMP8 = "let %(name)s = extract_%(header)s(pack(takeAt(0, dataVec)));"
+        TMP8 = "let %(name)s = extract_%(header_type)s(pack(takeAt(0, dataVec)));"
         TMP9 = "let next_state = compute_next_state_%(name)s(%(field)s);"
         TMP9_0 = "let next_state = StateParseStart;"
         TMP10 = "rg_parse_state <= next_state;"
@@ -188,7 +189,7 @@ class Parser(object):
         pdict = {"name": name,
                 "idx": idx,
                 "state": "State"+CamelCase(name),
-                "header": self.extract_headers[name],
+                "header_type": self.header_types[name],
                 "offset": offset,
                 "rcvdLen": rcvdLen,
                 "prevLen": rcvdLen - DP_WIDTH,

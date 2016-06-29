@@ -195,7 +195,7 @@ class StructMetadata(object):
         # valid fields
         print vars(ir.parsers)
         for it in ir.parsers.values():
-            for h in it.extract_headers.values():
+            for h in it.header_instances.values():
                 print h
                 name = "valid_%s" % (h)
                 fields.append(ast.StructMember("Maybe#(Bit#(0))", name))
