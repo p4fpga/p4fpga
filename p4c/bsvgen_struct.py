@@ -176,16 +176,29 @@ class StructMetadata(object):
                     metadata.add(f)
             # add runtime data to metadata
             for f in it.runtime_data:
-                width = f[0]
-                name = "runtime_%s" %(f[1])
-                fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
+                if f not in metadata:
+                    width = f[0]
+                    name = "runtime_%s" %(f[1])
+                    fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
+                    metadata.add(f)
 
         for f in ir.controls.values():
             for _, v in f.tables.items():
                 for k in v.key:
-                    width = field_width(k['target'], header_types, headers)
-                    name = "$".join(k['target'])
-                    fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
+                    d = tuple(k['target'])
+                    if d not in metadata:
+                        width = field_width(k['target'], header_types, headers)
+                        name = "$".join(k['target'])
+                        fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
+                        metadata.add(d)
+
+        # valid fields
+        print vars(ir.parsers)
+        for it in ir.parsers.values():
+            for h in it.extract_headers.values():
+                print h
+                name = "valid_%s" % (h)
+                fields.append(ast.StructMember("Maybe#(Bit#(0))", name))
 
         self.struct = ast.Struct(self.name, fields)
 
