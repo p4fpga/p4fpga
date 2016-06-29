@@ -135,7 +135,7 @@ class ActionBlock:
         builder.decreaseIndent()
         builder.emitIndent()
         builder.append("endaction")
-        builder.newline()
+        #builder.newline()
 
 class Function:
     def __init__(self, name, return_type, params, stmt=[]):
@@ -429,7 +429,7 @@ class Case:
         builder.decreaseIndent()
         builder.emitIndent()
         builder.append("endcase")
-        builder.newline()
+        #builder.newline()
 
 class If:
     def __init__(self, expression, stmt):

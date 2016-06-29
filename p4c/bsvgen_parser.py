@@ -161,7 +161,7 @@ class Parser(object):
         TMP12 = "parse_state_w <= %(state)s;"
         TMP13 = "succeed_and_next(rg_offset + %(dp_width)s);"
         TMP14 = "Vector#(%(nextLen)s, Bit#(1)) unparsed = takeAt(%(width)s, dataVec);"
-        print rule_attrs
+        #print rule_attrs
         first = rule_attrs['firstBeat']
         last = rule_attrs['lastBeat']
         name = rule_attrs['name']
@@ -236,9 +236,21 @@ class Parser(object):
         stmt.append(ast.Template(TMP6))
         return stmt
 
+    def buildTmpRegs(self):
+        TMP1 = "Reg#(Bit#(%(sz)s)) %(name)s <- mkReg(0);"
+        stmt = []
+        for state, parse_steps in self.rules.items():
+            for rule_attrs in parse_steps:
+                rcvdLen = rule_attrs['rcvdLen']
+                last = rule_attrs['lastBeat']
+                if last:
+                    stmt.append(ast.Template(TMP1, {'sz': rcvdLen, 'name': state}))
+        return stmt
+
     def buildModuleStmt(self):
         stmt = []
         stmt += self.buildFFs()
+        stmt += self.buildTmpRegs()
         stmt.append(self.funct_succeed())
         stmt.append(self.funct_failed())
         stmt.append(self.funct_push_phv())
