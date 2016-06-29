@@ -146,39 +146,48 @@ class Parser(object):
         rule = ast.Rule(rname, rcond, stmt)
         return rule
 
-    def rule_parse(self, rule_attrs, transition_key):
+    def rule_parse(self, rule_attrs, transition_key, transitions):
         TMP1 = "rl_parse_%(name)s_%(idx)s"
         TMP2 = "(rg_parse_state == %(state)s) && (rg_offset == %(offset)s)"
         TMP3 = "report_parse_action(rg_parse_state, rg_offset, data_this_cycle);"
-        TMP4 = "Vector#(%(prevLen)s, Bit#(1)) tmp_dataVec = unpack(truncate(rg_tmp_parse_ethernet));"
+        TMP4 = "Vector#(%(prevLen)s, Bit#(1)) tmp_dataVec = unpack(truncate(rg_tmp_%(name)s));"
         TMP5 = "Bit#(%(prevLen)s) data_last_cycle = pack(takeAt(0, tmp_dataVec));"
         TMP6 = "Bit#(%(rcvdLen)s) data = {data_this_cycle, data_last_cycle};"
         TMP7 = "Vector#(%(rcvdLen)s, Bit#(1)) dataVec = unpack(data);"
-        #TMP4 = "Bit#(%(width)s) tmp_%(name)s = pack(takeAt(0, unpack(_tmp)));"
-        #TMP5 = "let %(name)s = extract_%(name)s(tmp_%(name)s);"
-        #TMP6 = "let next_state = compute_next_state_%(name)s(%(field)s);"
-        #TMP7 = "rg_parse_state <= next_state;"
-        #TMP8 = "rg_tmp_%(next_state)s <= zeroExtend(%(name)s);"
-        #TMP9 = "parse_state_w <= %(state)s;"
-        #TMP10 = "succeed_and_next(rg_offset + %(dp_width)s);"
-        #TMP11 = "rg_tmp_%(name)s <= zeroExtend({data_this_cycle, rg_tmp_%(name)s});"
-        #print rule_attrs
+        TMP8 = "let %(name)s = extract_%(name)s(tmp_%(name)s);"
+        TMP9 = "let next_state = compute_next_state_%(name)s(%(field)s);"
+        TMP10 = "rg_parse_state <= next_state;"
+        TMP11 = "rg_tmp_%(next_state)s <= zeroExtend(pack(unparsed));"
+        TMP12 = "parse_state_w <= %(state)s;"
+        TMP13 = "succeed_and_next(rg_offset + %(dp_width)s);"
+        TMP14 = "Vector#(%(nextLen)s, Bit#(1)) unparsed = takeAt(%(width)s, dataVec);"
+        print rule_attrs
         first = rule_attrs['firstBeat']
         last = rule_attrs['lastBeat']
         name = rule_attrs['name']
         idx = rule_attrs['idx']
         rcvdLen = rule_attrs['rcvdLen']
+        nextLen = rule_attrs['nextLen']
         offset = rule_attrs['offset']
         width = rule_attrs['width']
-        #next_states = rule_attrs['next_states']
         keys = []
         for key in transition_key[name]:
             keys.append("parse_%s" % (".".join(key['value'])))
+
+        next_states = set()
+        for transition in transitions[name]:
+            next_state = transition['next_state']
+            if next_state == None:
+                continue
+            next_states.add(next_state)
+
         pdict = {"name": name, 
                 "idx": idx,
                 "state": "State"+CamelCase(name),
                 "offset": offset,
                 "rcvdLen": rcvdLen,
+                "prevLen": rcvdLen - DP_WIDTH,
+                "nextLen": nextLen,
                 "width": width,
                 "dp_width": DP_WIDTH,
                 "field": ",".join(keys)}
@@ -191,14 +200,22 @@ class Parser(object):
             stmt.append(ast.Template(TMP5, pdict))
             stmt.append(ast.Template(TMP6, pdict))
             stmt.append(ast.Template(TMP7, pdict))
-            #for t in next_states:
-            #    print t
-            #stmt.append(ast.Template(TMP8, pdict))
+            stmt.append(ast.Template(TMP8, pdict))
             stmt.append(ast.Template(TMP9, pdict))
             stmt.append(ast.Template(TMP10, pdict))
+            stmt.append(ast.Template(TMP14, pdict))
+            for s in next_states:
+                stmt.append(ast.Template(TMP11, {'next_state': s, 'name': name}))
+            stmt.append(ast.Template(TMP12, pdict))
+            stmt.append(ast.Template(TMP13, pdict))
         else:
-            stmt.append(ast.Template(TMP11, pdict))
+            stmt.append(ast.Template(TMP4, pdict))
+            stmt.append(ast.Template(TMP5, pdict))
+            stmt.append(ast.Template(TMP6, pdict))
+            stmt.append(ast.Template(TMP7, pdict))
+            #stmt.append(ast.Template(TMP11, pdict))
             stmt.append(ast.Template(TMP10, pdict))
+            stmt.append(ast.Template(TMP13, pdict))
             pass
         rule = ast.Rule(rname, rcond, stmt)
         return rule
@@ -232,9 +249,9 @@ class Parser(object):
         for state, parse_steps in self.rules.items():
             for rule_attrs in parse_steps:
                 rule_attrs['name'] = state
-                print rule_attrs
                 transition_key = self.transition_key
-                stmt.append(self.rule_parse(rule_attrs, transition_key))
+                transitions = self.transitions
+                stmt.append(self.rule_parse(rule_attrs, transition_key, transitions))
         return stmt
 
     def emitTypes(self, builder):

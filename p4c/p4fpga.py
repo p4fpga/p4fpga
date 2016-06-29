@@ -143,8 +143,8 @@ def render_parsers(ir, json_dict):
             parse_step["idx"] = step_idx
             parse_step["width"] = header_width
             parse_step["rcvdLen"] = rcvdLen
-            if (rcvdLen > header_width):
-                parse_step["nextLen"] = rcvdLen - header_width
+            #if (rcvdLen > header_width):
+            parse_step["nextLen"] = None#rcvdLen - header_width
             parse_step["firstBeat"] = firstBeat
             if firstBeat:
                 firstBeat = False
@@ -164,6 +164,7 @@ def render_parsers(ir, json_dict):
         parse_step["firstBeat"] = firstBeat
         parse_step["lastBeat"] = True
         parse_step["offset"] = offset
+        parse_step["next_state"] = []
         offset += DP_WIDTH
         parse_steps.append(parse_step)
         return parse_steps, bits_to_next_state
