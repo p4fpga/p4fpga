@@ -113,13 +113,15 @@ class Method:
         sparams = [p.__repr__() for p in self.params]
         return '<method: %s %s %s>' % (self.name, self.return_type, self.params)
 
+    def emitSubinterfaceDecl(self, builder):
+        builder.emitIndent()
+        builder.append("method {} {};".format(self.return_type, self.name))
+        builder.newline()
+
     def emit(self, builder):
         builder.emitIndent()
         builder.append("method {} {} ({});".format(self.return_type, self.name, self.params))
         builder.newline()
-
-    def instantiate(self):
-        return self
 
 class ActionBlock:
     def __init__(self, stmt):

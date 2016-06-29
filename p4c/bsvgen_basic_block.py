@@ -42,6 +42,13 @@ class BasicBlock(object):
                         fields.add((d['bitwidth'], d['name']))
             return fields
 
+        def addRawRuntimeData(action, json_dict):
+            actions = json_dict['actions']
+            for at in actions:
+                if at['name'] == action:
+                    rdata = at['runtime_data']
+                    return rdata
+
         self.name = basicblock_attrs['name']
         self.primitives = []
         self.meta_read = set()
@@ -64,6 +71,7 @@ class BasicBlock(object):
         # add runtime data to basic block request
         runtime_data = addRuntimeData(self.name, json_dict)
         self.runtime_data = runtime_data
+        self.raw_runtime_data = addRawRuntimeData(self.name, json_dict)
 
         req_name = "%sReqT" % (CamelCase(self.name))
         self.request = StructM(req_name, self.meta_read, header_types, header_instances, runtime_data=runtime_data)
@@ -230,7 +238,6 @@ class BasicBlock(object):
         TMP1 = "tagged %(type)s {%(field)s}"
         TMP2 = "let v = rx_info_prev_control_state.first;"
         TMP3 = "rx_info_prev_control_state.deq;"
-        TMP4 = "rg_%(field)s <= %(field)s;"
         rules = []
         stmt = []
         rname = self.name + "_request"
@@ -239,11 +246,7 @@ class BasicBlock(object):
         pdict = {"type": ctype, "field": self.request.build_match_expr()}
         casePatStmts = []
         for p in self.primitives:
-            if p.isRegRead():
-                casePatStmts += p.buildReadRequest()
-            if p.isRegWrite():
-                casePatStmts += p.buildWriteRequest()
-                casePatStmts += [ast.Template(TMP4, {"name": p.getName(), "field": p.getDstReg(self.json_dict)[1]})]
+            casePatStmts += p.buildRequest(self.json_dict, self.raw_runtime_data)
         casePatStmts += self.buildPacketFF()
 
         stmt.append(ast.Template(TMP2))
@@ -265,8 +268,7 @@ class BasicBlock(object):
         stmt = []
         rname = self.name + "_response"
         for p in self.primitives:
-            if p.isRegRead():
-                stmt += p.buildReadResponse()
+            stmt += p.buildResponse()
         # optimized bypass register
         # field must include bypass register
         stmt.append(ast.Template(TMP1))
@@ -297,6 +299,8 @@ class BasicBlock(object):
         for r in regs:
             stmt.append(ast.Template(TMP1, {'dsz': r[0], 'field': r[1]}))
         #-- end optimization
+        for p in self.primitives:
+            stmt += p.buildTempReg(self.json_dict)
         stmt += self.buildHandleRequest()
         stmt += self.buildHandleResponse()
         for p in self.primitives:

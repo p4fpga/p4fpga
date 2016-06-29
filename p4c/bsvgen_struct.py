@@ -196,7 +196,6 @@ class StructMetadata(object):
         print vars(ir.parsers)
         for it in ir.parsers.values():
             for h in it.header_instances.values():
-                print h
                 name = "valid_%s" % (h)
                 fields.append(ast.StructMember("Maybe#(Bit#(0))", name))
 
@@ -233,6 +232,7 @@ class StructTableRspT(object):
         self.name = name
         elements = []
         atype = "%sActionT" %(CamelCase(name))
+        elements.append(ast.EnumElement("NOOP_%s"%(name.upper()), "", 0))
         for idx, at in enumerate(actions):
             elements.append(ast.EnumElement(CamelCase(at).upper(), "", idx))
         self.enum = ast.Enum(atype, elements)

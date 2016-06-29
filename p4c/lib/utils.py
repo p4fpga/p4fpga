@@ -26,3 +26,46 @@ def CamelCase(name):
 def camelCase(name):
     output = ''.join(x for x in name.title() if x.isalnum())
     return output[0].lower() + output[1:]
+
+def header_type_to_width (header_type, json_dict):
+    assert type(header_type) == str
+    for h in json_dict["header_types"]:
+        if h["name"] == header_type:
+            fields = h["fields"]
+            width = sum([x for _, x in fields])
+            return width
+    return None
+
+def header_to_width (header, json_dict):
+    assert type(header) == str
+    for h in json_dict["headers"]:
+        if h["name"] == header:
+            hty = h["header_type"]
+            return header_type_to_width(hty, json_dict)
+    return None
+
+def field_to_width (field, json_dict):
+    assert type(field) is list
+    hty = None
+    fields = None
+    for h in json_dict["headers"]:
+        if h["name"] == field[0]:
+            hty = h["header_type"]
+            print hty
+
+    for h in json_dict["header_types"]:
+        if h["name"] == hty:
+            fields = h["fields"]
+    for f, width in fields:
+        if f == field[1]:
+            #print field, width
+            return width
+
+def header_to_header_type(header, json_dict):
+    assert type(header) == str
+    for h in json_dict["headers"]:
+        if h["name"] == header:
+            return h["header_type"]
+    return None
+
+

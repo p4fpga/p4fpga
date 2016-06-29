@@ -43,7 +43,7 @@ BURST_LEN_SIZE=12
 ###########################################
 
 P4FILE=Caans.p4
-CONNECTALFLAGS += -D PARSER=Parser
+CONNECTALFLAGS += -D PARSER=Caans
 CONNECTALFLAGS += -D DEPARSER=Deparser
 CONNECTALFLAGS += -D MATCHTABLE=MatchTableSim
 CONNECTALFLAGS += -D TYPEDEF=Caans

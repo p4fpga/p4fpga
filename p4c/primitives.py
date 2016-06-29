@@ -14,7 +14,7 @@
 #
 
 import lib.ast as ast
-from lib.utils import CamelCase
+from lib.utils import CamelCase, field_to_width
 import primitives as prm
 
 def get_reg_array_size(name, json_dict):
@@ -23,7 +23,6 @@ def get_reg_array_size(name, json_dict):
             bitwidth = array['bitwidth']
             size = array['size']
             return bitwidth, size
-
 
 class Primitive(object):
     """
@@ -39,8 +38,9 @@ class Primitive(object):
     def buildInterface(self, json_dict): return []
     def buildInterfaceDef(self): return []
 
-    def isRegRead(self): return False
-    def isRegWrite(self): return False
+    def buildRequest(self, json_dict, runtime_data): return []
+    def buildResponse(self): return []
+    def buildTempReg(self, json_dict): return []
     def getDstReg(self, json_dict): return None
 
 class ModifyField(Primitive):
@@ -51,8 +51,34 @@ class ModifyField(Primitive):
     def __repr__(self):
         return "%s %s" %(self.op, self.parameters)
 
-    def build(self):
+    def buildTempReg(self, json_dict=None):
+        TMP1 = "Reg#(Bit#(%(dsz)s)) %(field)s <- mkReg(0);"
         stmt = []
+        dst_value = self.parameters[0]['value']
+        dst_type = self.parameters[0]['type']
+        print dst_value
+        field = "$".join(dst_value)
+        dsz = field_to_width(dst_value, json_dict)
+        pdict = {"dsz": dsz, "field": field}
+        stmt.append(ast.Template(TMP1, pdict))
+        return stmt
+
+    def buildRequest(self, json_dict=None, runtime_data=None):
+        TMP1 = "%s <= %s;"
+        stmt = []
+        src_value = self.parameters[1]['value']
+        src_type = self.parameters[1]['type']
+        dst_value = self.parameters[0]['value']
+        dst_type = self.parameters[0]['type']
+        if src_type == 'runtime_data':
+            assert runtime_data is not None
+            src = runtime_data[src_value]
+
+            stmt.append(ast.Template(TMP1 % ("$".join(dst_value), "runtime_%s" % (src['name']))))
+        elif src_type == 'hexstr':
+            stmt.append(ast.Template(TMP1 % ("$".join(dst_value), "%s" % (src_value.replace("0x", "'h")))))
+        else:
+            stmt.append(ast.Template(TMP1 % ("$".join(dst_value), "$".join(src_value))))
         return stmt
 
 class RegisterRead(Primitive):
@@ -60,14 +86,7 @@ class RegisterRead(Primitive):
         self.op = op
         self.parameters = parameters
 
-    def isRegRead(self):
-        return True
-
-    def build(self):
-        stmt = []
-        return stmt
-
-    def buildReadRequest(self):
+    def buildRequest(self, json_dict=None, runtime_data=None):
         TMP1 = "let %(name)s_req = RegRequest { addr: %(addr)s, data: ?, write: False };"
         TMP2 = "tx_info_%(name)s.enq(%(name)s_req);"
         name = self.parameters[1]['value']
@@ -79,11 +98,12 @@ class RegisterRead(Primitive):
         stmt = []
         if addr != "0":
             addr = "truncate(" + addr + ")"
-        stmt.append(ast.Template(TMP1, {"name": name, "type": ptype, "addr": addr}))
-        stmt.append(ast.Template(TMP2, {"name": name}))
+        pdict = {"name": name, "type": ptype, "addr": addr}
+        stmt.append(ast.Template(TMP1, pdict))
+        stmt.append(ast.Template(TMP2, pdict))
         return stmt
 
-    def buildReadResponse(self):
+    def buildResponse(self):
         TMP1 = "let v_%(name)s = rx_info_%(tname)s.first;"
         TMP2 = "rx_info_%(tname)s.deq;"
         TMP3 = "let %(name)s = v_%(name)s.data;"
@@ -137,9 +157,6 @@ class RegisterWrite(Primitive):
         self.op = op
         self.parameters = parameters
 
-    def isRegWrite(self):
-        return True
-
     def getDstReg(self, json_dict):
         name = self.parameters[0]['value']
         dsz, _ = get_reg_array_size(name, json_dict)
@@ -148,13 +165,10 @@ class RegisterWrite(Primitive):
     def getName(self):
         return self.parameters[0]['value']
 
-    def build(self):
-        stmt = []
-        return stmt
-
-    def buildWriteRequest(self):
+    def buildRequest(self, json_dict=None, runtime_data=None):
         TMP1 = "let %(name)s_req = RegRequest { addr: truncate(%(addr)s), data: %(data)s, write: True };"
         TMP2 = "tx_info_%(name)s.enq(%(name)s_req);"
+        TMP4 = "rg_%(field)s <= %(field)s;"
         name = self.parameters[0]['value']
         ptype = CamelCase(name)
         if type(self.parameters[1]['value']) is list:
@@ -166,8 +180,11 @@ class RegisterWrite(Primitive):
         else:
             data = self.parameters[2]['value'][0]
         stmt = []
-        stmt.append(ast.Template(TMP1, {"name": name, "type": ptype, "addr": addr, "data": data}))
-        stmt.append(ast.Template(TMP2, {"name": name}))
+        _, field = self.getDstReg(json_dict)
+        pdict = {"name": name, "type": ptype, "addr": addr, "data": data, "field": field}
+        stmt.append(ast.Template(TMP1, pdict))
+        stmt.append(ast.Template(TMP2, pdict))
+        stmt.append(ast.Template(TMP4, pdict))
         return stmt
 
     def buildTXRX(self, json_dict):

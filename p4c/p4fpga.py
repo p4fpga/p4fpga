@@ -29,7 +29,7 @@ from bsvgen_parser import Parser
 from bsvgen_basic_block import BasicBlock
 from bsvgen_table import Table
 from bsvgen_struct import Struct, StructT, StructMetadata
-from lib.utils import CamelCase
+from lib.utils import CamelCase, header_type_to_width, header_to_width, header_to_header_type
 import lib.ast as ast
 
 def render_runtime_types(ir, json_dict):
@@ -122,30 +122,6 @@ def render_parsers(ir, json_dict):
                 return value
         return None
 
-    def header_type_to_width (header_type):
-        assert type(header_type) == str
-        for h in json_dict["header_types"]:
-            if h["name"] == header_type:
-                fields = h["fields"]
-                width = sum([x for _, x in fields])
-                return width
-        return None
-
-    def header_to_width (header):
-        assert type(header) == str
-        for h in json_dict["headers"]:
-            if h["name"] == header:
-                hty = h["header_type"]
-                return header_type_to_width(hty)
-        return None
-
-    def header_to_header_type(header):
-        assert type(header) == str
-        for h in json_dict["headers"]:
-            if h["name"] == header:
-                return h["header_type"]
-        return None
-
     def expand_parse_state (rcvdLen, offset, header_width):
         ''' expand parse_state to multiple cycles if needed '''
         parse_steps = []
@@ -195,7 +171,7 @@ def render_parsers(ir, json_dict):
         bits_to_next_state = 0
         header = state_to_header(state)
         if header:
-            header_sz = header_to_width(header)
+            header_sz = header_to_width(header, json_dict)
             # compute constants needed for multi-cycle headers
             num_steps, bits_to_next_state = expand_parse_state(bits_in_curr_state, offset_from_start, header_sz)
             # collect info for generating parser
@@ -204,7 +180,7 @@ def render_parsers(ir, json_dict):
             transitions[name] = name_to_transitions(name)
             transition_key[name] = name_to_transition_key(name)
             header_instance[name] = header
-            header_type[name] = header_to_header_type(header)
+            header_type[name] = header_to_header_type(header, json_dict)
             #TODO: handle multiple instances of header type
 
         for t in state["transitions"]:
