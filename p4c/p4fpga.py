@@ -203,7 +203,7 @@ def render_deparsers(ir, json_dict):
     deparse_state0 = deparse_states[0]
     for idx, state in enumerate(deparse_states):
         print idx, state
-    ir.deparsers['deparser'] = Deparser()
+    ir.deparsers['deparser'] = Deparser(deparse_states)
 
 def build_expression(json_data, sb=[], metadata=[]):
     if not json_data:

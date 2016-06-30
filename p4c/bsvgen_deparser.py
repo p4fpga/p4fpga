@@ -29,8 +29,8 @@ import bsvgen_common
 logger = logging.getLogger(__name__)
 
 class Deparser(object):
-    def __init__(self):
-        self.deparse_steps = []
+    def __init__(self, deparse_states):
+        self.deparse_states = deparse_states
 
     def emitInterface(self, builder):
         logger.info("emitInterface: Deparser")
@@ -46,15 +46,32 @@ class Deparser(object):
         intf.emit(builder)
 
     def buildFFs(self):
-        TMP1 = "Reg#(DeparserState) rg_deparse_state <- mkReg(StateDeparseStart);"
-        TMP2 = "FIFOF#(EtherData) data_in_ff <- mkFIFOF;"
-        TMP3 = "FIFOF#(EtherData) data_out_ff <- mkFIFOF;"
-        TMP4 = "FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;"
+        TMP = []
+        TMP.append("FIFOF#(EtherData) data_in_ff <- mkFIFOF;")
+        TMP.append("FIFOF#(EtherData) data_out_ff <- mkFIFOF;")
+        TMP.append("FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;")
         stmt = []
-        stmt.append(ast.Template(TMP1))
-        stmt.append(ast.Template(TMP2))
-        stmt.append(ast.Template(TMP3))
-        stmt.append(ast.Template(TMP4))
+        for t in TMP:
+            stmt.append(ast.Template(t))
+        return stmt
+
+    def buildRegs(self):
+        TMP = []
+        TMP.append("Reg#(Bit#(32)) rg_offset <- mkReg(0);")
+        TMP.append("Reg#(Bit#(128)) rg_buff <- mkReg(0);")
+        TMP.append("Reg#(DeparserState) rg_deparse_state <- mkReg(StateDeparseStart);")
+        stmt = []
+        for t in TMP:
+            stmt.append(ast.Template(t))
+        return stmt
+
+    def buildInputs(self):
+        TMP = []
+        TMP.append("let din = data_in_ff.first;")
+        TMP.append("let meta = meta_in_ff.first;")
+        stmt = []
+        for t in TMP:
+            stmt.append(ast.Template(t))
         return stmt
 
     def funct_report_deparse_action(self):
@@ -121,7 +138,7 @@ class Deparser(object):
         stmt.append(ast.Template(TMP2))
         fname = "create_mask"
         rtype = "Bit#(max)"
-        params = "LUInt#(max) count"
+        params = "UInt#(max) count"
         funct = ast.Function(fname, rtype, params, stmt)
         return funct
 
@@ -152,7 +169,8 @@ class Deparser(object):
         fname = "build_deparse_rule_no_opt"
         rtype = "Rules"
         params = "DeparserState state, int offset, Tuple2#(Bit#(n), Bit#(n)) m, UInt#(8) clen, UInt#(8) plen"
-        funct = ast.Function(fname, rtype, params, rules_stmt)
+        provisos = "Mul#(TDiv#(n, 8), 8, n), Add#(a__, n, 128)"
+        funct = ast.Function(fname, rtype, params, rules_stmt, provisos)
         stmt = []
         stmt.append(funct)
         return stmt
@@ -172,7 +190,7 @@ class Deparser(object):
         else_stmt.append(ast.Template(TMP4))
         stmt.append(ast.Else(else_stmt))
         rname = "rl_start_state"
-        rcond = "rg_parse_state == StateDeparseStart"
+        rcond = "rg_deparse_state == StateDeparseStart"
         rule = ast.Rule(rname, rcond, stmt)
         return rule
 
@@ -200,17 +218,25 @@ class Deparser(object):
         stmt = []
         stmt += bsvgen_common.buildVerbosity()
         stmt += self.buildFFs()
+        stmt += self.buildRegs()
+        stmt += self.buildInputs()
         stmt.append(self.funct_report_deparse_action())
         stmt.append(self.funct_succeed())
         stmt.append(self.funct_failed())
         stmt.append(self.funct_read_data())
         stmt.append(self.funct_create_mask())
-        stmt.append(ast.Template("let din = data_in_ff.first;"))
-        stmt.append(ast.Template("let meta = meta_in_ff.first;"))
         stmt.append(self.rule_start())
         stmt += self.funct_deparse_rule_no_opt()
         #stmt += self.rule_deparse()
         return stmt
+
+    def emitTypes(self, builder):
+        elem = []
+        elem.append(ast.EnumElement("StateDeparseStart", None, None))
+        for state in self.deparse_states:
+            elem.append(ast.EnumElement("StateDeparse%s" % (CamelCase(state)), None, None))
+        state = ast.Enum("DeparserState", elem)
+        state.emit(builder)
 
     def emitModule(self, builder):
         logger.info("emitModule: Deparser")
@@ -225,5 +251,6 @@ class Deparser(object):
         module.emit(builder)
 
     def emit(self, builder):
+        self.emitTypes(builder)
         self.emitInterface(builder)
         self.emitModule(builder)
