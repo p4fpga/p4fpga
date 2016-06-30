@@ -193,7 +193,7 @@ class StructMetadata(object):
                         metadata.add(d)
 
         # valid fields
-        print vars(ir.parsers)
+        #print vars(ir.parsers)
         for it in ir.parsers.values():
             for h in it.header_instances.values():
                 name = "valid_%s" % (h)

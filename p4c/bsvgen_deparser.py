@@ -19,4 +19,221 @@
 # DEALINGS IN THE SOFTWARE.
 #
 
+import logging
+from lib.sourceCodeBuilder import SourceCodeBuilder
+from lib.utils import CamelCase
+import lib.ast as ast
+from p4fpga import DP_WIDTH
+import bsvgen_common
 
+logger = logging.getLogger(__name__)
+
+class Deparser(object):
+    def __init__(self):
+        self.deparse_steps = []
+
+    def emitInterface(self, builder):
+        logger.info("emitInterface: Deparser")
+        TMP1 = "PipeIn#(MetadataT)"
+        TMP2 = "PktWriteServer"
+        TMP3 = "PktWriteClient"
+        TMP4 = "Put#(int)"
+        intf = ast.Interface("Deparser")
+        intf.subinterfaces.append(ast.Interface("metadata", TMP1))
+        intf.subinterfaces.append(ast.Interface("writeServer", TMP2))
+        intf.subinterfaces.append(ast.Interface("writeClient", TMP3))
+        intf.subinterfaces.append(ast.Interface("verbosity", TMP4))
+        intf.emit(builder)
+
+    def buildFFs(self):
+        TMP1 = "Reg#(DeparserState) rg_deparse_state <- mkReg(StateDeparseStart);"
+        TMP2 = "FIFOF#(EtherData) data_in_ff <- mkFIFOF;"
+        TMP3 = "FIFOF#(EtherData) data_out_ff <- mkFIFOF;"
+        TMP4 = "FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;"
+        stmt = []
+        stmt.append(ast.Template(TMP1))
+        stmt.append(ast.Template(TMP2))
+        stmt.append(ast.Template(TMP3))
+        stmt.append(ast.Template(TMP4))
+        return stmt
+
+    def funct_report_deparse_action(self):
+        TMP1 = "$display(\"(%%d) Deparse State %%h offset %%h\", $time, state, offset);"
+        fname = "report_deparse_action"
+        rtype = "Action"
+        params = "DeparserState state, Bit#(32) offset"
+        if_stmt = ast.If("cr_verbosity[0] > 0", [])
+        if_stmt.stmt.append(ast.Template(TMP1))
+        stmt = []
+        stmt.append(if_stmt)
+        ablock = [ast.ActionBlock(stmt)]
+        funct = ast.Function(fname, rtype, params, ablock)
+        return funct
+
+    def funct_succeed(self):
+        TMP1 = "data_in_ff.deq;"
+        TMP2 = "rg_offset <= offset;"
+        fname = "succeed_and_next"
+        rtype = "Action"
+        params = "Bit#(32) offset"
+        stmt = []
+        stmt.append(ast.Template(TMP1))
+        stmt.append(ast.Template(TMP2))
+        ablock = [ast.ActionBlock(stmt)]
+        funct = ast.Function(fname, rtype, params, ablock)
+        return funct
+
+    def funct_failed(self):
+        TMP1 = "data_in_ff.deq;"
+        TMP2 = "rg_offset <= 0;"
+        fname = "failed_and_trap"
+        rtype = "Action"
+        params = "Bit#(32) offset"
+        stmt = []
+        stmt.append(ast.Template(TMP1))
+        stmt.append(ast.Template(TMP2))
+        ablock = [ast.ActionBlock(stmt)]
+        funct = ast.Function(fname, rtype, params, ablock)
+        return funct
+
+    def funct_read_data(self):
+        TMP1 = "Bit#(l) ldata = truncate(din.data) << (fromInteger(valueOf(l))-lhs);"
+        TMP2 = "Bit#(l) rdata = truncate(rg_buff >> (fromInteger(valueOf(l))-rhs);"
+        TMP3 = "Bit#(l) cdata = ldata | rdata;"
+        TMP4 = "return cdata;"
+        stmt = []
+        stmt.append(ast.Template(TMP1))
+        stmt.append(ast.Template(TMP2))
+        stmt.append(ast.Template(TMP3))
+        stmt.append(ast.Template(TMP4))
+        fname = "read_data"
+        rtype = "Bit#(l)"
+        params = "UInt#(8) lhs, UInt#(8) rhs"
+        provisos = "Add#(a__, l, 128)"
+        funct = ast.Function(fname, rtype, params, stmt, provisos=provisos)
+        return funct
+
+    def funct_create_mask(self):
+        TMP1 = "Bit#(max) v = 1 << count - 1;"
+        TMP2 = "return v;"
+        stmt = []
+        stmt.append(ast.Template(TMP1))
+        stmt.append(ast.Template(TMP2))
+        fname = "create_mask"
+        rtype = "Bit#(max)"
+        params = "LUInt#(max) count"
+        funct = ast.Function(fname, rtype, params, stmt)
+        return funct
+
+    def funct_deparse_rule_no_opt(self):
+        TMP1="""\
+   // build_deparse_rule_no_opt
+   function Rules build_deparse_rule_no_opt (DeparserState state,
+                                             int offset,
+                                             Tuple2#(Bit#(n), Bit#(n)) m,
+                                             UInt#(8) clen,
+                                             UInt#(8) plen)
+      provisos (Mul#(TDiv#(n, 8), 8, n),
+                Add#(a__, n, 128));
+      Rules d =
+      rules
+         rule rl_deparse if ((rg_deparse_state == state)
+                          && (rg_offset == unpack(pack(offset))));
+            report_deparse_action(rg_deparse_state, rg_offset);
+            match {.meta, .mask} = m;
+            Vector#(n, Bit#(1)) curr_meta = takeAt(0, unpack(byteSwap(meta)));
+            Vector#(n, Bit#(1)) curr_mask = takeAt(0, unpack(byteSwap(mask)));
+            Bit#(n) curr_data = read_data (clen, plen);
+            $display ("read_data %%h", curr_data);
+            let data = apply_changes (curr_data, pack(curr_meta), pack(curr_mask));
+            let data_this_cycle = EtherData { sop: din.sop,
+                                              eop: din.eop,
+                                              data: zeroExtend(data),
+                                              mask: create_mask(cExtend(fromInteger(valueOf(n)))) };
+            data_out_ff.enq (data_this_cycle);
+            DeparserState next_state = compute_next_state(state);
+            $display ("next_state %%h", next_state);
+            rg_deparse_state <= next_state;
+            rg_buff <= din.data;
+            // apply header removal by marking mask zero
+            // apply added header by setting field at offset.
+            succeed_and_next (rg_offset + cExtend(clen) + cExtend(plen));
+         endrule
+      endrules;
+      return d;
+   endfunction
+"""
+        stmt = []
+        stmt.append(ast.Template(TMP1))
+        return stmt
+
+    def rule_start(self):
+        TMP1 = "let v = data_in_ff.first;"
+        TMP2 = "rg_deparse_state <= %(state)s;"
+        TMP3 = "data_in_ff.deq;"
+        TMP4 = "data_out_ff.enq(v);"
+        stmt = []
+        stmt.append(ast.Template(TMP1))
+        if_stmt = []
+        if_stmt.append(ast.Template(TMP2, {"state": "StateDeparseEthernet"}))
+        stmt.append(ast.If("v.sop", if_stmt))
+        else_stmt = []
+        else_stmt.append(ast.Template(TMP3))
+        else_stmt.append(ast.Template(TMP4))
+        stmt.append(ast.Else(else_stmt))
+        rname = "rl_start_state"
+        rcond = "rg_parse_state == StateDeparseStart"
+        rule = ast.Rule(rname, rcond, stmt)
+        return rule
+
+    def rule_deparse(self):
+        TMP1 = "Tuple2#(%(type)s, %(type)s) %(name)s = toTuple(meta);"
+        TMP2 = "Bit#(%(width)s) %(name)s_meta = pack(tpl_1(%(name)s));"
+        TMP3 = "Bit#(%(width)s) %(name)s_mask = pack(tpl_2(%(name)s));"
+        TMP4 = "addRules(build_deparse_rule_no_opt(%(state)s, %(offset)s, %(tuple)s, %(clen)s, %(plen)s));"
+        stmt = []
+        pdict = {"type": "FIXME",
+                "name": "FIXME",
+                "width": 0,
+                "state": "FIXME",
+                "offset": "FIXME",
+                "tuple": "FIXME",
+                "clen": 0,
+                "plen": 0}
+        stmt.append(ast.Template(TMP1 % pdict))
+        stmt.append(ast.Template(TMP2 % pdict))
+        stmt.append(ast.Template(TMP3 % pdict))
+        stmt.append(ast.Template(TMP4 % pdict))
+        return stmt
+
+    def buildModuleStmt(self):
+        stmt = []
+        stmt += bsvgen_common.buildVerbosity()
+        stmt += self.buildFFs()
+        stmt.append(self.funct_report_deparse_action())
+        stmt.append(self.funct_succeed())
+        stmt.append(self.funct_failed())
+        stmt.append(self.funct_read_data())
+        stmt.append(self.funct_create_mask())
+        stmt.append(ast.Template("let din = data_in_ff.first;"))
+        stmt.append(ast.Template("let meta = meta_in_ff.first;"))
+        stmt.append(self.rule_start())
+        stmt += self.funct_deparse_rule_no_opt()
+        stmt += self.rule_deparse()
+        return stmt
+
+    def emitModule(self, builder):
+        logger.info("emitModule: Deparser")
+        stmt = []
+        mname = "mkDeparser"
+        iname = "Deparser"
+        params = []
+        provisos = []
+        decls = []
+        stmt = self.buildModuleStmt()
+        module = ast.Module(mname, params, iname, provisos, decls, stmt)
+        module.emit(builder)
+
+    def emit(self, builder):
+        self.emitInterface(builder)
+        self.emitModule(builder)

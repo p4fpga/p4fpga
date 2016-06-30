@@ -4,6 +4,7 @@ Common template for bsv generation
 
 import re
 from collections import OrderedDict
+import lib.ast as ast
 
 def get_camel_case(column_name):
     ''' TODO '''
@@ -63,6 +64,24 @@ def emit_import(builder):
                       "Register", "BuildVector"]
     pmap['imports'] = "\n".join(["import {}::*;".format(x) for x in sorted(import_modules)])
     builder.append(IMPORT_TEMPLATE % (pmap))
+
+def buildVerbosity():
+    TMP1 = "Reg#(int) cr_verbosity[2] <- mkCRegU(2);"
+    TMP2 = "FIFOF#(int) cr_verbosity_ff <- mkFIFOF;"
+    TMP3 = "let x = cr_verbosity_ff.first;"
+    TMP4 = "cr_verbosity_ff.deq;"
+    TMP5 = "cr_verbosity[1] <= x;"
+    stmt = []
+    stmt.append(ast.Template(TMP1))
+    stmt.append(ast.Template(TMP2))
+    rl_stmt = []
+    rl_stmt.append(ast.Template(TMP3))
+    rl_stmt.append(ast.Template(TMP4))
+    rl_stmt.append(ast.Template(TMP5))
+    rule = ast.Rule("set_verbosity", [], rl_stmt)
+    stmt.append(rule)
+    return stmt
+
 
 COMPUTE_NEXT_STATE = '''
   function %(state)s compute_next_state(Bit#(%(width)s) v);
@@ -695,4 +714,5 @@ def generate_deparse_top(indent, json):
     pmap["deparse_state_start"] = expand_state_start(indent + 3, json.deparser)
     pmap["deparse_state_stop"] = expand_state_stop(indent + 3, json.deparser)
     return DEPARSE_TOP_TEMPLATE % (pmap)
+
 

@@ -26,6 +26,7 @@ from pprint import pprint
 from bsvgen_program import Program
 from bsvgen_control import Control
 from bsvgen_parser import Parser
+from bsvgen_deparser import Deparser
 from bsvgen_basic_block import BasicBlock
 from bsvgen_table import Table
 from bsvgen_struct import Struct, StructT, StructMetadata
@@ -195,8 +196,12 @@ def render_parsers(ir, json_dict):
     ir.parsers['parser'] = Parser(parse_rules, transitions, transition_key, header_type, header_instance)
 
 def render_deparsers(ir, json_dict):
-    # TODO: generate IR_basic_block objects
-    pass
+    deparsers = json_dict['deparsers']
+    assert (len(deparsers) == 1), "Only one deparser is supported."
+    deparser = deparsers[0]
+    deparse_order = deparser['order']
+    # compute data required for deparser
+    ir.deparsers['deparser'] = Deparser()
 
 def build_expression(json_data, sb=[], metadata=[]):
     if not json_data:
@@ -303,7 +308,7 @@ def ir_create(json_dict):
     ir = Program("program", "ir_meta.yml")
     render_header_types(ir, json_dict)
     render_parsers(ir, json_dict)
-    #render_deparsers(ir, json_dict)
+    render_deparsers(ir, json_dict)
     render_basic_blocks(ir, json_dict)
     render_pipelines(ir, json_dict)
     render_runtime_types(ir, json_dict)

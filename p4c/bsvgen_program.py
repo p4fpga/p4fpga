@@ -111,10 +111,13 @@ class Program(MetaIRInstance):
         for p in self.parsers.values():
             p.emit(builder)
 
+    def emit_deparsers(self, builder):
+        for p in self.deparsers.values():
+            p.emit(builder)
+
     # Basic blocks
     def emit_basic_blocks(self, builder):
         # emit with info from multiple basic blocks
-        #self.emit_metadata(builder)
         self.emit_union_bb_request(builder)
         self.emit_union_bb_response(builder)
 
@@ -138,6 +141,7 @@ class Program(MetaIRInstance):
         emit_import(builder)
         self.emit_structs(builder)
         self.emit_parsers(builder)
+        self.emit_deparsers(builder)
         self.emit_basic_blocks(builder)
         self.emit_controls(builder)
         emit_license(builder)

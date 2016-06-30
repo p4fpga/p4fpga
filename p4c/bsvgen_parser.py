@@ -23,8 +23,8 @@ import logging
 from lib.sourceCodeBuilder import SourceCodeBuilder
 from lib.utils import CamelCase
 import lib.ast as ast
-import pprint
 from p4fpga import DP_WIDTH
+import bsvgen_common
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +43,9 @@ class Parser(object):
         TMP3 = "Put#(int)"
         TMP4 = "ParserPerfRec"
         intf = ast.Interface("Parser")
-        intf.subinterfaces.append(ast.Interface(name="frameIn", typeDefType=TMP1))
-        intf.subinterfaces.append(ast.Interface(name="meta", typeDefType=TMP2))
-        intf.subinterfaces.append(ast.Interface(name="verbosity", typeDefType=TMP3))
+        intf.subinterfaces.append(ast.Interface("frameIn", TMP1))
+        intf.subinterfaces.append(ast.Interface("meta", TMP2))
+        intf.subinterfaces.append(ast.Interface("verbosity", TMP3))
         intf.subinterfaces.append(ast.Method(name="read_perf_info", return_type=TMP4, params=[]))
         intf.emit(builder)
 
@@ -147,7 +147,7 @@ class Parser(object):
         else_stmt = []
         else_stmt.append(ast.Template(TMP3))
         stmt.append(ast.Else(else_stmt))
-        rname = "start_state"
+        rname = "rl_start_state"
         rcond = "rg_parse_state == StateParseStart"
         rule = ast.Rule(rname, rcond, stmt)
         return rule
@@ -230,23 +230,6 @@ class Parser(object):
         rule = ast.Rule(rname, rcond, stmt)
         return rule
 
-    def buildVerbosity(self):
-        TMP1 = "Reg#(int) cr_verbosity[2] <- mkCRegU(2);"
-        TMP2 = "FIFOF#(int) cr_verbosity_ff <- mkFIFOF;"
-        TMP3 = "let x = cr_verbosity_ff.first;"
-        TMP4 = "cr_verbosity_ff.deq;"
-        TMP5 = "cr_verbosity[1] <= x;"
-        stmt = []
-        stmt.append(ast.Template(TMP1))
-        stmt.append(ast.Template(TMP2))
-        rl_stmt = []
-        rl_stmt.append(ast.Template(TMP3))
-        rl_stmt.append(ast.Template(TMP4))
-        rl_stmt.append(ast.Template(TMP5))
-        rule = ast.Rule("set_verbosity", [], rl_stmt)
-        stmt.append(rule)
-        return stmt
-
     def buildFFs(self):
         TMP1 = "FIFOF#(EtherData) data_in_ff <- mkFIFOF;"
         TMP2 = "FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;"
@@ -276,7 +259,7 @@ class Parser(object):
 
     def buildModuleStmt(self):
         stmt = []
-        stmt += self.buildVerbosity()
+        stmt += bsvgen_common.buildVerbosity()
         stmt += self.buildFFs()
         stmt += self.buildTmpRegs()
         stmt.append(self.funct_succeed())

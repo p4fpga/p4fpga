@@ -44,17 +44,17 @@ class Template(object):
         builder.emitIndent()
         builder.append(self.template % self.pdict)
 
-class InterfaceMixin:
-    def getSubinterface(self, name):
-        subinterfaceName = name
-        if not globalv.globalvars.has_key(subinterfaceName):
-            return None
-        subinterface = globalv.globalvars[subinterfaceName]
-        #print 'subinterface', subinterface, subinterface
-        return subinterface
-    def parentClass(self, default):
-        rv = default if (len(self.typeClassInstances)==0) else (self.typeClassInstances[0])
-        return rv
+#class InterfaceMixin:
+#    def getSubinterface(self, name):
+#        subinterfaceName = name
+#        if not globalv.globalvars.has_key(subinterfaceName):
+#            return None
+#        subinterface = globalv.globalvars[subinterfaceName]
+#        #print 'subinterface', subinterface, subinterface
+#        return subinterface
+#    def parentClass(self, default):
+#        rv = default if (len(self.typeClassInstances)==0) else (self.typeClassInstances[0])
+#        return rv
 
 def dtInfo(arg):
     rc = {}
@@ -140,12 +140,14 @@ class ActionBlock:
         #builder.newline()
 
 class Function:
-    def __init__(self, name, return_type, params, stmt=[]):
+    def __init__(self, name, return_type, params, stmt=[], provisos=None):
         self.type = 'Function'
         self.name = name
         self.return_type = return_type
         self.params = params
         self.stmt = stmt
+        self.provisos = provisos
+
     def __repr__(self):
         if not self.params:
             return '<function: %s %s NONE>' % (self.name, self.return_type)
@@ -154,7 +156,13 @@ class Function:
 
     def emit(self, builder):
         builder.emitIndent()
-        builder.append("function {} {}({});".format(self.return_type, self.name, self.params))
+        if self.provisos:
+            builder.append("function {} {}({})".format(self.return_type, self.name, self.params))
+            builder.newline()
+            builder.emitIndent()
+            builder.append(" provisos ({});".format(self.provisos))
+        else:
+            builder.append("function {} {}({});".format(self.return_type, self.name, self.params))
         builder.newline()
         builder.increaseIndent()
         for s in self.stmt:
@@ -176,29 +184,20 @@ class Variable:
     def __repr__(self):
         return '<variable: %s : %s>' % (self.name, self.type)
 
-class Interface(InterfaceMixin):
-    def __init__(self, name="unknown", params=[], subinterfaces=[],
-                       typeDefType=[], methodProto=[]):
-        """
-        @param
-        @param subinterfaces: instances of subinterface of type Interface
-        """
-        self.type = 'Interface'
+class Interface():
+    def __init__(self, name=None, typedef=None):
         self.name = name
-        self.params = params
-        self.subinterfaces = subinterfaces
-        self.typeDefType = typeDefType
-        self.methodProto = methodProto
-
-    def interfaceType(self):
-        return Type(self.name,self.params)
+        self.typedef = typedef 
+        self.params = [] 
+        self.subinterfaces = []
+        self.methodProto = [] 
 
     def __repr__(self):
-        return '{interface: %s (%s) : %s}' % (self.name, self.params, self.typeDefType)
+        return '{interface: %s (%s)}' % (self.name, self.params)
 
     def emitSubinterfaceDecl(self, builder):
         builder.emitIndent()
-        builder.append("interface {} {};".format(self.typeDefType, self.name))
+        builder.append("interface {} {};".format(self.typedef, self.name))
         builder.newline()
 
     def emit(self, builder):

@@ -51,7 +51,7 @@ def field_to_width (field, json_dict):
     for h in json_dict["headers"]:
         if h["name"] == field[0]:
             hty = h["header_type"]
-            print hty
+            #print hty
 
     for h in json_dict["header_types"]:
         if h["name"] == hty:

@@ -56,7 +56,7 @@ class ModifyField(Primitive):
         stmt = []
         dst_value = self.parameters[0]['value']
         dst_type = self.parameters[0]['type']
-        print dst_value
+        #print dst_value
         field = "$".join(dst_value)
         dsz = field_to_width(dst_value, json_dict)
         pdict = {"dsz": dsz, "field": field}
@@ -138,7 +138,7 @@ class RegisterRead(Primitive):
         ptype = CamelCase(tname)
         dsz, asz= get_reg_array_size(name, json_dict)
         pdict = {'name': name, 'asz': asz, 'dsz': dsz}
-        intf = ast.Interface(name, typeDefType = TMP1 % pdict)
+        intf = ast.Interface(name, TMP1 % pdict)
         stmt.append(intf)
         return stmt
 
@@ -210,7 +210,8 @@ class RegisterWrite(Primitive):
         tname = self.parameters[2]['value'][1]
         dsz, asz= get_reg_array_size(name, json_dict)
         pdict = {'name': name, 'asz': asz, 'dsz': dsz}
-        intf = ast.Interface(name, typeDefType = TMP1 % pdict)
+        intf = ast.Interface(name)
+        intf.typeDefType = TMP1 % pdict
         stmt.append(intf)
         return stmt
 
