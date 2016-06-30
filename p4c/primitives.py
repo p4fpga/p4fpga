@@ -211,7 +211,7 @@ class RegisterWrite(Primitive):
         dsz, asz= get_reg_array_size(name, json_dict)
         pdict = {'name': name, 'asz': asz, 'dsz': dsz}
         intf = ast.Interface(name)
-        intf.typeDefType = TMP1 % pdict
+        intf.typedef = TMP1 % pdict
         stmt.append(intf)
         return stmt
 
