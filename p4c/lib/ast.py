@@ -280,6 +280,28 @@ class Rule:
         builder.append("endrule")
         builder.newline()
 
+class Rules:
+    def __init__(self, ruleStmt):
+        self.ruleStmt = ruleStmt
+
+    def emit(self, builder):
+        builder.emitIndent()
+        builder.append("Rules d = ")
+        builder.newline()
+        builder.emitIndent()
+        builder.append("rules")
+        builder.newline()
+        builder.increaseIndent()
+        for s in self.ruleStmt:
+            s.emit(builder)
+            builder.newline()
+        builder.decreaseIndent()
+        builder.emitIndent()
+        builder.append("endrules;")
+        builder.newline()
+        builder.emitIndent()
+        builder.append("return d;")
+
 class EnumElement:
     def __init__(self, name, qualifiers, value):
         self.qualifiers = qualifiers

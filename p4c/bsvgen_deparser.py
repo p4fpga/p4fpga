@@ -98,7 +98,7 @@ class Deparser(object):
 
     def funct_read_data(self):
         TMP1 = "Bit#(l) ldata = truncate(din.data) << (fromInteger(valueOf(l))-lhs);"
-        TMP2 = "Bit#(l) rdata = truncate(rg_buff >> (fromInteger(valueOf(l))-rhs);"
+        TMP2 = "Bit#(l) rdata = truncate(rg_buff) >> (fromInteger(valueOf(l))-rhs);"
         TMP3 = "Bit#(l) cdata = ldata | rdata;"
         TMP4 = "return cdata;"
         stmt = []
@@ -126,45 +126,35 @@ class Deparser(object):
         return funct
 
     def funct_deparse_rule_no_opt(self):
-        TMP1="""\
-   // build_deparse_rule_no_opt
-   function Rules build_deparse_rule_no_opt (DeparserState state,
-                                             int offset,
-                                             Tuple2#(Bit#(n), Bit#(n)) m,
-                                             UInt#(8) clen,
-                                             UInt#(8) plen)
-      provisos (Mul#(TDiv#(n, 8), 8, n),
-                Add#(a__, n, 128));
-      Rules d =
-      rules
-         rule rl_deparse if ((rg_deparse_state == state)
-                          && (rg_offset == unpack(pack(offset))));
-            report_deparse_action(rg_deparse_state, rg_offset);
-            match {.meta, .mask} = m;
-            Vector#(n, Bit#(1)) curr_meta = takeAt(0, unpack(byteSwap(meta)));
-            Vector#(n, Bit#(1)) curr_mask = takeAt(0, unpack(byteSwap(mask)));
-            Bit#(n) curr_data = read_data (clen, plen);
-            $display ("read_data %%h", curr_data);
-            let data = apply_changes (curr_data, pack(curr_meta), pack(curr_mask));
-            let data_this_cycle = EtherData { sop: din.sop,
-                                              eop: din.eop,
-                                              data: zeroExtend(data),
-                                              mask: create_mask(cExtend(fromInteger(valueOf(n)))) };
-            data_out_ff.enq (data_this_cycle);
-            DeparserState next_state = compute_next_state(state);
-            $display ("next_state %%h", next_state);
-            rg_deparse_state <= next_state;
-            rg_buff <= din.data;
-            // apply header removal by marking mask zero
-            // apply added header by setting field at offset.
-            succeed_and_next (rg_offset + cExtend(clen) + cExtend(plen));
-         endrule
-      endrules;
-      return d;
-   endfunction
-"""
+        TMP = []
+        TMP.append("report_deparse_action(rg_deparse_state, rg_offset);")
+        TMP.append("match {.meta, .mask} = m;")
+        TMP.append("Vector#(n, Bit#(1)) curr_meta = takeAt(0, unpack(byteSwap(meta)));")
+        TMP.append("Vector#(n, Bit#(1)) curr_mask = takeAt(0, unpack(byteSwap(mask)));")
+        TMP.append("Bit#(n) curr_data = read_data (clen, plen);")
+        TMP.append("$display (\"read_data %%h\", curr_data);")
+        TMP.append("let data = apply_changes (curr_data, pack(curr_meta), pack(curr_mask));")
+        TMP.append("let data_this_cycle = EtherData { sop: din.sop, eop: din.eop, data: zeroExtend(data), mask: create_mask(cExtend(fromInteger(valueOf(n)))) };")
+        TMP.append("data_out_ff.enq (data_this_cycle);")
+        TMP.append("DeparserState next_state = compute_next_state(state);")
+        TMP.append("$display (\"next_state %%h\", next_state);")
+        TMP.append("rg_deparse_state <= next_state;")
+        TMP.append("rg_buff <= din.data;")
+        TMP.append("// apply header removal by marking mask zero")
+        TMP.append("// apply added header by setting field at offset.")
+        TMP.append("succeed_and_next (rg_offset + cExtend(clen) + cExtend(plen));")
+        rcond = "(rg_deparse_state == state) && (rg_offset == unpack(pack(offset)))"
+        rstmt = []
+        for n in TMP: rstmt.append(ast.Template(n))
+        rule = ast.Rule("rl_deparse", rcond, rstmt)
+        rules = ast.Rules([rule])
+        rules_stmt = [rules]
+        fname = "build_deparse_rule_no_opt"
+        rtype = "Rules"
+        params = "DeparserState state, int offset, Tuple2#(Bit#(n), Bit#(n)) m, UInt#(8) clen, UInt#(8) plen"
+        funct = ast.Function(fname, rtype, params, rules_stmt)
         stmt = []
-        stmt.append(ast.Template(TMP1))
+        stmt.append(funct)
         return stmt
 
     def rule_start(self):
@@ -219,7 +209,7 @@ class Deparser(object):
         stmt.append(ast.Template("let meta = meta_in_ff.first;"))
         stmt.append(self.rule_start())
         stmt += self.funct_deparse_rule_no_opt()
-        stmt += self.rule_deparse()
+        #stmt += self.rule_deparse()
         return stmt
 
     def emitModule(self, builder):

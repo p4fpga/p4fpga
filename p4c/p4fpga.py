@@ -199,8 +199,10 @@ def render_deparsers(ir, json_dict):
     deparsers = json_dict['deparsers']
     assert (len(deparsers) == 1), "Only one deparser is supported."
     deparser = deparsers[0]
-    deparse_order = deparser['order']
-    # compute data required for deparser
+    deparse_states = deparser['order']
+    deparse_state0 = deparse_states[0]
+    for idx, state in enumerate(deparse_states):
+        print idx, state
     ir.deparsers['deparser'] = Deparser()
 
 def build_expression(json_data, sb=[], metadata=[]):
