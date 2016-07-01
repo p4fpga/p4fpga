@@ -19,6 +19,7 @@ import os
 import sys
 import yaml
 import p4fpga
+import top
 
 from collections import OrderedDict
 from p4c_bm import gen_json
@@ -53,6 +54,21 @@ def _validate_dir(path):
         print path, "is not a valid directory"
         sys.exit(1)
     return path
+
+def generate_top_module():
+    t = top.top_create()
+    builder = SourceCodeBuilder()
+    t.emit(builder)
+    with open("Main.bsv", 'w') as bsv:
+        bsv.write(builder.toString())
+
+
+def generate_top_api():
+    api = top.top_api_create()
+    builder = SourceCodeBuilder()
+    api.emit(builder)
+    with open("MainAPI.bsv", 'w') as bsv:
+        bsv.write(builder.toString())
 
 def main():
     argparser = argparse.ArgumentParser(
@@ -126,6 +142,9 @@ def main():
     if options.output:
         with open(path_output, 'w') as bsv:
             bsv.write(builder.toString())
+
+    generate_top_module()
+    generate_top_api()
 
 if __name__ == "__main__":
     main()

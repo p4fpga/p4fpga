@@ -248,7 +248,7 @@ class Module:
         module_decls = ""
         if len(self.decls) != 0:
             module_decls = "#(%s)" % (",".join(self.decls))
-        builder.append("module {}{}({});".format(self.name, module_decls, self.interface))
+        builder.append("module {} {} ({});".format(self.name, module_decls, self.interface))
         builder.newline()
         builder.increaseIndent()
         for s in self.stmt:
