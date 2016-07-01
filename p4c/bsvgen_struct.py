@@ -209,6 +209,7 @@ class StructTableReqT(object):
         self.name = name
         fields = []
         total_width = 0
+        pad_width = 0
         for k in key:
             width = field_width(k['target'], header_types, headers)
             total_width += width
