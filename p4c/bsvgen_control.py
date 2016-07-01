@@ -61,17 +61,32 @@ class Control (object):
         TMP1 = "%(type)s %(name)s <- mk%(type)s();"
         stmt = []
         stmt.append(ast.Template("// Basic Blocks"))
+        basic_block_set = dict() # to ensure unique name
         for b in self.basic_blocks:
-            name = b.name
-            stmt.append(ast.Template(TMP1, {"type": CamelCase(name), "name": name}))
+            btype = CamelCase(b.name)
+            bname = b.name
+            if bname in basic_block_set:
+                basic_block_set[bname] += 1
+                name = b.name + "_%s" % (basic_block_set[b.name])
+            else:
+                basic_block_set[bname] = 0
+                name = b.name + "_0"
+            stmt.append(ast.Template(TMP1, {"type": btype, "name": name}))
         return stmt
 
     def buildBasicBlockConnection(self):
-        TMP1 = "mkConnection(%(tbl)s.next_control_state_%(id)s, %(bb)s.prev_control_state);"
+        TMP1 = "mkChan(mkFIFOF, mkFIFOF, %(tbl)s.next_control_state_%(id)s, %(bb)s.prev_control_state);"
         stmt = []
+        basic_block_set = dict() # to ensure unique name
         for k, v in self.tables.items():
             for idx, action in enumerate(v.actions):
-                stmt.append(ast.Template(TMP1, {"tbl": k, "id": idx, "bb": action}))
+                if action in basic_block_set:
+                    basic_block_set[action] += 1
+                    name = action + "_%s" % (basic_block_set[action])
+                else:
+                    basic_block_set[action] = 0
+                    name = action + "_0"
+                stmt.append(ast.Template(TMP1, {"tbl": k, "id": idx, "bb": name}))
         return stmt
 
     def buildRegisterMakeChan(self):
