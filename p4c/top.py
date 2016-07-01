@@ -17,8 +17,8 @@ from bsvgen_common import emit_license, emit_import
 import lib.ast as ast
 
 class Top(object):
-    def __init__(self):
-        pass
+    def __init__(self, p4name):
+        self.p4name = p4name
 
     def emit_import(self, builder):
         TMP1 = "import %s::*;"
@@ -31,6 +31,7 @@ class Top(object):
                    "PacketBuffer",
                    "SharedBuff",
                    "Sims",
+                   self.p4name,
                    "MainAPI"
                    ]
         for x in sorted(modules):
@@ -39,6 +40,7 @@ class Top(object):
 
     def buildModule(self):
         TMP = []
+        TMP.append("let verbose = True;")
         TMP.append("Clock defaultClock <- exposeCurrentClock();")
         TMP.append("Reset defaultReset <- exposeCurrentReset();")
         TMP.append("`ifdef SIMULATION")
@@ -72,7 +74,7 @@ class Top(object):
         return stmt
 
     def emitInterface(self, builder):
-        intf = ast.Interface("Main")
+        intf = ast.Interface(typedef="Main")
         intf.subinterfaces.append(ast.Interface("request", "MainRequest"))
         intf.emitInterfaceDecl(builder)
 
@@ -95,19 +97,22 @@ class Top(object):
         emit_license(builder)
 
 class API():
-    def __init__(self):
-        pass
+    def __init__(self, p4name):
+        self.p4name = p4name
 
     def emit_import(self, builder):
         TMP1 = "import %s::*;"
         modules = ["Connectable",
                    "Clocks",
+                   "DefaultValue",
                    "Ethernet",
                    "BuildVector",
                    "GetPut",
                    "HostChannel",
                    "PacketBuffer",
-                   "MainDefs"
+                   "Vector",
+                   "MainDefs",
+                   self.p4name
                    ]
         for x in sorted(modules):
             builder.append(ast.Template(TMP1 % x))
@@ -116,7 +121,7 @@ class API():
     # Default API function
     def build_read_version(self):
         TMP1 = "let v = `NicVersion;"
-        TMP2 = "indication.read_version_resp(v);"
+        TMP2 = "indication.read_version_rsp(v);"
         name = "read_version"
         rtype = "Action"
         params = "Bit#(32) version"

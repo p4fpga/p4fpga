@@ -135,8 +135,9 @@ def main():
         with open(path_output, 'w') as bsv:
             bsv.write(builder.toString())
 
-    generate_extra_file(top.Top(), "Main.bsv")
-    generate_extra_file(top.API(), "MainAPI.bsv")
+    p4name = os.path.splitext(os.path.basename(options.output))[0]
+    generate_extra_file(top.Top(p4name), "Main.bsv")
+    generate_extra_file(top.API(p4name), "MainAPI.bsv")
     generate_extra_file(top.Defs([]), "MainDefs.bsv")
 
 if __name__ == "__main__":

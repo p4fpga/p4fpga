@@ -115,6 +115,18 @@ class Deparser(object):
         funct = ast.Function(fname, rtype, params, ablock)
         return funct
 
+    def funct_compute_next_state(self):
+        TMP1 = "DeparserState nextState = StateDeparseStart;"
+        TMP2 = "return nextState;"
+        stmt = []
+        stmt.append(ast.Template(TMP1))
+        stmt.append(ast.Template(TMP2))
+        fname = "compute_next_state"
+        rtype = "DeparserState"
+        params = "DeparserState state"
+        funct = ast.Function(fname, rtype, params, stmt)
+        return funct
+
     def funct_read_data(self):
         TMP1 = "Bit#(l) ldata = truncate(din.data) << (fromInteger(valueOf(l))-lhs);"
         TMP2 = "Bit#(l) rdata = truncate(rg_buff) >> (fromInteger(valueOf(l))-rhs);"
@@ -225,6 +237,7 @@ class Deparser(object):
         stmt.append(self.funct_report_deparse_action())
         stmt.append(self.funct_succeed())
         stmt.append(self.funct_failed())
+        stmt.append(self.funct_compute_next_state())
         stmt.append(self.funct_read_data())
         stmt.append(self.funct_create_mask())
         stmt.append(self.rule_start())
