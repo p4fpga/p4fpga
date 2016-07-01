@@ -55,7 +55,7 @@ def _validate_dir(path):
         sys.exit(1)
     return path
 
-def generate_extra_file(obj, filename):
+def generate_file(obj, filename):
     assert type(filename) is str
     builder = SourceCodeBuilder()
     obj.emit(builder)
@@ -73,15 +73,10 @@ def main():
     argparser.add_argument('--p4-v1.1', action='store_true',
                            help='Run the compiler on a P4 v1.1 program.',
                            default=False, required=False)
-    argparser.add_argument('--output', '-o', type=str,
-                           help='Output BSV file.')
     options = argparser.parse_args()
 
     if options.json:
         path_json = _validate_path(options.json)
-
-    if options.output:
-        path_output = _validate_path(options.output)
 
     p4_v1_1 = getattr(options, 'p4_v1.1')
     if p4_v1_1:
@@ -118,27 +113,19 @@ def main():
     # entry point for mid-end
     ir = p4fpga.ir_create(json_dict);
 
-    noisyFlag = os.environ.get('D') == '1'
-    #if noisyFlag:
-    #    with open("generatedPipeline.json", "w") as fp:
-    #        json.dump(ir, fp, indent=4, separators=(',', ': '))
-
     # entry point for backend
-    builder = SourceCodeBuilder()
-    ir.emit(builder, noisyFlag)
+    #builder = SourceCodeBuilder()
+    #ir.emit(builder, noisyFlag)
 
-    if os.path.dirname(options.output) and \
-        not os.path.exists(os.path.dirname(options.output)):
-        os.makedirs(os.path.dirname(options.output))
+    if os.path.dirname("generatedbsv") and \
+        not os.path.exists("generatedbsv"):
+        os.makedirs("generatedbsv")
 
-    if options.output:
-        with open(path_output, 'w') as bsv:
-            bsv.write(builder.toString())
-
-    p4name = os.path.splitext(os.path.basename(options.output))[0]
-    generate_extra_file(top.Top(p4name), "Main.bsv")
-    generate_extra_file(top.API(p4name), "MainAPI.bsv")
-    generate_extra_file(top.Defs([]), "MainDefs.bsv")
+    p4name = os.path.splitext(os.path.basename(options.source))[0]
+    generate_file(ir, os.path.join('generatedbsv', p4name+'.bsv'))
+    generate_file(top.Top(p4name), os.path.join('generatedbsv', "Main.bsv"))
+    generate_file(top.API(p4name), os.path.join('generatedbsv', "MainAPI.bsv"))
+    generate_file(top.Defs([]), os.path.join('generatedbsv', "MainDefs.bsv"))
 
 if __name__ == "__main__":
     main()

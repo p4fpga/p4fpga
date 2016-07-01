@@ -134,7 +134,7 @@ class Program(MetaIRInstance):
         for it in self.controls.values():
             it.emit(builder)
 
-    def emit(self, builder, noisyFlag):
+    def emit(self, builder):
         """
         Emit Mid-end IR to BSV
         """

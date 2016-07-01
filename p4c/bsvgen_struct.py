@@ -234,9 +234,9 @@ class StructTableRspT(object):
         self.name = name
         elements = []
         atype = "%sActionT" %(CamelCase(name))
-        elements.append(ast.EnumElement("NOOP_%s"%(name.upper()), "", 0))
+        elements.append(ast.EnumElement("DEFAULT_%s"%(name.upper()), "", 0))
         for idx, at in enumerate(actions):
-            elements.append(ast.EnumElement(at.upper(), "", idx))
+            elements.append(ast.EnumElement(at.lstrip('_').upper(), "", idx))
         self.enum = ast.Enum(atype, elements)
         fields = []
         fields.append(ast.StructMember(atype, "_action"))
