@@ -56,7 +56,7 @@ def _validate_dir(path):
     return path
 
 def generate_top_module():
-    t = top.top_create()
+    t = top.Top()
     builder = SourceCodeBuilder()
     t.emit(builder)
     with open("Main.bsv", 'w') as bsv:
@@ -64,7 +64,7 @@ def generate_top_module():
 
 
 def generate_top_api():
-    api = top.top_api_create()
+    api = top.API()
     builder = SourceCodeBuilder()
     api.emit(builder)
     with open("MainAPI.bsv", 'w') as bsv:

@@ -82,10 +82,19 @@ class API():
         pass
 
     def build_read_version(self):
-        pass
+        name = "read_version"
+        rtype = "Action"
+        params = "Bit#(32) version"
+        req = ast.Method(name, rtype, [])
+        rsp = ast.Method(name+"_rsp", rtype, params)
+        return req, rsp
 
     def build_writePacketData(self):
-        pass
+        name = "writePacketData"
+        rtype = "Action"
+        params = "Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop"
+        req = ast.Method(name, rtype, params)
+        return req
 
     def buildModule(self):
         stmt = []
@@ -93,10 +102,13 @@ class API():
 
     def buildRequestInterface(self):
         intf = ast.Interface("MainRequest")
+        intf.subinterfaces.append(self.build_read_version()[0])
+        intf.subinterfaces.append(self.build_writePacketData())
         return intf
 
     def buildResponseInterface(self):
         intf = ast.Interface("MainIndication")
+        intf.subinterfaces.append(self.build_read_version()[1])
         return intf
 
     def emitInterface(self, builder):
@@ -123,12 +135,4 @@ class API():
         self.emitInterface(builder)
         self.emitModule(builder)
         emit_license(builder)
-
-def top_create():
-    top = Top()
-    return top
-
-def top_api_create():
-    api = API()
-    return api
 
