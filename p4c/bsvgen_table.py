@@ -93,7 +93,7 @@ class Table(object):
     def __init__(self, table_attrs, basic_block_map, json_dict):
         self.name = table_attrs["name"]
         self.match_type = table_attrs['match_type']
-        self.depth = table_attrs['max_size']
+        self.depth = 256 if table_attrs['max_size'] == 16384 else table_attrs['max_size']
         self.key = table_attrs.get('key', None)
         self.actions = table_attrs.get('actions', None)
         self.next_tables= table_attrs.get('next_tables', None)
