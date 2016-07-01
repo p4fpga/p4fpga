@@ -1,3 +1,6 @@
 [submodule "submodules/p4c-bm"]
 	path = submodules/p4c-bm
 	url = https://github.com/p4lang/p4c-bm.git
+[submodule "dpl-benchmark"]
+	path = dpl-benchmark
+	url = git@github.com:usi-systems/dpl-benchmark.git
