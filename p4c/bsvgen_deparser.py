@@ -85,7 +85,7 @@ class Deparser(object):
         if_stmt.stmt.append(ast.Template(TMP1))
         stmt = []
         stmt.append(if_stmt)
-        ablock = [ast.ActionBlock(stmt)]
+        ablock = [ast.ActionBlock("action", stmt)]
         funct = ast.Function(fname, rtype, params, ablock)
         return funct
 
@@ -98,7 +98,7 @@ class Deparser(object):
         stmt = []
         stmt.append(ast.Template(TMP1))
         stmt.append(ast.Template(TMP2))
-        ablock = [ast.ActionBlock(stmt)]
+        ablock = [ast.ActionBlock("action", stmt)]
         funct = ast.Function(fname, rtype, params, ablock)
         return funct
 
@@ -111,7 +111,7 @@ class Deparser(object):
         stmt = []
         stmt.append(ast.Template(TMP1))
         stmt.append(ast.Template(TMP2))
-        ablock = [ast.ActionBlock(stmt)]
+        ablock = [ast.ActionBlock("action", stmt)]
         funct = ast.Function(fname, rtype, params, ablock)
         return funct
 

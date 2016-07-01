@@ -40,6 +40,53 @@ IRQ_TEMPLATE = """Vector#(%(sz)s, Bool) readyBits = map(fifoNotEmpty, %(fifo)s);
   end
 """
 
+class MatchTableSim:
+    def __init__(self, ksz, vsz):
+        self.ksz = ksz
+        self.vsz = vsz
+
+    def build_bdpi(self, ksz, vsz):
+        TMP1 = "import \"BDPI\" function ActionValue#(Bit#(%s)) matchtable_read_%s_%s(Bit#(%s) msgtype);"
+        TMP2 = "import \"BDPI\" function Action matchtable_write_%s_%s(Bit#(%s) msgtype, Bit#(%s) data);"
+        stmt = []
+        stmt.append(ast.Template(TMP1 % (vsz, ksz, vsz, ksz)))
+        stmt.append(ast.Template(TMP2 % (ksz, vsz, ksz, vsz)))
+        return stmt
+
+    def build_read_function(self, ksz, vsz):
+        TMP1 = "let v <- matchtable_read_%s_%s(key);" % (ksz, vsz)
+        TMP2 = "return v;"
+        name = "matchtable_read"
+        type = "ActionValue#(Bit#(%s))" % (vsz)
+        params = "Bit#(%s) key" % (ksz)
+        stmt = []
+        stmt.append(ast.Template(TMP1))
+        stmt.append(ast.Template(TMP2))
+        action_block = ast.ActionBlock("actionvalue", stmt)
+        funct = ast.Function(name, type, params, stmt=[action_block])
+        return funct
+
+    def build_write_function(self, ksz, vsz):
+        TMP1 = "matchtable_write_%s_%s(key, data);" % (ksz, vsz)
+        name = "matchtable_write"
+        type = "Action"
+        params = "Bit#(%s) key, Bit#(%s) data" % (ksz, vsz)
+        stmt = []
+        stmt.append(ast.Template(TMP1))
+        action_block = ast.ActionBlock("action", stmt)
+        funct = ast.Function(name, type, params, stmt=[action_block])
+        return funct
+
+    def emit(self, builder):
+        TMP1 = "MatchTableSim#(%s, %s)"
+        for s in self.build_bdpi(self.ksz, self.vsz):
+            s.emit(builder)
+            builder.newline()
+        stmt = []
+        stmt.append(self.build_read_function(self.ksz, self.vsz))
+        stmt.append(self.build_write_function(self.ksz, self.vsz))
+        inst = ast.Instance(TMP1%(self.ksz, self.vsz), stmt)
+        inst.emit(builder)
 
 class Table(object):
     required_attributes = ["name", "match_type", "max_size", "key", "actions"]
@@ -332,6 +379,9 @@ class Table(object):
         action_info = self.json_dict['actions']
         rsp_struct = StructTableRspT(self.name, self.actions, action_info)
         rsp_struct.emit(builder)
+
+        simmodel = MatchTableSim(req_struct.width, rsp_struct.width)
+        simmodel.emit(builder)
 
     def emitValueType(self, builder):
         pass

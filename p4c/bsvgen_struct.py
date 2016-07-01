@@ -219,6 +219,7 @@ class StructTableReqT(object):
             fields.append(ast.StructMember("Bit#(%s)" %(pad_width), "padding"))
 
         self.struct = ast.Struct("%sReqT"%(CamelCase(self.name)), fields)
+        self.width = total_width + pad_width
 
     def emit(self, builder):
         self.struct.emitTypeDefStruct(builder)
@@ -234,10 +235,11 @@ class StructTableRspT(object):
         atype = "%sActionT" %(CamelCase(name))
         elements.append(ast.EnumElement("NOOP_%s"%(name.upper()), "", 0))
         for idx, at in enumerate(actions):
-            elements.append(ast.EnumElement(CamelCase(at).upper(), "", idx))
+            elements.append(ast.EnumElement(at.upper(), "", idx))
         self.enum = ast.Enum(atype, elements)
         fields = []
         fields.append(ast.StructMember(atype, "_action"))
+        dwidth = 0
         for at in enumerate(actions):
             info = findActionInfo(action_info, at)
             runtime_data = info['runtime_data']
@@ -245,7 +247,9 @@ class StructTableRspT(object):
                 data_width = data['bitwidth']
                 data_name = "runtime_%s"%(data['name'])
                 fields.append(ast.StructMember("Bit#(%s)" %(data_width), data_name))
+                dwidth += data_width
         self.struct = ast.Struct("%sRspT"%(CamelCase(self.name)), fields)
+        self.width = len(actions) + dwidth
 
     def emit(self, builder):
         self.enum.emit(builder)

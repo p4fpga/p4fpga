@@ -134,11 +134,12 @@ class Method:
         builder.newline()
 
 class ActionBlock:
-    def __init__(self, stmt):
+    def __init__(self, type, stmt):
+        self.type = type
         self.stmt = stmt
     def emit(self, builder):
         builder.emitIndent()
-        builder.append("action")
+        builder.append(self.type)
         builder.newline()
         builder.increaseIndent()
         for s in self.stmt:
@@ -146,8 +147,7 @@ class ActionBlock:
             builder.newline()
         builder.decreaseIndent()
         builder.emitIndent()
-        builder.append("endaction")
-        #builder.newline()
+        builder.append("end"+self.type)
 
 class Function:
     def __init__(self, name, return_type, params, stmt=[], provisos=None):
@@ -181,7 +181,7 @@ class Function:
         builder.decreaseIndent()
         builder.emitIndent()
         builder.append("endfunction")
-        builder.newline()
+        #builder.newline()
 
 class Variable:
     def __init__(self, name, t, value):
@@ -509,13 +509,21 @@ class Else:
         builder.emitIndent()
         builder.append("end")
 
-class Reg:
-    def __init__(self, name, rw, value):
-        pass
-
-    def emitDecl(self, builder):
-        pass
+class Instance:
+    def __init__(self, type, stmt):
+        self.type = type
+        self.stmt = stmt
 
     def emit(self, builder):
-        pass
+        builder.emitIndent()
+        builder.append("instance {};".format(self.type))
+        builder.newline()
+        builder.increaseIndent()
+        for s in self.stmt:
+            s.emit(builder)
+            builder.newline()
+        builder.decreaseIndent()
+        builder.emitIndent()
+        builder.append("endinstance")
+        builder.newline()
 

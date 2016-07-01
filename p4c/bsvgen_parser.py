@@ -58,7 +58,7 @@ class Parser(object):
         stmt = []
         stmt.append(ast.Template(TMP1))
         stmt.append(ast.Template(TMP2))
-        ablock = [ast.ActionBlock(stmt)]
+        ablock = [ast.ActionBlock("action", stmt)]
         funct = ast.Function(fname, rtype, params, ablock)
         return funct
 
@@ -71,7 +71,7 @@ class Parser(object):
         stmt = []
         stmt.append(ast.Template(TMP1))
         stmt.append(ast.Template(TMP2))
-        ablock = [ast.ActionBlock(stmt)]
+        ablock = [ast.ActionBlock("action", stmt)]
         funct = ast.Function(fname, rtype, params, ablock)
         return funct
 
@@ -80,9 +80,7 @@ class Parser(object):
         rtype = "Action"
         params = "ParserState ty"
         stmt = []
-        #stmt.append(ast.Template(TMP1))
-        #stmt.append(ast.Template(TMP2))
-        ablock = [ast.ActionBlock(stmt)]
+        ablock = [ast.ActionBlock("action", stmt)]
         funct = ast.Function(fname, rtype, params, ablock)
         return funct
 
@@ -95,7 +93,7 @@ class Parser(object):
         if_stmt.stmt.append(ast.Template(TMP1))
         stmt = []
         stmt.append(if_stmt)
-        ablock = [ast.ActionBlock(stmt)]
+        ablock = [ast.ActionBlock("action", stmt)]
         funct = ast.Function(fname, rtype, params, ablock)
         return funct
 
@@ -135,14 +133,14 @@ class Parser(object):
                 funct.append(compute_next_state(name, width, transition))
         return funct
 
-    def rule_start(self):
+    def rule_start(self, first_state):
         TMP1 = "let v = data_in_ff.first;"
         TMP2 = "rg_parse_state <= %(state)s;"
         TMP3 = "data_in_ff.deq;"
         stmt = []
         stmt.append(ast.Template(TMP1))
         if_stmt = []
-        if_stmt.append(ast.Template(TMP2, {"state": "StateParseEthernet"}))
+        if_stmt.append(ast.Template(TMP2, {"state": "State{}".format(CamelCase(first_state))}))
         stmt.append(ast.If("v.sop", if_stmt))
         else_stmt = []
         else_stmt.append(ast.Template(TMP3))
@@ -267,7 +265,8 @@ class Parser(object):
         stmt.append(self.funct_push_phv())
         stmt.append(self.funct_report_parse_action())
         stmt += self.funct_compute_next_states(self.rules, self.transition_key, self.transitions)
-        stmt.append(self.rule_start())
+        first_state = self.rules.keys()[0]
+        stmt.append(self.rule_start(first_state))
         stmt.append(ast.Template("let data_this_cycle = data_in_ff.first.data;"))
         for state, parse_steps in self.rules.items():
             for rule_attrs in parse_steps:
