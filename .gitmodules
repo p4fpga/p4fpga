@@ -1,6 +1,3 @@
 [submodule "submodules/p4c-bm"]
 	path = submodules/p4c-bm
 	url = https://github.com/p4lang/p4c-bm.git
-[submodule "submodules/pif_ir"]
-	path = submodules/pif_ir
-	url = git@github.com:OpenNetworkingFoundation/PIF-Open-Intermediate-Representation.git
