@@ -103,24 +103,34 @@ def classInfo(item):
     return rc
 
 class Method:
-    def __init__(self, name, return_type, params):
+    def __init__(self, name, return_type, params=None, stmt=[]):
         self.type = 'Method'
         self.name = name
         self.return_type = return_type
         self.params = params
+        self.stmt = stmt
 
     def __repr__(self):
         sparams = [p.__repr__() for p in self.params]
-        return '<method: %s %s %s>' % (self.name, self.return_type, self.params)
+        return '<method: %s %s %s>' % (self.name, self.return_type, str(self.params or ""))
 
     def emitSubinterfaceDecl(self, builder):
         builder.emitIndent()
-        builder.append("method {} {};".format(self.return_type, self.name))
+        params = str(self.params or "")
+        builder.append("method {} {} ({});".format(self.return_type, self.name, params))
         builder.newline()
 
     def emit(self, builder):
         builder.emitIndent()
-        builder.append("method {} {} ({});".format(self.return_type, self.name, self.params))
+        self.emitSubinterfaceDecl(builder)
+        builder.increaseIndent()
+        for s in self.stmt:
+            builder.emitIndent()
+            s.emit(builder)
+            builder.newline()
+        builder.emitIndent()
+        builder.decreaseIndent()
+        builder.append("endmethod")
         builder.newline()
 
 class ActionBlock:
@@ -200,16 +210,28 @@ class Interface():
         builder.append("interface {} {};".format(self.typedef, self.name))
         builder.newline()
 
-    def emit(self, builder):
-        builder.append("interface {};".format(self.name));
+    def emitInterfaceDecl(self, builder):
+        builder.emitIndent()
+        builder.append("interface {};".format(self.typedef))
         builder.newline()
         builder.increaseIndent()
         for s in self.subinterfaces:
             s.emitSubinterfaceDecl(builder)
         for s in self.methodProto:
-            s.emit(builder)
+            s.emitSubinterfaceDecl(builder)
         builder.decreaseIndent()
-        # print list = methods, if any
+        builder.append("endinterface")
+        builder.newline()
+
+    def emit(self, builder):
+        builder.emitIndent()
+        builder.append("interface {} {};".format(self.typedef, self.name));
+        builder.newline()
+        for s in self.subinterfaces:
+            s.emit(builder)
+        for s in self.methodProto:
+            s.emit(builder)
+        builder.emitIndent()
         builder.append("endinterface")
         builder.newline()
 

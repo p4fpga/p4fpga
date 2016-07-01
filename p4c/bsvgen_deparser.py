@@ -39,13 +39,13 @@ class Deparser(object):
         TMP3 = "PktWriteClient"
         TMP4 = "Put#(int)"
         TMP5 = "DeparserPerfRec"
-        intf = ast.Interface("Deparser")
+        intf = ast.Interface(typedef="Deparser")
         intf.subinterfaces.append(ast.Interface("metadata", TMP1))
         intf.subinterfaces.append(ast.Interface("writeServer", TMP2))
         intf.subinterfaces.append(ast.Interface("writeClient", TMP3))
         intf.subinterfaces.append(ast.Interface("verbosity", TMP4))
         intf.subinterfaces.append(ast.Method("read_perf_info", TMP5, []))
-        intf.emit(builder)
+        intf.emitInterfaceDecl(builder)
 
     def buildFFs(self):
         TMP = []

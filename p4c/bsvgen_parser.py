@@ -42,12 +42,12 @@ class Parser(object):
         TMP2 = "Get#(MetadataT)"
         TMP3 = "Put#(int)"
         TMP4 = "ParserPerfRec"
-        intf = ast.Interface("Parser")
+        intf = ast.Interface(typedef="Parser")
         intf.subinterfaces.append(ast.Interface("frameIn", TMP1))
         intf.subinterfaces.append(ast.Interface("meta", TMP2))
         intf.subinterfaces.append(ast.Interface("verbosity", TMP3))
         intf.subinterfaces.append(ast.Method(name="read_perf_info", return_type=TMP4, params=[]))
-        intf.emit(builder)
+        intf.emitInterfaceDecl(builder)
 
     def funct_succeed(self):
         TMP1 = "data_in_ff.deq;"

@@ -20,6 +20,23 @@ class Top(object):
     def __init__(self):
         pass
 
+    def emit_import(self, builder):
+        TMP1 = "import %s::*;"
+        modules = ["Connectable",
+                   "Clocks",
+                   "BuildVector",
+                   "GetPut",
+                   "HostChannel",
+                   "TxChannel",
+                   "PacketBuffer",
+                   "SharedBuff",
+                   "Sims",
+                   "MainAPI"
+                   ]
+        for x in sorted(modules):
+            builder.append(ast.Template(TMP1 % x))
+            builder.newline()
+
     def buildModule(self):
         TMP = []
         TMP.append("Clock defaultClock <- exposeCurrentClock();")
@@ -57,7 +74,7 @@ class Top(object):
     def emitInterface(self, builder):
         intf = ast.Interface("Main")
         intf.subinterfaces.append(ast.Interface("request", "MainRequest"))
-        intf.emit(builder)
+        intf.emitInterfaceDecl(builder)
 
     def emitModule(self, builder):
         mname = "mkMain"
@@ -72,7 +89,7 @@ class Top(object):
         module.emit(builder)
 
     def emit(self, builder):
-        emit_import(builder)
+        self.emit_import(builder)
         self.emitInterface(builder)
         self.emitModule(builder)
         emit_license(builder)
@@ -81,41 +98,76 @@ class API():
     def __init__(self):
         pass
 
+    def emit_import(self, builder):
+        TMP1 = "import %s::*;"
+        modules = ["Connectable",
+                   "Clocks",
+                   "Ethernet",
+                   "BuildVector",
+                   "GetPut",
+                   "HostChannel",
+                   "PacketBuffer",
+                   "MainDefs"
+                   ]
+        for x in sorted(modules):
+            builder.append(ast.Template(TMP1 % x))
+            builder.newline()
+
+    # Default API function
     def build_read_version(self):
+        TMP1 = "let v = `NicVersion;"
+        TMP2 = "indication.read_version_resp(v);"
         name = "read_version"
         rtype = "Action"
         params = "Bit#(32) version"
-        req = ast.Method(name, rtype, [])
+        stmt = []
+        stmt.append(ast.Template(TMP1))
+        stmt.append(ast.Template(TMP2))
+        req = ast.Method(name, rtype, stmt=stmt)
         rsp = ast.Method(name+"_rsp", rtype, params)
         return req, rsp
 
     def build_writePacketData(self):
+        TMP = []
+        TMP.append("EtherData beat = defaultValue;")
+        TMP.append("beat.data = pack(reverse(data));")
+        TMP.append("beat.mask = pack(reverse(mask));")
+        TMP.append("beat.sop = unpack(sop);")
+        TMP.append("beat.eop = unpack(eop);")
+        TMP.append("hostchan.writeServer.writeData.put(beat);")
         name = "writePacketData"
         rtype = "Action"
         params = "Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop"
-        req = ast.Method(name, rtype, params)
+        stmt = []
+        for t in TMP:
+            stmt.append(ast.Template(t))
+        req = ast.Method(name, rtype, params, stmt=stmt)
         return req
 
     def buildModule(self):
         stmt = []
+        stmt.append(self.buildRequestInterface())
         return stmt
 
     def buildRequestInterface(self):
-        intf = ast.Interface("MainRequest")
+        intf = ast.Interface(name="request", typedef="MainRequest")
         intf.subinterfaces.append(self.build_read_version()[0])
         intf.subinterfaces.append(self.build_writePacketData())
         return intf
 
     def buildResponseInterface(self):
-        intf = ast.Interface("MainIndication")
+        intf = ast.Interface(typedef="MainIndication")
         intf.subinterfaces.append(self.build_read_version()[1])
         return intf
 
     def emitInterface(self, builder):
         req_intf = self.buildRequestInterface()
-        req_intf.emit(builder)
+        req_intf.emitInterfaceDecl(builder)
         rsp_intf = self.buildResponseInterface()
-        rsp_intf.emit(builder)
+        rsp_intf.emitInterfaceDecl(builder)
+        intf = ast.Interface(typedef="MainAPI")
+        intf.subinterfaces.append(req_intf)
+        intf.emitInterfaceDecl(builder)
 
     def emitModule(self, builder):
         mname = "mkMainAPI"
@@ -127,12 +179,21 @@ class API():
         params = []
         provisos = []
         stmt = self.buildModule()
+        builder.emitIndent()
         module = ast.Module(mname, params, iname, provisos, decls, stmt)
         module.emit(builder)
 
     def emit(self, builder):
-        emit_import(builder)
+        self.emit_import(builder)
         self.emitInterface(builder)
         self.emitModule(builder)
         emit_license(builder)
+
+class Defs:
+    def __init__(self, typedefs):
+        self.typedefs = typedefs
+
+    def emit(self, builder):
+        for t in self.typedefs:
+            t.emit(builder)
 

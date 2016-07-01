@@ -304,13 +304,13 @@ class Table(object):
         TMP3 = "next_control_state_%(id)s"
         TMP4 = "Client #(BBRequest, BBResponse)"
         iname = CamelCase(self.name)
-        intf = ast.Interface(iname)
+        intf = ast.Interface(typedef=iname)
         s_intf = ast.Interface(TMP1 % {"id": 0}, TMP2)
         intf.subinterfaces.append(s_intf)
         for idx, _ in enumerate(self.actions):
             c_intf = ast.Interface(TMP3 % {"id": idx}, TMP4)
             intf.subinterfaces.append(c_intf)
-        intf.emit(builder)
+        intf.emitInterfaceDecl(builder)
 
     def emitModule(self, builder):
         logger.info("emitModule: {}".format(self.name))

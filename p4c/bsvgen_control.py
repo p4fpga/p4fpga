@@ -250,12 +250,12 @@ class Control (object):
 
     def emitInterface(self, builder):
         iname = CamelCase(self.name)
-        table_intf = ast.Interface(iname)
+        table_intf = ast.Interface(typedef=iname)
         intf0 = ast.Interface("eventPktSend", "PipeOut#(MetadataRequest)")
         table_intf.subinterfaces.append(intf0)
         #method0 = ast.Method("add_entry", "Action", [])
         #table_intf.methodProto = [ method0 ]
-        table_intf.emit(builder)
+        table_intf.emitInterfaceDecl(builder)
 
     def emitModule(self, builder):
         mname = "mk{}".format(CamelCase(self.name))

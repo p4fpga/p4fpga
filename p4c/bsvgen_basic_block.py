@@ -199,8 +199,7 @@ class BasicBlock(object):
         TMP1 = "Server#(BBRequest, BBResponse)"
         stmt = []
         iname = "prev_control_state"
-        intf = ast.Interface(iname)
-        intf.typedef = TMP1
+        intf = ast.Interface(name=iname, typedef=TMP1)
         stmt.append(intf)
         return stmt
 
@@ -324,9 +323,9 @@ class BasicBlock(object):
         stmt = []
         stmt += self.clientInterfaces
         stmt += self.serverInterfaces
-        intf = ast.Interface(iname)
+        intf = ast.Interface(typedef=iname)
         intf.subinterfaces = stmt
-        intf.emit(builder)
+        intf.emitInterfaceDecl(builder)
 
     def emitModule(self, builder):
         logger.info("emitBasicBlockModule: {}".format(self.name))

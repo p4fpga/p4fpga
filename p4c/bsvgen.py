@@ -55,19 +55,11 @@ def _validate_dir(path):
         sys.exit(1)
     return path
 
-def generate_top_module():
-    t = top.Top()
+def generate_extra_file(obj, filename):
+    assert type(filename) is str
     builder = SourceCodeBuilder()
-    t.emit(builder)
-    with open("Main.bsv", 'w') as bsv:
-        bsv.write(builder.toString())
-
-
-def generate_top_api():
-    api = top.API()
-    builder = SourceCodeBuilder()
-    api.emit(builder)
-    with open("MainAPI.bsv", 'w') as bsv:
+    obj.emit(builder)
+    with open(filename, 'w') as bsv:
         bsv.write(builder.toString())
 
 def main():
@@ -143,8 +135,9 @@ def main():
         with open(path_output, 'w') as bsv:
             bsv.write(builder.toString())
 
-    generate_top_module()
-    generate_top_api()
+    generate_extra_file(top.Top(), "Main.bsv")
+    generate_extra_file(top.API(), "MainAPI.bsv")
+    generate_extra_file(top.Defs([]), "MainDefs.bsv")
 
 if __name__ == "__main__":
     main()
