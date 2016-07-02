@@ -19,6 +19,8 @@
 # DEALINGS IN THE SOFTWARE.
 #
 
+import os
+
 def CamelCase(name):
     output = ''.join(x for x in name.title() if x.isalnum())
     return output
@@ -28,6 +30,7 @@ def camelCase(name):
     return output[0].lower() + output[1:]
 
 def header_type_to_width (header_type, json_dict):
+    global bmv2_jsondata
     assert type(header_type) == str
     for h in json_dict["header_types"]:
         if h["name"] == header_type:
@@ -37,6 +40,7 @@ def header_type_to_width (header_type, json_dict):
     return None
 
 def header_to_width (header, json_dict):
+    global bmv2_jsondata
     assert type(header) == str
     #print 'htow', header
     for h in json_dict["headers"]:
@@ -46,6 +50,7 @@ def header_to_width (header, json_dict):
     return None
 
 def field_to_width (field, json_dict):
+    global bmv2_jsondata
     assert type(field) is list
     hty = None
     fields = None
@@ -63,10 +68,16 @@ def field_to_width (field, json_dict):
             return width
 
 def header_to_header_type(header, json_dict):
+    global bmv2_jsondata
     assert type(header) == str
     for h in json_dict["headers"]:
         if h["name"] == header:
             return h["header_type"]
     return None
 
+def createDirAndOpen(f, m):
+    (d, name) = os.path.split(f)
+    if not os.path.exists(d):
+        os.makedirs(d)
+    return open(f, m)
 

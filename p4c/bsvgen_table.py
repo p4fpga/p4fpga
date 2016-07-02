@@ -22,12 +22,12 @@
 import astbsv as ast
 import math
 import logging
+import cppgen
 from sourceCodeBuilder import SourceCodeBuilder
 from utils import CamelCase
 from bsvgen_struct import StructT, StructTableReqT, StructTableRspT
 
 logger = logging.getLogger(__name__)
-
 
 IRQ_TEMPLATE = """Vector#(%(sz)s, Bool) readyBits = map(fifoNotEmpty, %(fifo)s);
   Bool interruptStatus = False;
@@ -40,21 +40,28 @@ IRQ_TEMPLATE = """Vector#(%(sz)s, Bool) readyBits = map(fifoNotEmpty, %(fifo)s);
   end
 """
 
+generated_table_sim = []
+
+def simgen():
+    cppgen.generate_cpp('generatedcpp', False, generated_table_sim)
+
 class MatchTableSim:
-    def __init__(self, ksz, vsz):
+    def __init__(self, name, ksz, vsz):
+        self.name = name
         self.ksz = ksz
         self.vsz = vsz
 
     def build_bdpi(self, ksz, vsz):
-        TMP1 = "import \"BDPI\" function ActionValue#(Bit#(%s)) matchtable_read_%s_%s(Bit#(%s) msgtype);"
-        TMP2 = "import \"BDPI\" function Action matchtable_write_%s_%s(Bit#(%s) msgtype, Bit#(%s) data);"
+        global generated_table_sim
+        TMP1 = "import \"BDPI\" function ActionValue#(Bit#(%s)) matchtable_read_%s(Bit#(%s) msgtype);"
+        TMP2 = "import \"BDPI\" function Action matchtable_write_%s(Bit#(%s) msgtype, Bit#(%s) data);"
         stmt = []
-        stmt.append(ast.Template(TMP1 % (vsz, ksz, vsz, ksz)))
-        stmt.append(ast.Template(TMP2 % (ksz, vsz, ksz, vsz)))
+        stmt.append(ast.Template(TMP1 % (vsz, self.name, ksz)))
+        stmt.append(ast.Template(TMP2 % (self.name, ksz, vsz)))
         return stmt
 
     def build_read_function(self, ksz, vsz):
-        TMP1 = "let v <- matchtable_read_%s_%s(key);" % (ksz, vsz)
+        TMP1 = "let v <- matchtable_read_%s(key);" % (self.name)
         TMP2 = "return v;"
         name = "matchtable_read"
         type = "ActionValue#(Bit#(%s))" % (vsz)
@@ -67,7 +74,7 @@ class MatchTableSim:
         return funct
 
     def build_write_function(self, ksz, vsz):
-        TMP1 = "matchtable_write_%s_%s(key, data);" % (ksz, vsz)
+        TMP1 = "matchtable_write_%s(key, data);" % (self.name)
         name = "matchtable_write"
         type = "Action"
         params = "Bit#(%s) key, Bit#(%s) data" % (ksz, vsz)
@@ -87,6 +94,7 @@ class MatchTableSim:
         stmt.append(self.build_write_function(self.ksz, self.vsz))
         inst = ast.Instance(TMP1%(self.ksz, self.vsz), stmt)
         inst.emit(builder)
+        generated_table_sim.append({'name': self.name, 'ksz': self.ksz, 'vsz': self.vsz})
 
 class Table(object):
     required_attributes = ["name", "match_type", "max_size", "key", "actions"]
@@ -371,6 +379,7 @@ class Table(object):
         module.emit(builder)
 
     def emitKeyType(self, builder):
+        global generated_table_sim
         header_types = self.json_dict['header_types']
         headers = self.json_dict['headers']
         req_struct = StructTableReqT(self.name, self.key, header_types, headers)
@@ -380,7 +389,7 @@ class Table(object):
         rsp_struct = StructTableRspT(self.name, self.actions, action_info)
         rsp_struct.emit(builder)
 
-        simmodel = MatchTableSim(req_struct.width, rsp_struct.width)
+        simmodel = MatchTableSim(self.name, req_struct.width, rsp_struct.width)
         simmodel.emit(builder)
 
     def emitValueType(self, builder):

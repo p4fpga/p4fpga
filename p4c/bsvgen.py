@@ -20,6 +20,7 @@ import sys
 import yaml
 import p4fpga
 import top
+import bsvgen_table
 from sourceCodeBuilder import SourceCodeBuilder
 from collections import OrderedDict
 from p4c_bm import gen_json
@@ -124,6 +125,8 @@ def main():
     generate_file(top.Top(p4name), os.path.join('generatedbsv', "Main.bsv"))
     generate_file(top.API(p4name), os.path.join('generatedbsv', "MainAPI.bsv"))
     generate_file(top.Defs([]), os.path.join('generatedbsv', "MainDefs.bsv"))
+
+    bsvgen_table.simgen()
 
 if __name__ == "__main__":
     main()
