@@ -274,6 +274,9 @@ class Parser(object):
                 transition_key = self.transition_key
                 transitions = self.transitions
                 stmt.append(self.rule_parse(rule_attrs, transition_key, transitions))
+        stmt.append(ast.Template("interface frameIn = toPut(data_in_ff);"))
+        stmt.append(ast.Template("interface meta = toGet(meta_in_ff);"))
+        stmt.append(ast.Template("interface verbosity = toPut(cr_verbosity_ff);"))
         return stmt
 
     def emitTypes(self, builder):
