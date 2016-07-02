@@ -13,8 +13,8 @@
 # limitations under the License.
 #
 
+import astbsv as ast
 from bsvgen_common import emit_license, emit_import
-import lib.ast as ast
 
 class Top(object):
     def __init__(self, p4name):

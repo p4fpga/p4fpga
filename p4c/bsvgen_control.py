@@ -14,9 +14,9 @@
 #
 
 import logging
-import lib.ast as ast
-from lib.utils import CamelCase, camelCase
-from lib.exceptions import CompilationException
+import astbsv as ast
+import exceptions
+from utils import CamelCase, camelCase
 from collections import OrderedDict
 
 logger = logging.getLogger(__name__)

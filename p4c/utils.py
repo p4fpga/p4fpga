@@ -38,6 +38,7 @@ def header_type_to_width (header_type, json_dict):
 
 def header_to_width (header, json_dict):
     assert type(header) == str
+    #print 'htow', header
     for h in json_dict["headers"]:
         if h["name"] == header:
             hty = h["header_type"]

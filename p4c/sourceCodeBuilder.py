@@ -2,7 +2,7 @@
 
 # helper for building program source text
 
-from exceptions import CompilationException as BUG
+import exceptions
 
 class SourceCodeBuilder(object):
     def __init__(self):
@@ -20,7 +20,7 @@ class SourceCodeBuilder(object):
     def decreaseIndent(self):
         self.currentIndent -= self.INDENT_AMOUNT
         if self.currentIndent < 0:
-            raise BUG(True, "Negative indentation level")
+            raise exceptions.CompilationException(True, "Negative indentation level")
 
     def toString(self):
         return self.program

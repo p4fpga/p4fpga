@@ -27,7 +27,7 @@ import logging
 import os
 import sys
 import traceback
-from lib.utils import CamelCase
+from utils import CamelCase
 from collections import OrderedDict
 
 logger = logging.getLogger(__name__)

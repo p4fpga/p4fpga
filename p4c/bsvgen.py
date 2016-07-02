@@ -20,11 +20,10 @@ import sys
 import yaml
 import p4fpga
 import top
-
+from sourceCodeBuilder import SourceCodeBuilder
 from collections import OrderedDict
 from p4c_bm import gen_json
 from pkg_resources import resource_string
-from lib.sourceCodeBuilder import SourceCodeBuilder
 
 # to be used for a destination file
 def _validate_path(path):
@@ -117,8 +116,7 @@ def main():
     #builder = SourceCodeBuilder()
     #ir.emit(builder, noisyFlag)
 
-    if os.path.dirname("generatedbsv") and \
-        not os.path.exists("generatedbsv"):
+    if not os.path.exists("generatedbsv"):
         os.makedirs("generatedbsv")
 
     p4name = os.path.splitext(os.path.basename(options.source))[0]

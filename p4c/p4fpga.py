@@ -21,6 +21,7 @@
 
 DP_WIDTH = 128
 
+import astbsv as ast
 from collections import OrderedDict
 from pprint import pprint
 from bsvgen_program import Program
@@ -30,8 +31,7 @@ from bsvgen_deparser import Deparser
 from bsvgen_basic_block import BasicBlock
 from bsvgen_table import Table
 from bsvgen_struct import Struct, StructT, StructMetadata
-from lib.utils import CamelCase, header_type_to_width, header_to_width, header_to_header_type
-import lib.ast as ast
+from utils import CamelCase, header_type_to_width, header_to_width, header_to_header_type
 
 def render_runtime_types(ir, json_dict):
     # metadata req/rsp
@@ -52,6 +52,8 @@ def render_header_types(ir, json_dict):
 def render_parsers(ir, json_dict):
     stack = []
     visited = set()
+    header_stacks = dict()
+    state_stacks = dict()
     parse_rules = OrderedDict()
     transitions = OrderedDict()
     transition_key = OrderedDict()
@@ -116,12 +118,25 @@ def render_parsers(ir, json_dict):
 
     def state_to_header (state):
         assert type(state) == OrderedDict
+        headers = []
+        stack = False
         for op in state["parser_ops"]:
             if op["op"] == "extract":
-                parameters = op["parameters"][0]
-                value = parameters["value"]
-                return value
-        return None
+                parameters = op['parameters'][0]
+                if parameters['type'] == "regular":
+                    value = parameters["value"]
+                    headers.append(value)
+                elif parameters['type'] == "stack":
+                    stack = True
+                    value = parameters['value']
+                    if value not in header_stacks:
+                        header_stacks[value] = 0
+                    #print 'mmm', value, header_stacks[value]
+                    headers.append("%s[%d]" % (value, header_stacks[value]))
+                    header_stacks[value] = header_stacks[value] + 1
+            elif op["op"] == "set":
+                print "modify metadata"
+        return headers
 
     def expand_parse_state (rcvdLen, offset, header_width):
         ''' expand parse_state to multiple cycles if needed '''
@@ -130,7 +145,7 @@ def render_parsers(ir, json_dict):
         lastBeat = False
         step_idx = 0
         while rcvdLen < header_width:
-            #print rcvdLen
+            #print 'ccc', rcvdLen
             parse_step = OrderedDict()
             parse_step["idx"] = step_idx
             parse_step["width"] = header_width
@@ -150,9 +165,10 @@ def render_parsers(ir, json_dict):
         parse_step["idx"] = step_idx
         parse_step['width'] = header_width
         parse_step["rcvdLen"] = rcvdLen
+        #print 'aaa', rcvdLen, header_width
         bits_to_next_state = rcvdLen - header_width
+        #print 'bbb', bits_to_next_state
         parse_step["nextLen"] = bits_to_next_state
-        #print bits_to_next_state
         parse_step["firstBeat"] = firstBeat
         parse_step["lastBeat"] = True
         parse_step["offset"] = offset
@@ -162,30 +178,42 @@ def render_parsers(ir, json_dict):
         return parse_steps, bits_to_next_state
 
     def walk_parse_states (bits_from_prev_state, offset_from_start, state):
-        name = state["name"]
-        visited.add(name)
-        stack.append(name)
+        name = state['name']
+        if name not in visited:
+            state_stacks[name] = 0
+            visited.add(name)
+        else:
+            state_stacks[name] = state_stacks[name] + 1
+        _name = "%s_%d" % (name, state_stacks[name])
+        print _name
+        stack.append(_name)
 
         bits_in_curr_state = bits_from_prev_state
         bits_in_curr_state += DP_WIDTH
 
         bits_to_next_state = 0
-        header = state_to_header(state)
-        if header:
+        headers = state_to_header(state)
+        # loop extracted headers
+        for header in headers:
             header_sz = header_to_width(header, json_dict)
+            if header_sz == None:
+                print 'terminate'
+                return
             # compute constants needed for multi-cycle headers
             num_steps, bits_to_next_state = expand_parse_state(bits_in_curr_state, offset_from_start, header_sz)
+            print 'xxx', num_steps
             # collect info for generating parser
             offset_from_start += DP_WIDTH * len(num_steps)
-            parse_rules[name] = num_steps
-            transitions[name] = name_to_transitions(name)
-            transition_key[name] = name_to_transition_key(name)
-            header_instance[name] = header
-            header_type[name] = header_to_header_type(header, json_dict)
+            parse_rules[_name] = num_steps
+            transitions[_name] = name_to_transitions(name)
+            transition_key[_name] = name_to_transition_key(name)
+            header_instance[_name] = header
+            header_type[_name] = header_to_header_type(header, json_dict)
             #TODO: handle multiple instances of header type
 
         for t in state["transitions"]:
             next_state_name = t["next_state"]
+            # topological sort ??
             if next_state_name:
                 next_state = name_to_parse_state(next_state_name)
                 walk_parse_states(bits_to_next_state, offset_from_start, next_state)

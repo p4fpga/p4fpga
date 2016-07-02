@@ -19,12 +19,12 @@
 # DEALINGS IN THE SOFTWARE.
 #
 
-import logging
-from lib.sourceCodeBuilder import SourceCodeBuilder
-from lib.utils import CamelCase
-import lib.ast as ast
-from p4fpga import DP_WIDTH
+import astbsv as ast
 import bsvgen_common
+import logging
+import sourceCodeBuilder
+from utils import CamelCase
+from p4fpga import DP_WIDTH
 
 logger = logging.getLogger(__name__)
 
@@ -189,7 +189,7 @@ class Deparser(object):
         stmt.append(funct)
         return stmt
 
-    def rule_start(self):
+    def rule_start(self, first_state):
         TMP1 = "let v = data_in_ff.first;"
         TMP2 = "rg_deparse_state <= %(state)s;"
         TMP3 = "data_in_ff.deq;"
@@ -197,7 +197,7 @@ class Deparser(object):
         stmt = []
         stmt.append(ast.Template(TMP1))
         if_stmt = []
-        if_stmt.append(ast.Template(TMP2, {"state": "StateDeparseEthernet"}))
+        if_stmt.append(ast.Template(TMP2, {"state": "State{}".format(CamelCase(first_state))}))
         stmt.append(ast.If("v.sop", if_stmt))
         else_stmt = []
         else_stmt.append(ast.Template(TMP3))
@@ -240,7 +240,8 @@ class Deparser(object):
         stmt.append(self.funct_compute_next_state())
         stmt.append(self.funct_read_data())
         stmt.append(self.funct_create_mask())
-        stmt.append(self.rule_start())
+        first_state = self.deparse_states[0]
+        stmt.append(self.rule_start(first_state))
         stmt += self.funct_deparse_rule_no_opt()
         #stmt += self.rule_deparse()
         return stmt
@@ -249,7 +250,7 @@ class Deparser(object):
         elem = []
         elem.append(ast.EnumElement("StateDeparseStart", None, None))
         for state in self.deparse_states:
-            elem.append(ast.EnumElement("StateDeparse%s" % (CamelCase(state)), None, None))
+            elem.append(ast.EnumElement("State%s" % (CamelCase(state)), None, None))
         state = ast.Enum("DeparserState", elem)
         state.emit(builder)
 

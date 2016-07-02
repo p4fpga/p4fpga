@@ -19,11 +19,11 @@
 # DEALINGS IN THE SOFTWARE.
 #
 
+import astbsv as ast
 import math
 import logging
-from lib.sourceCodeBuilder import SourceCodeBuilder
-from lib.utils import CamelCase
-import lib.ast as ast
+from sourceCodeBuilder import SourceCodeBuilder
+from utils import CamelCase
 from bsvgen_struct import StructT, StructTableReqT, StructTableRspT
 
 logger = logging.getLogger(__name__)

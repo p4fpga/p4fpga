@@ -19,12 +19,12 @@
 # DEALINGS IN THE SOFTWARE.
 #
 
-import logging
-from lib.sourceCodeBuilder import SourceCodeBuilder
-from lib.utils import CamelCase
-import lib.ast as ast
-from p4fpga import DP_WIDTH
+import astbsv as ast
 import bsvgen_common
+import logging
+from sourceCodeBuilder import SourceCodeBuilder
+from utils import CamelCase
+from p4fpga import DP_WIDTH
 
 logger = logging.getLogger(__name__)
 

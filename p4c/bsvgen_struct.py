@@ -19,10 +19,10 @@
 # DEALINGS IN THE SOFTWARE.
 #
 
+import astbsv as ast
 import logging
-from lib.sourceCodeBuilder import SourceCodeBuilder
-from lib.utils import CamelCase
-import lib.ast as ast
+from sourceCodeBuilder import SourceCodeBuilder
+from utils import CamelCase
 from collections import OrderedDict
 
 STRUCT_DEFAULT="""\

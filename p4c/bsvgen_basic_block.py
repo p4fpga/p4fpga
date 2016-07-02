@@ -20,13 +20,13 @@
 #
 
 import logging
-from lib.sourceCodeBuilder import SourceCodeBuilder
-from lib.utils import CamelCase
-import lib.ast as ast
+import astbsv as ast
 import primitives as prm
-from lib.exceptions import CompilationException
+import exceptions
+from utils import CamelCase
 from bsvgen_struct import Struct, StructM
 from collections import OrderedDict
+from sourceCodeBuilder import SourceCodeBuilder
 
 logger = logging.getLogger(__name__)
 

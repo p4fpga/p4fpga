@@ -3,8 +3,8 @@ Common template for bsv generation
 '''
 
 import re
+import astbsv as ast
 from collections import OrderedDict
-import lib.ast as ast
 
 def get_camel_case(column_name):
     ''' TODO '''

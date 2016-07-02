@@ -13,8 +13,8 @@
 # limitations under the License.
 #
 
-import lib.ast as ast
-from lib.utils import CamelCase, field_to_width
+import astbsv as ast
+from utils import CamelCase, field_to_width
 import primitives as prm
 
 def get_reg_array_size(name, json_dict):

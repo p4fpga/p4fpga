@@ -20,11 +20,11 @@
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import astbsv as ast
 import os
 from collections import OrderedDict
 from meta_ir.instance import MetaIRInstance
 from bsvgen_common import emit_license, emit_import
-import lib.ast as ast
 
 class Program(MetaIRInstance):
     def __init__(self, name, inputfile):
