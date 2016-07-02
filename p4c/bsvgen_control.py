@@ -39,12 +39,14 @@ class Control (object):
         TMP2 = "FIFOF#(MetadataResponse) default_rsp_ff <- mkFIFOF;"
         TMP3 = "FIFOF#(MetadataRequest) %(name)s_req_ff <- mkFIFOF;"
         TMP4 = "FIFOF#(MetadataResponse) %(name)s_rsp_ff <- mkFIFOF;"
+        TMP5 = "FIFOF#(MetadataRequest) currPacketFifo <- mkFIFOF;"
         stmt = []
         stmt.append(ast.Template(TMP1))
         stmt.append(ast.Template(TMP2))
         for t in self.tables.values():
             stmt.append(ast.Template(TMP3, {"name": t.name} ))
             stmt.append(ast.Template(TMP4, {"name": t.name} ))
+        stmt.append(ast.Template(TMP5))
         return stmt
 
     def buildRegisterArrays(self):
@@ -246,6 +248,7 @@ class Control (object):
         stmt += self.buildRegisterArrays()
         stmt += self.buildBasicBlockConnection()
         stmt += self.buildRules()
+        stmt.append(ast.Template("interface eventPktSend = toPipeOut(currPacketFifo);"))
         return stmt
 
     def emitInterface(self, builder):
@@ -253,8 +256,6 @@ class Control (object):
         table_intf = ast.Interface(typedef=iname)
         intf0 = ast.Interface("eventPktSend", "PipeOut#(MetadataRequest)")
         table_intf.subinterfaces.append(intf0)
-        #method0 = ast.Method("add_entry", "Action", [])
-        #table_intf.methodProto = [ method0 ]
         table_intf.emitInterfaceDecl(builder)
 
     def emitModule(self, builder):
@@ -270,5 +271,9 @@ class Control (object):
     def emit(self, builder):
         for t in sorted(self.tables.values()):
             t.emit(builder)
+        builder.newline()
+        builder.append("// ====== %s ======" % (self.name.upper()))
+        builder.newline()
+        builder.newline()
         self.emitInterface(builder)
         self.emitModule(builder)

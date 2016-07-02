@@ -149,6 +149,19 @@ class API():
         req = ast.Method(name, rtype, params, stmt=stmt)
         return req
 
+    def build_verbosity(self):
+        TMP = []
+        TMP.append("hostchan.set_verbosity(unpack(verbosity));")
+        #TMP.append("ingress.set_verbosity(unpack(verbosity));")
+        stmt = []
+        for t in TMP:
+            stmt.append(ast.Template(t))
+        name = "set_verbosity"
+        rtype = "Action"
+        params = "Bit#(32) verbosity"
+        req = ast.Method(name, rtype, params, stmt=stmt)
+        return req
+
     def buildModule(self):
         stmt = []
         stmt.append(self.buildRequestInterface())
@@ -158,6 +171,7 @@ class API():
         intf = ast.Interface(name="request", typedef="MainRequest")
         intf.subinterfaces.append(self.build_read_version()[0])
         intf.subinterfaces.append(self.build_writePacketData())
+        intf.subinterfaces.append(self.build_verbosity())
         return intf
 
     def buildResponseInterface(self):

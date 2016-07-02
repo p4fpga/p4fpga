@@ -339,6 +339,10 @@ class BasicBlock(object):
         module.emit(builder)
 
     def emit(self, builder):
+        builder.newline()
+        builder.append("// ====== %s ======" % (self.name.upper()))
+        builder.newline()
+        builder.newline()
         assert isinstance(builder, SourceCodeBuilder)
         self.emitInterface(builder)
         self.emitModule(builder)

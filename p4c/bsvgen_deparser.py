@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 class Deparser(object):
     def __init__(self, deparse_states):
         self.deparse_states = deparse_states
+        self.intf = None
 
     def emitInterface(self, builder):
         logger.info("emitInterface: Deparser")
@@ -39,13 +40,13 @@ class Deparser(object):
         TMP3 = "PktWriteClient"
         TMP4 = "Put#(int)"
         TMP5 = "DeparserPerfRec"
-        intf = ast.Interface(typedef="Deparser")
-        intf.subinterfaces.append(ast.Interface("metadata", TMP1))
-        intf.subinterfaces.append(ast.Interface("writeServer", TMP2))
-        intf.subinterfaces.append(ast.Interface("writeClient", TMP3))
-        intf.subinterfaces.append(ast.Interface("verbosity", TMP4))
-        intf.subinterfaces.append(ast.Method("read_perf_info", TMP5, []))
-        intf.emitInterfaceDecl(builder)
+        self.intf = ast.Interface(typedef="Deparser")
+        self.intf.subinterfaces.append(ast.Interface("metadata", TMP1))
+        self.intf.subinterfaces.append(ast.Interface("writeServer", TMP2, ["interface writeData = toPut(data_in_ff);"]))
+        self.intf.subinterfaces.append(ast.Interface("writeClient", TMP3, ["interface writeData = toGet(data_out_ff)"]))
+        self.intf.subinterfaces.append(ast.Interface("verbosity", TMP4))
+        self.intf.subinterfaces.append(ast.Method("read_perf_info", TMP5, []))
+        self.intf.emitInterfaceDecl(builder)
 
     def buildFFs(self):
         TMP = []
@@ -243,7 +244,14 @@ class Deparser(object):
         first_state = self.deparse_states[0]
         stmt.append(self.rule_start(first_state))
         stmt += self.funct_deparse_rule_no_opt()
-        #stmt += self.rule_deparse()
+        stmt.append(ast.Template("interface metadata = toPipeIn(meta_in_ff);"))
+        stmt.append(ast.Template("interface PktWriteServer writeServer;"))
+        stmt.append(ast.Template("  interface writeData = toPut(data_in_ff);"))
+        stmt.append(ast.Template("endinterface"))
+        stmt.append(ast.Template("interface PktWriteClient writeClient;"))
+        stmt.append(ast.Template("  interface writeData = toGet(data_out_ff);"))
+        stmt.append(ast.Template("endinterface"))
+        stmt.append(ast.Template("interface verbosity = toPut(cr_verbosity_ff);"))
         return stmt
 
     def emitTypes(self, builder):
@@ -267,6 +275,10 @@ class Deparser(object):
         module.emit(builder)
 
     def emit(self, builder):
+        builder.newline()
+        builder.append("// ====== DEPARSER ======")
+        builder.newline()
+        builder.newline()
         self.emitTypes(builder)
         self.emitInterface(builder)
         self.emitModule(builder)

@@ -299,6 +299,10 @@ class Parser(object):
         module.emit(builder)
 
     def emit(self, builder):
+        builder.newline()
+        builder.append("// ====== PARSER ======")
+        builder.newline()
+        builder.newline()
         assert isinstance(builder, SourceCodeBuilder)
         self.emitTypes(builder)
         self.emitInterface(builder)

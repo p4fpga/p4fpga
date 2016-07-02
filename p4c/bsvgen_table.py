@@ -396,6 +396,10 @@ class Table(object):
         pass
 
     def emit(self, builder):
+        builder.newline()
+        builder.append("// ====== %s ======" % (self.name.upper()))
+        builder.newline()
+        builder.newline()
         assert isinstance(builder, SourceCodeBuilder)
         self.emitValueType(builder)
         self.emitKeyType(builder)

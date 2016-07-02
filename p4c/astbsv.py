@@ -195,12 +195,13 @@ class Variable:
         return '<variable: %s : %s>' % (self.name, self.type)
 
 class Interface():
-    def __init__(self, name=None, typedef=None):
+    def __init__(self, name=None, typedef=None, stmt=[]):
         self.name = name
         self.typedef = typedef 
         self.params = [] 
         self.subinterfaces = []
         self.methodProto = [] 
+        self.stmt = stmt
 
     def __repr__(self):
         return '{interface: %s (%s)}' % (self.name, self.params)
@@ -219,6 +220,19 @@ class Interface():
             s.emitSubinterfaceDecl(builder)
         for s in self.methodProto:
             s.emitSubinterfaceDecl(builder)
+        builder.decreaseIndent()
+        builder.append("endinterface")
+        builder.newline()
+
+    def emitInterfaceDef(self, builder):
+        builder.emitIndent()
+        builder.append("interface {} {};".format(self.typedef, self.name))
+        builder.newline()
+        builder.increaseIndent()
+        for s in self.subinterfaces:
+            s.emitInterfaceDef(builder)
+        for s in self.stmt:
+            builder.append(s)
         builder.decreaseIndent()
         builder.append("endinterface")
         builder.newline()
