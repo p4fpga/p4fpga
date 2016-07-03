@@ -42,6 +42,7 @@ class Template(object):
 
     def emit(self, builder):
         builder.emitIndent()
+        #print self.template, self.pdict
         builder.append(self.template % self.pdict)
 
 #class InterfaceMixin:
@@ -443,6 +444,7 @@ class TypeDef:
         builder.increaseIndent()
         for p in self.params:
             p.emit(builder)
+            builder.newline()
         builder.decreaseIndent()
         builder.append("} %(name)s deriving (Bits, Eq);" % {"name": self.name})
         builder.newline()

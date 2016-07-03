@@ -196,9 +196,9 @@ class Table(object):
         TMP1 = "let v <- toGet(bbRspFifo[readyChannel]).get;"
         TMP2 = "let meta <- toGet(metadata_ff[1]).get;"
         TMP3 = "tagged %(name)sRspT {%(field)s}"
-        TMP4 = "MetadataResponse rsp = MetadataResponse {pkt: pkt, meta: meta};"
+        TMP4 = "MetadataResponse rsp = tagged %(name)s {pkt: pkt, meta: meta};"
         TMP5 = "tx_info_%(name)s.enq(rsp);"
-        TMP6 = "meta.%(mname)s = tagged Valid %(name)s;"
+        TMP6 = "meta.%(mname)s = tagged Valid %(mname)s;"
 
         stmt = []
         case_stmt = ast.Case("v")
@@ -209,8 +209,10 @@ class Table(object):
             action_stmt = []
             for field in basic_block.response.members:
                 mname = "$".join(field)
-                action_stmt.append(ast.Template(TMP6 % {"mname": mname, "name": "$".join(field)}))
-            action_stmt.append(ast.Template(TMP4 % {"name": CamelCase(self.name)}))
+                action_stmt.append(ast.Template(TMP6 % {"mname": mname}))
+
+            tagname = "%s%sRspT" % (CamelCase(self.name), CamelCase(action))
+            action_stmt.append(ast.Template(TMP4 % {"name": tagname}))
             action_stmt.append(ast.Template(TMP5 % {"name": "metadata"}))
             case_stmt.casePatItem[action] = TMP3 % {"name": CamelCase(action),
                                                     "field": fields}

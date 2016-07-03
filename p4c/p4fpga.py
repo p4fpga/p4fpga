@@ -35,7 +35,21 @@ from utils import CamelCase, header_type_to_width, header_to_width, header_to_he
 def render_runtime_types(ir, json_dict):
     # metadata req/rsp
     ir.structs['metadata_request'] = StructT("MetadataRequest")
-    ir.structs['metadata_response'] = StructT("MetadataResponse")
+    #ir.structs['metadata_response'] = StructT("MetadataResponse")
+
+    responses = []
+    for pipeline in json_dict['pipelines']:
+        name = pipeline['name']
+        for t in sorted(pipeline['tables'], key=lambda k: k['name']):
+            tname = t['name']
+            tnext = t['actions']
+            for n in tnext:
+                sname = "%s%sRspT" % (CamelCase(tname), CamelCase(n))
+                stmt = []
+                stmt.append(ast.StructMember("PacketInstance", "pkt"))
+                stmt.append(ast.StructMember("MetadataT", "meta"))
+                responses.append(ast.Struct(sname, stmt))
+    ir.structs['metadata_response'] = ast.TypeDef("union tagged", "MetadataResponse", responses)
 
     # metadata
     header_types = json_dict['header_types']

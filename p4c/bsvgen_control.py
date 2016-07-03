@@ -164,17 +164,8 @@ class Control (object):
             stmt.append(ast.Template("currPacketFifo.enq(req);"))
 
         if tblName in self.tables:
-            next_tables = self.tables[tblName].next_tables
-            for next_table in next_tables.values():
-                if next_table in self.tables:
-                    self.buildConditionalStmt(next_table, stmt, metadata)
-                elif next_table in self.conditionals:
-                    self.buildConditionalStmt(next_table, stmt, metadata)
-                else:
-                    if not toCurrPacketFifo:
-                        stmt.append(ast.Template("MetadataRequest req = MetadataRequest {pkt: pkt, meta: meta};"))
-                        stmt.append(ast.Template("currPacketFifo.enq(req);"))
-                        toCurrPacketFifo = True
+            stmt.append(ast.Template(TMP1))
+            stmt.append(ast.Template(TMP2, {"name": tblName}))
 
         if tblName in self.conditionals:
             cond = search_conditional(tblName)
@@ -206,27 +197,29 @@ class Control (object):
                 _stmt = []
                 self.buildConditionalStmt(false_next, _stmt, metadata)
                 stmt.append(ast.Else(_stmt))
-        #return stmt
 
     def buildTableRuleStmt(self, tblName):
         TMP1 = "%(tblName)s_rsp_ff.deq;"
-        TMP2 = "let _req = %(tblName)s_rsp_ff.first;"
+        TMP2 = "let _rsp = %(tblName)s_rsp_ff.first;"
         TMP3 = "let meta = _req.meta;"
         TMP4 = "let pkt = _req.pkt;"
         TMP5 = "let %(name)s = fromMaybe(?, meta.%(name)s);"
+        TMP6 = "tagged %(type)s {%(field)s}"
         stmt = []
         stmt.append(ast.Template(TMP1, {"tblName": tblName}))
         stmt.append(ast.Template(TMP2, {"tblName": tblName}));
-        stmt.append(ast.Template(TMP3));
-        stmt.append(ast.Template(TMP4));
-        _stmt = []
-        metadata = set()
-        self.buildConditionalStmt(tblName, _stmt, metadata)
-        for m in metadata:
-            if type(m) is tuple:
-                stmt.append(ast.Template(TMP5, {"name": "$".join(m)}))
-        #print 'yyy', metadata
-        stmt += _stmt
+        case_stmt = ast.Case("_rsp")
+        for action, next_table in self.tables[tblName].next_tables.items():
+            ctype = "%s%sRspT"%(CamelCase(tblName), CamelCase(action))
+            pdict = {"type": ctype, "field": "meta: .meta, pkt: .pkt"}
+            case_stmt.casePatItem[ctype] = ast.Template(TMP6, pdict)
+            _stmt, _meta, metadata = [], [], set()
+            self.buildConditionalStmt(next_table, _stmt, metadata)
+            for m in metadata:
+                if type(m) is tuple:
+                    _meta.append(ast.Template(TMP5, {"name": "$".join(m)}))
+            case_stmt.casePatStmt[ctype] = _meta + _stmt
+        stmt.append(case_stmt)
         return stmt
 
     def buildRules(self):

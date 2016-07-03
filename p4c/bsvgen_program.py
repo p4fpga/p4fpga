@@ -94,8 +94,9 @@ class Program(MetaIRInstance):
         requests = []
         for it in self.basic_blocks.values():
             requests.append(it.request)
-        union = ast.TypeDef ("union tagged", "BBRequest", requests)
-        union.emit(builder)
+        if len(requests) != 0:
+            union = ast.TypeDef ("union tagged", "BBRequest", requests)
+            union.emit(builder)
 
     # tagged union BBResponse
     def emit_union_bb_response(self, builder):
@@ -103,8 +104,9 @@ class Program(MetaIRInstance):
         responses = []
         for it in self.basic_blocks.values():
             responses.append(it.response)
-        union = ast.TypeDef ("union tagged", "BBResponse", responses)
-        union.emit(builder)
+        if len(responses) != 0:
+            union = ast.TypeDef ("union tagged", "BBResponse", responses)
+            union.emit(builder)
 
     # Parsers
     def emit_parsers(self, builder):

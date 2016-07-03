@@ -76,7 +76,7 @@ def header_to_header_type(header, json_dict):
     return None
 
 def field_width(field, header_types, headers):
-    print field, header_types, headers
+    #print field, header_types, headers
     header_type = None
     for h in headers:
         if h['name'] == field[0]:

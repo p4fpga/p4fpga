@@ -22,7 +22,7 @@
 import astbsv as ast
 import logging
 from sourceCodeBuilder import SourceCodeBuilder
-from utils import CamelCase, field_width
+from utils import CamelCase, camelCase, field_width
 from collections import OrderedDict
 
 STRUCT_DEFAULT="""\
@@ -118,12 +118,12 @@ class StructM(object):
     def emit(self, builder):
         assert isinstance(builder, SourceCodeBuilder)
         self.struct.emit(builder)
-        builder.newline()
+        #builder.newline()
 
     def emit_typedef_struct (self, builder):
         assert isinstance(builder, SourceCodeBuilder)
         self.struct.emitTypeDefStruct(builder)
-        builder.newline()
+        #builder.newline()
 
 class StructT(object):
     def __init__(self, name):
@@ -183,8 +183,7 @@ class StructMetadata(object):
         # valid fields
         for it in ir.parsers.values():
             for h in it.header_instances.values():
-                name = "valid_%s" % (h)
-                print 'ir', name
+                name = "valid_%s" % (camelCase(h))
                 fields.append(ast.StructMember("Maybe#(Bit#(0))", name))
 
         self.struct = ast.Struct(self.name, fields)

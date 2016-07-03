@@ -23,7 +23,7 @@ import astbsv as ast
 import bsvgen_common
 import logging
 from sourceCodeBuilder import SourceCodeBuilder
-from utils import CamelCase, field_width
+from utils import CamelCase, camelCase, field_width
 import config
 
 logger = logging.getLogger(__name__)
@@ -222,7 +222,6 @@ class Parser(object):
                 stmt.append(ast.Template(TMP9_0))
             stmt.append(ast.Template(TMP10, pdict))
             stmt.append(ast.Template(TMP14, pdict))
-            print 'xxxx', next_states
             for s in next_states:
                 stmt.append(ast.Template(TMP11, {'next_state': s, 'name': name}))
             if len(next_states) == 0:
@@ -233,7 +232,7 @@ class Parser(object):
             stmt.append(ast.Template(TMP4, pdict))
             stmt.append(ast.Template(TMP5, pdict))
             stmt.append(ast.Template(TMP6, pdict))
-            stmt.append(ast.Template(TMP15, {'state': name}))
+            stmt.append(ast.Template(TMP15, pdict))
             stmt.append(ast.Template(TMP13, pdict))
         rule = ast.Rule(rname, rcond, stmt)
         return rule
@@ -292,7 +291,7 @@ class Parser(object):
                         metadata.add(d)
         for it in config.ir.parsers.values():
             for h in it.header_instances.values():
-                name = "valid_%s" % (h)
+                name = "valid_%s" % (camelCase(h))
                 fields.append((0, name))
         return fields
 
