@@ -24,8 +24,7 @@ def emitType(ksz):
     elif ksz <= 64:
         return "uint64_t"
     else:
-        assert("key larger than 64 is not supported")
-        sys.exit(1)
+        return "uint32_t*"
 
 def generate_tables(name, ksz, vsz, generated_cpp):
     reqT = utils.CamelCase(name) + "ReqT"
@@ -33,7 +32,7 @@ def generate_tables(name, ksz, vsz, generated_cpp):
     generated_cpp.write("typedef %s %s;\n" % (emitType(ksz), reqT))
     generated_cpp.write("typedef %s %s;\n" % (emitType(vsz), rspT))
     generated_cpp.write("std::unordered_map<%s, %s> %s_table;\n" %(reqT, rspT, name))
-    generated_cpp.write("extern \"C\" %s matchtable_read_%s(%s rdata)\n" %(reqT, name, reqT))
+    generated_cpp.write("extern \"C\" %s matchtable_read_%s(%s rdata)\n" %(rspT, name, reqT))
     generated_cpp.write("{\n")
     generated_cpp.write("   auto it = %s_table.find(rdata);\n" % (name))
     generated_cpp.write("   if (it != %s_table.end()) {\n" % (name))
