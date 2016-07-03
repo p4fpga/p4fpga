@@ -134,12 +134,11 @@ class Method:
         builder.newline()
 
 class ActionBlock:
-    def __init__(self, type, stmt):
-        self.type = type
+    def __init__(self, stmt):
         self.stmt = stmt
     def emit(self, builder):
         builder.emitIndent()
-        builder.append(self.type)
+        builder.append("action")
         builder.newline()
         builder.increaseIndent()
         for s in self.stmt:
@@ -147,7 +146,22 @@ class ActionBlock:
             builder.newline()
         builder.decreaseIndent()
         builder.emitIndent()
-        builder.append("end"+self.type)
+        builder.append("endaction")
+
+class ActionValueBlock:
+    def __init__(self, stmt):
+        self.stmt = stmt
+    def emit(self, builder):
+        builder.emitIndent()
+        builder.append("actionvalue")
+        builder.newline()
+        builder.increaseIndent()
+        for s in self.stmt:
+            s.emit(builder)
+            builder.newline()
+        builder.decreaseIndent()
+        builder.emitIndent()
+        builder.append("endactionvalue")
 
 class Function:
     def __init__(self, name, return_type, params, stmt=[], provisos=None):

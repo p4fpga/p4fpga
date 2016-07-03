@@ -19,8 +19,7 @@
 #
 # TODO: replace this module with a more proper c++ pass.
 
-DP_WIDTH = 128
-
+import config
 import astbsv as ast
 from collections import OrderedDict
 from pprint import pprint
@@ -157,8 +156,8 @@ def render_parsers(ir, json_dict):
                 firstBeat = False
             parse_step["lastBeat"] = lastBeat
             parse_step["offset"] = offset
-            rcvdLen += DP_WIDTH
-            offset += DP_WIDTH
+            rcvdLen += config.DP_WIDTH
+            offset += config.DP_WIDTH
             step_idx += 1
             parse_steps.append(parse_step)
         parse_step = OrderedDict()
@@ -173,7 +172,7 @@ def render_parsers(ir, json_dict):
         parse_step["lastBeat"] = True
         parse_step["offset"] = offset
         parse_step["next_state"] = []
-        offset += DP_WIDTH
+        offset += config.DP_WIDTH
         parse_steps.append(parse_step)
         return parse_steps, bits_to_next_state
 
@@ -189,7 +188,7 @@ def render_parsers(ir, json_dict):
         stack.append(_name)
 
         bits_in_curr_state = bits_from_prev_state
-        bits_in_curr_state += DP_WIDTH
+        bits_in_curr_state += config.DP_WIDTH
 
         bits_to_next_state = 0
         headers = state_to_header(state)
@@ -203,7 +202,7 @@ def render_parsers(ir, json_dict):
             num_steps, bits_to_next_state = expand_parse_state(bits_in_curr_state, offset_from_start, header_sz)
             print 'xxx', num_steps
             # collect info for generating parser
-            offset_from_start += DP_WIDTH * len(num_steps)
+            offset_from_start += config.DP_WIDTH * len(num_steps)
             parse_rules[_name] = num_steps
             transitions[_name] = name_to_transitions(name)
             transition_key[_name] = name_to_transition_key(name)
@@ -221,7 +220,7 @@ def render_parsers(ir, json_dict):
 
     obj_init_state = name_to_parse_state(str_init_state)
     walk_parse_states(0, 0, obj_init_state)
-    ir.parsers['parser'] = Parser(parse_rules, transitions, transition_key, header_type, header_instance)
+    ir.parsers['parser'] = Parser(ir, parse_rules, transitions, transition_key, header_type, header_instance)
 
 def render_deparsers(ir, json_dict):
     deparsers = json_dict['deparsers']
@@ -336,6 +335,8 @@ def render_basic_blocks(ir, json_dict):
 
 def ir_create(json_dict):
     ir = Program("program", "ir_meta.yml")
+    config.jsondata = json_dict
+    config.ir = ir
     render_header_types(ir, json_dict)
     render_parsers(ir, json_dict)
     render_deparsers(ir, json_dict)

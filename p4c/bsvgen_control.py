@@ -115,20 +115,31 @@ class Control (object):
                                             "id": 0}))
         return stmt
 
-    def buildDefaultRuleStmt(self, nextState):
+    def buildDefaultRuleStmt(self, tblName):
         TMP1 = "default_req_ff.deq;"
         TMP2 = "let _req = default_req_ff.first;"
         TMP3 = "let meta = _req.meta;"
         TMP4 = "let pkt = _req.pkt;"
+        TMP5 = "MetadataRequest req = MetadataRequest {pkt: pkt, meta: meta};"
+        TMP6 = "%(name)s_req_ff.enq(req);"
         stmt = []
         stmt.append(ast.Template(TMP1))
         stmt.append(ast.Template(TMP2))
         stmt.append(ast.Template(TMP3))
         stmt.append(ast.Template(TMP4))
+        if tblName in self.tables:
+            stmt.append(ast.Template(TMP5))
+            stmt.append(ast.Template(TMP6, {"name": tblName}))
+        elif tblName in self.conditionals:
+            _stmt = []
+            self.buildConditionalStmt(tblName, _stmt)
+            stmt += _stmt
+        else:
+            stmt.append(ast.Template("MetadataRequest req = MetadataRequest {pkt: pkt, meta: meta};"))
+            stmt.append(ast.Template("currPacketFifo.enq(req);"))
         return stmt
 
     def buildIfStmt(self, true=None, false=None):
-        # conditional table
         _if = ast.If()
         if true:
             _if.stmt += self.buildIfStmt(true, false)
@@ -139,33 +150,35 @@ class Control (object):
     def buildConditionalStmt(self, tblName, stmt, metadata=set()):
         TMP1 = "MetadataRequest req = MetadataRequest {pkt: pkt, meta: meta};"
         TMP2 = "%(name)s_req_ff.enq(req);"
+        toCurrPacketFifo = False
+
         def search_conditional (name):
             for key, cond in self.conditionals.items():
-                #print key, cond
+                print key, cond
                 if key == name:
                     return cond
             return None
 
         if tblName is None:
-            stmt.append(ast.Template("MetadataRequest request = MetadataRequest {pkt: pkt, meta: meta};"))
-            #stmt.append(ast.Template("currPacketFifo.enq(req);"))
+            stmt.append(ast.Template("MetadataRequest req = MetadataRequest {pkt: pkt, meta: meta};"))
+            stmt.append(ast.Template("currPacketFifo.enq(req);"))
 
         if tblName in self.tables:
             next_tables = self.tables[tblName].next_tables
             for next_table in next_tables.values():
-                if next_table is None:
-                    #stmt.append(ast.Template("currPacketFifo.enq(req);"))
-                    pass
+                if next_table in self.tables:
+                    self.buildConditionalStmt(next_table, stmt, metadata)
                 elif next_table in self.conditionals:
                     self.buildConditionalStmt(next_table, stmt, metadata)
                 else:
-                    self.buildConditionalStmt(next_table, stmt, metadata)
-                    #raise Exception("ERROR: ConditionalStmt", tblName, next_table)
+                    if not toCurrPacketFifo:
+                        stmt.append(ast.Template("MetadataRequest req = MetadataRequest {pkt: pkt, meta: meta};"))
+                        stmt.append(ast.Template("currPacketFifo.enq(req);"))
+                        toCurrPacketFifo = True
 
         if tblName in self.conditionals:
             cond = search_conditional(tblName)
             expr = cond['expression']
-            #print 'www', expr
             true_next = cond['true_next']
             false_next = cond['false_next']
             _meta = cond['metadata']
@@ -193,7 +206,7 @@ class Control (object):
                 _stmt = []
                 self.buildConditionalStmt(false_next, _stmt, metadata)
                 stmt.append(ast.Else(_stmt))
-        return stmt
+        #return stmt
 
     def buildTableRuleStmt(self, tblName):
         TMP1 = "%(tblName)s_rsp_ff.deq;"
@@ -223,9 +236,6 @@ class Control (object):
         rname = "default_next_state"
         cond = TMP1 % ({"name": "default", "type": "Default"})
         stmt = self.buildDefaultRuleStmt(self.init_table)
-        _stmt = []
-        self.buildConditionalStmt(self.init_table, _stmt)
-        stmt += _stmt
         rule = ast.Rule(rname, cond, stmt)
         rules.append(rule)
         for t in self.tables.values():

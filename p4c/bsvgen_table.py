@@ -69,7 +69,7 @@ class MatchTableSim:
         stmt = []
         stmt.append(ast.Template(TMP1))
         stmt.append(ast.Template(TMP2))
-        action_block = ast.ActionBlock("actionvalue", stmt)
+        action_block = ast.ActionValueBlock(stmt)
         funct = ast.Function(name, type, params, stmt=[action_block])
         return funct
 
@@ -80,7 +80,7 @@ class MatchTableSim:
         params = "Bit#(%s) key, Bit#(%s) data" % (ksz, vsz)
         stmt = []
         stmt.append(ast.Template(TMP1))
-        action_block = ast.ActionBlock("action", stmt)
+        action_block = ast.ActionBlock(stmt)
         funct = ast.Function(name, type, params, stmt=[action_block])
         return funct
 

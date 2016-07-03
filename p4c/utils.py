@@ -75,6 +75,19 @@ def header_to_header_type(header, json_dict):
             return h["header_type"]
     return None
 
+def field_width(field, header_types, headers):
+    print field, header_types, headers
+    header_type = None
+    for h in headers:
+        if h['name'] == field[0]:
+            header_type = h['header_type']
+    for f in header_types:
+        if f['name'] == header_type:
+            for p in f['fields']:
+                if p[0] == field[1]:
+                    return p[1]
+    return None
+
 def createDirAndOpen(f, m):
     (d, name) = os.path.split(f)
     if not os.path.exists(d):

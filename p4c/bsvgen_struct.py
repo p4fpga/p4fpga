@@ -22,7 +22,7 @@
 import astbsv as ast
 import logging
 from sourceCodeBuilder import SourceCodeBuilder
-from utils import CamelCase
+from utils import CamelCase, field_width
 from collections import OrderedDict
 
 STRUCT_DEFAULT="""\
@@ -39,18 +39,6 @@ EXTRACT_TEMP="""\
 function %(name)s extract_%(lname)s(Bit#(%(width)s) data);
   return unpack(data);
 endfunction"""
-
-def field_width(field, header_types, headers):
-    header_type = None
-    for h in headers:
-        if h['name'] == field[0]:
-            header_type = h['header_type']
-    for f in header_types:
-        if f['name'] == header_type:
-            for p in f['fields']:
-                if p[0] == field[1]:
-                    return p[1]
-    return None
 
 class Struct(object):
     def __init__(self, struct_attrs):
@@ -193,16 +181,21 @@ class StructMetadata(object):
                         metadata.add(d)
 
         # valid fields
-        #print vars(ir.parsers)
         for it in ir.parsers.values():
             for h in it.header_instances.values():
                 name = "valid_%s" % (h)
+                print 'ir', name
                 fields.append(ast.StructMember("Maybe#(Bit#(0))", name))
 
         self.struct = ast.Struct(self.name, fields)
 
+    def emitDefault(self, builder):
+        default = ast.Template(STRUCT_DEFAULT, {"name": "MetadataT"})
+        default.emit(builder)
+
     def emit(self, builder):
         self.struct.emitTypeDefStruct(builder)
+        self.emitDefault(builder)
 
 class StructTableReqT(object):
     def __init__(self, name, key, header_types, headers):

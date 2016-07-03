@@ -24,7 +24,7 @@ import bsvgen_common
 import logging
 import sourceCodeBuilder
 from utils import CamelCase
-from p4fpga import DP_WIDTH
+import config
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ class Deparser(object):
         if_stmt.stmt.append(ast.Template(TMP1))
         stmt = []
         stmt.append(if_stmt)
-        ablock = [ast.ActionBlock("action", stmt)]
+        ablock = [ast.ActionBlock(stmt)]
         funct = ast.Function(fname, rtype, params, ablock)
         return funct
 
@@ -99,7 +99,7 @@ class Deparser(object):
         stmt = []
         stmt.append(ast.Template(TMP1))
         stmt.append(ast.Template(TMP2))
-        ablock = [ast.ActionBlock("action", stmt)]
+        ablock = [ast.ActionBlock(stmt)]
         funct = ast.Function(fname, rtype, params, ablock)
         return funct
 
@@ -112,7 +112,7 @@ class Deparser(object):
         stmt = []
         stmt.append(ast.Template(TMP1))
         stmt.append(ast.Template(TMP2))
-        ablock = [ast.ActionBlock("action", stmt)]
+        ablock = [ast.ActionBlock(stmt)]
         funct = ast.Function(fname, rtype, params, ablock)
         return funct
 

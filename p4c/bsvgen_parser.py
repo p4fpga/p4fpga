@@ -23,18 +23,19 @@ import astbsv as ast
 import bsvgen_common
 import logging
 from sourceCodeBuilder import SourceCodeBuilder
-from utils import CamelCase
-from p4fpga import DP_WIDTH
+from utils import CamelCase, field_width
+import config
 
 logger = logging.getLogger(__name__)
 
 class Parser(object):
-    def __init__(self, parse_rules, transitions, transition_key, header_types, header_instances):
+    def __init__(self, ir, parse_rules, transitions, transition_key, header_types, header_instances):
         self.rules = parse_rules
         self.transitions = transitions
         self.transition_key = transition_key
         self.header_types = header_types
         self.header_instances = header_instances
+        self.ir = ir
 
     def emitInterface(self, builder):
         logger.info("emitParser")
@@ -58,7 +59,7 @@ class Parser(object):
         stmt = []
         stmt.append(ast.Template(TMP1))
         stmt.append(ast.Template(TMP2))
-        ablock = [ast.ActionBlock("action", stmt)]
+        ablock = [ast.ActionBlock(stmt)]
         funct = ast.Function(fname, rtype, params, ablock)
         return funct
 
@@ -71,16 +72,23 @@ class Parser(object):
         stmt = []
         stmt.append(ast.Template(TMP1))
         stmt.append(ast.Template(TMP2))
-        ablock = [ast.ActionBlock("action", stmt)]
+        ablock = [ast.ActionBlock(stmt)]
         funct = ast.Function(fname, rtype, params, ablock)
         return funct
 
-    def funct_push_phv(self):
+    def funct_push_phv(self, phv):
+        TMP1 = "MetadataT meta = defaultValue;"
+        TMP2 = "meta.%(field)s = tagged Valid rg_tmp_%(field)s;"
+        TMP3 = "meta_in_ff.enq(meta);"
         fname = "push_phv"
         rtype = "Action"
         params = "ParserState ty"
         stmt = []
-        ablock = [ast.ActionBlock("action", stmt)]
+        stmt.append(ast.Template(TMP1))
+        for _, p in phv:
+            stmt.append(ast.Template(TMP2, {"field": p}))
+        stmt.append(ast.Template(TMP3))
+        ablock = [ast.ActionBlock(stmt)]
         funct = ast.Function(fname, rtype, params, ablock)
         return funct
 
@@ -93,7 +101,7 @@ class Parser(object):
         if_stmt.stmt.append(ast.Template(TMP1))
         stmt = []
         stmt.append(if_stmt)
-        ablock = [ast.ActionBlock("action", stmt)]
+        ablock = [ast.ActionBlock(stmt)]
         funct = ast.Function(fname, rtype, params, ablock)
         return funct
 
@@ -167,7 +175,7 @@ class Parser(object):
         TMP13 = "succeed_and_next(rg_offset + %(dp_width)s);"
         TMP14 = "Vector#(%(nextLen)s, Bit#(1)) unparsed = takeAt(%(width)s, dataVec);"
         TMP15 = "rg_tmp_%(name)s <= zeroExtend(data);"
-        #print rule_attrs
+        TMP16 = "push_phv(%(state)s);"
         first = rule_attrs['firstBeat']
         last = rule_attrs['lastBeat']
         name = rule_attrs['name']
@@ -193,10 +201,10 @@ class Parser(object):
                 "header_type": self.header_types[name],
                 "offset": offset,
                 "rcvdLen": rcvdLen,
-                "prevLen": rcvdLen - DP_WIDTH,
+                "prevLen": rcvdLen - config.DP_WIDTH,
                 "nextLen": nextLen,
                 "width": width,
-                "dp_width": DP_WIDTH,
+                "dp_width": config.DP_WIDTH,
                 "field": ",".join(keys)}
         rname = TMP1 % pdict
         rcond = TMP2 % pdict
@@ -214,17 +222,19 @@ class Parser(object):
                 stmt.append(ast.Template(TMP9_0))
             stmt.append(ast.Template(TMP10, pdict))
             stmt.append(ast.Template(TMP14, pdict))
+            print 'xxxx', next_states
             for s in next_states:
                 stmt.append(ast.Template(TMP11, {'next_state': s, 'name': name}))
+            if len(next_states) == 0:
+                stmt.append(ast.Template(TMP16, pdict))
             stmt.append(ast.Template(TMP12, pdict))
             stmt.append(ast.Template(TMP13, pdict))
         else:
             stmt.append(ast.Template(TMP4, pdict))
             stmt.append(ast.Template(TMP5, pdict))
             stmt.append(ast.Template(TMP6, pdict))
-            stmt.append(ast.Template(TMP15, {'name': name}))
+            stmt.append(ast.Template(TMP15, {'state': name}))
             stmt.append(ast.Template(TMP13, pdict))
-            pass
         rule = ast.Rule(rname, rcond, stmt)
         return rule
 
@@ -244,7 +254,7 @@ class Parser(object):
         stmt.append(ast.Template(TMP6))
         return stmt
 
-    def buildTmpRegs(self):
+    def buildTmpRegs(self, phv):
         TMP1 = "Reg#(Bit#(%(sz)s)) rg_tmp_%(name)s <- mkReg(0);"
         stmt = []
         for state, parse_steps in self.rules.items():
@@ -253,16 +263,48 @@ class Parser(object):
                 last = rule_attrs['lastBeat']
                 if last:
                     stmt.append(ast.Template(TMP1, {'sz': rcvdLen, 'name': state}))
+
+        for sz, name in phv:
+            stmt.append(ast.Template(TMP1, {'sz': sz, 'name': name}))
+
         return stmt
 
+    def build_phv(self):
+        header_types = config.jsondata['header_types']
+        headers = config.jsondata['headers']
+        metadata = set()
+        fields = []
+        for it in config.ir.basic_blocks.values():
+            for f in it.request.members:
+                if f not in metadata:
+                    width = field_width(f, header_types, headers)
+                    name = "$".join(f)
+                    fields.append((width, name))
+                    metadata.add(f)
+        for f in config.ir.controls.values():
+            for _, v in f.tables.items():
+                for k in v.key:
+                    d = tuple(k['target'])
+                    if d not in metadata:
+                        width = field_width(k['target'], header_types, headers)
+                        name = "$".join(k['target'])
+                        fields.append((width, name))
+                        metadata.add(d)
+        for it in config.ir.parsers.values():
+            for h in it.header_instances.values():
+                name = "valid_%s" % (h)
+                fields.append((0, name))
+        return fields
+
     def buildModuleStmt(self):
+        phv = self.build_phv()
         stmt = []
         stmt += bsvgen_common.buildVerbosity()
         stmt += self.buildFFs()
-        stmt += self.buildTmpRegs()
+        stmt += self.buildTmpRegs(phv)
         stmt.append(self.funct_succeed())
         stmt.append(self.funct_failed())
-        stmt.append(self.funct_push_phv())
+        stmt.append(self.funct_push_phv(phv))
         stmt.append(self.funct_report_parse_action())
         stmt += self.funct_compute_next_states(self.rules, self.transition_key, self.transitions)
         first_state = self.rules.keys()[0]
