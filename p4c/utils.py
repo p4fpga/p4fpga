@@ -19,6 +19,7 @@
 # DEALINGS IN THE SOFTWARE.
 #
 
+import config
 import os
 
 def CamelCase(name):
@@ -29,28 +30,25 @@ def camelCase(name):
     output = ''.join(x for x in name.title() if x.isalnum())
     return output[0].lower() + output[1:]
 
-def header_type_to_width (header_type, json_dict):
-    global bmv2_jsondata
+def header_type_to_width (header_type):
     assert type(header_type) == str
-    for h in json_dict["header_types"]:
+    for h in config.jsondata["header_types"]:
         if h["name"] == header_type:
             fields = h["fields"]
             width = sum([x for _, x in fields])
             return width
     return None
 
-def header_to_width (header, json_dict):
-    global bmv2_jsondata
+def header_to_width (header):
     assert type(header) == str
     #print 'htow', header
-    for h in json_dict["headers"]:
+    for h in config.jsondata["headers"]:
         if h["name"] == header:
             hty = h["header_type"]
-            return header_type_to_width(hty, json_dict)
+            return header_type_to_width(hty)
     return None
 
 def field_to_width (field, json_dict):
-    global bmv2_jsondata
     assert type(field) is list
     hty = None
     fields = None
@@ -67,10 +65,9 @@ def field_to_width (field, json_dict):
             #print field, width
             return width
 
-def header_to_header_type(header, json_dict):
-    global bmv2_jsondata
+def header_to_header_type(header):
     assert type(header) == str
-    for h in json_dict["headers"]:
+    for h in config.jsondata["headers"]:
         if h["name"] == header:
             return h["header_type"]
     return None
@@ -87,6 +84,29 @@ def field_width(field, header_types, headers):
                 if p[0] == field[1]:
                     return p[1]
     return None
+
+def state_name_to_state (state_name):
+    for s in config.jsondata['parsers'][0]['parse_states']:
+        if s['name'] == state_name:
+            return s
+    return None
+
+def state_to_header (state_name):
+    state = state_name_to_state(state_name)
+    headers = []
+    header_stacks = []
+    stack = False
+    for op in state["parser_ops"]:
+        if op["op"] == "extract":
+            parameters = op['parameters'][0]
+            if parameters['type'] == "regular":
+                value = parameters["value"]
+                headers.append(value)
+            elif parameters['type'] == 'stack':
+                value = parameters['value']
+                headers.append("%s[%d]" % (value, 0))
+    return headers
+
 
 def createDirAndOpen(f, m):
     (d, name) = os.path.split(f)

@@ -56,10 +56,11 @@ class Top(object):
         TMP.append("`endif")
         TMP.append("HostChannel hostchan <- mkHostChannel();")
         TMP.append("Ingress ingress <- mkIngress(vec(hostchan.next));")
+        TMP.append("Egress egress <- mkEgress(vec(ingress.next));")
         TMP.append("TxChannel txchan <- mkTxChannel(txClock, txReset);")
 
         TMP.append("SharedBuffer#(12, 128, 1) mem <- mkSharedBuffer(vec(txchan.readClient), vec(txchan.freeClient), vec(hostchan.writeClient), vec(hostchan.mallocClient), memServerInd);")
-        TMP.append("mkConnection(ingress.eventPktSend, txchan.eventPktSend);")
+        TMP.append("mkConnection(egress.next, txchan.prev);")
         TMP.append("`ifdef SIMULATION")
         TMP.append("rule drain_mac;")
         TMP.append("   let v <- toGet(txchan.macTx).get;")

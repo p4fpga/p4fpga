@@ -37,7 +37,7 @@ endinstance"""
 
 EXTRACT_TEMP="""\
 function %(name)s extract_%(lname)s(Bit#(%(width)s) data);
-  return unpack(data);
+  return unpack(byteSwap(data));
 endfunction"""
 
 class Struct(object):
@@ -181,10 +181,10 @@ class StructMetadata(object):
                         metadata.add(d)
 
         # valid fields
-        for it in ir.parsers.values():
-            for h in it.header_instances.values():
-                name = "valid_%s" % (camelCase(h))
-                fields.append(ast.StructMember("Maybe#(Bit#(0))", name))
+        #for it in ir.parsers.values():
+        #    for h in it.header_instances.values():
+        #        name = "valid_%s" % (camelCase(h))
+        #        fields.append(ast.StructMember("Maybe#(Bit#(0))", name))
 
         self.struct = ast.Struct(self.name, fields)
 

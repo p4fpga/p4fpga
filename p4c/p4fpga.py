@@ -19,6 +19,7 @@
 #
 # TODO: replace this module with a more proper c++ pass.
 
+import math
 import config
 import astbsv as ast
 from collections import OrderedDict
@@ -30,12 +31,11 @@ from bsvgen_deparser import Deparser
 from bsvgen_basic_block import BasicBlock
 from bsvgen_table import Table
 from bsvgen_struct import Struct, StructT, StructMetadata
-from utils import CamelCase, header_type_to_width, header_to_width, header_to_header_type
+from utils import CamelCase, header_type_to_width, header_to_width, state_to_header
 
 def render_runtime_types(ir, json_dict):
     # metadata req/rsp
     ir.structs['metadata_request'] = StructT("MetadataRequest")
-    #ir.structs['metadata_response'] = StructT("MetadataResponse")
 
     responses = []
     for pipeline in json_dict['pipelines']:
@@ -62,39 +62,44 @@ def render_header_types(ir, json_dict):
         struct = Struct(s)
         ir.structs[name] = struct
 
-def render_parsers(ir, json_dict):
-    stack = []
-    visited = set()
-    header_stacks = dict()
-    state_stacks = dict()
-    parse_rules = OrderedDict()
-    transitions = OrderedDict()
-    transition_key = OrderedDict()
-    header_type = OrderedDict()
-    header_instance = OrderedDict()
+class ParseRule():
+    def __init__(self, idx=0, width=0, rcvdLen=0, nextLen=0,
+            firstBeat=False, lastBeat=False, offset=0):
+        self.name = None
+        self.idx = idx
+        self.width = width
+        self.rcvdLen = rcvdLen
+        self.nextLen = nextLen
+        self.firstBeat = firstBeat
+        self.lastBeat = lastBeat
+        self.offset = offset
 
-    parsers = json_dict["parsers"]
-    assert (len(parsers) == 1), "only one parser is supported."
+    def __repr__(self):
+        return "idx:%s width:%s rl:%s nl:%s fb:%s lb:%s off:%s" % (self.idx,
+                self.width, self.rcvdLen, self.nextLen, self.firstBeat,
+                self.lastBeat, self.offset)
+
+def render_parsers(ir, json_dict):
+    """ """
+    parsers = json_dict['parsers']
+    assert (len(parsers) == 1), "Only one parser is supported."
     parser = parsers[0]
 
-    str_init_state = parser["init_state"]
-    lst_parse_states = parser["parse_states"]
-
-    def name_to_parse_state (name):
-        """
-        map parse state to object
-        """
-        for state in lst_parse_states:
-            if state["name"] == name:
-                return state
-        return None
+    map_parse_state_reverse = {}
+    map_merged_to_prev_state = {}
+    map_unparsed_bits = {}
+    map_parse_state_num_rules = {}
+    map_rcvd_len = {}
+    header_stacks = dict()
+    transitions = OrderedDict()
+    transition_key = OrderedDict()
 
     def name_to_transition_key (name):
         """
         map parse state to keys used for transition to next state.
         """
         keys = []
-        for state in lst_parse_states:
+        for state in parser['parse_states']:
             if state["name"] == name:
                 keys = state['transition_key']
 
@@ -117,124 +122,121 @@ def render_parsers(ir, json_dict):
                                 return f[1]
         return None
 
-    def name_to_transitions(name):
-        for state in lst_parse_states:
-            if state["name"] == name:
-                return state['transitions']
-        return None
+    def to_num_rules(state, header_width, unparsed_bits):
+        assert type(state) is str
+        print 'w:%s, u:%s' % (header_width, unparsed_bits)
+        n_cycles = int(math.ceil((header_width - unparsed_bits) / float(config.DP_WIDTH)))
+        map_parse_state_num_rules[state_name] = n_cycles
+        return n_cycles
 
-    def name_to_parse_ops(name):
-        for state in lst_parse_states:
-            if state['name'] == name:
-                return state['parse_ops']
-        return None
+    def get_num_rules(state):
+        if state not in map_parse_state_num_rules:
+            return None
+        return map_parse_state_num_rules[state]
 
-    def state_to_header (state):
-        assert type(state) == OrderedDict
-        headers = []
-        stack = False
-        for op in state["parser_ops"]:
-            if op["op"] == "extract":
-                parameters = op['parameters'][0]
-                if parameters['type'] == "regular":
-                    value = parameters["value"]
-                    headers.append(value)
-                elif parameters['type'] == "stack":
-                    stack = True
-                    value = parameters['value']
-                    if value not in header_stacks:
-                        header_stacks[value] = 0
-                    #print 'mmm', value, header_stacks[value]
-                    headers.append("%s[%d]" % (value, header_stacks[value]))
-                    header_stacks[value] = header_stacks[value] + 1
-            elif op["op"] == "set":
-                print "modify metadata"
-        return headers
+    def to_unparsed_bits(prev_unparsed_bits, n_cycles, hdr_sz):
+        unparsed_bits = prev_unparsed_bits + n_cycles * config.DP_WIDTH - hdr_sz
+        print unparsed_bits
+        return unparsed_bits
 
-    def expand_parse_state (rcvdLen, offset, header_width):
-        ''' expand parse_state to multiple cycles if needed '''
-        parse_steps = []
-        firstBeat = True
-        lastBeat = False
-        step_idx = 0
-        while rcvdLen < header_width:
-            #print 'ccc', rcvdLen
-            parse_step = OrderedDict()
-            parse_step["idx"] = step_idx
-            parse_step["width"] = header_width
-            parse_step["rcvdLen"] = rcvdLen
-            #if (rcvdLen > header_width):
-            parse_step["nextLen"] = None#rcvdLen - header_width
-            parse_step["firstBeat"] = firstBeat
-            if firstBeat:
-                firstBeat = False
-            parse_step["lastBeat"] = lastBeat
-            parse_step["offset"] = offset
-            rcvdLen += config.DP_WIDTH
-            offset += config.DP_WIDTH
-            step_idx += 1
-            parse_steps.append(parse_step)
-        parse_step = OrderedDict()
-        parse_step["idx"] = step_idx
-        parse_step['width'] = header_width
-        parse_step["rcvdLen"] = rcvdLen
-        #print 'aaa', rcvdLen, header_width
-        bits_to_next_state = rcvdLen - header_width
-        #print 'bbb', bits_to_next_state
-        parse_step["nextLen"] = bits_to_next_state
-        parse_step["firstBeat"] = firstBeat
-        parse_step["lastBeat"] = True
-        parse_step["offset"] = offset
-        parse_step["next_state"] = []
-        offset += config.DP_WIDTH
-        parse_steps.append(parse_step)
-        return parse_steps, bits_to_next_state
+    def to_header_size(state):
+        hdr_sz = 0
+        state_name = state['name']
+        hdrs = state_to_header(state_name)
+        print hdrs
+        for hdr in hdrs:
+            hdr_sz += header_to_width(hdr)
+        return hdr_sz
 
-    def walk_parse_states (bits_from_prev_state, offset_from_start, state):
-        name = state['name']
-        if name not in visited:
-            state_stacks[name] = 0
-            visited.add(name)
+    def to_rcvd_len(prev_unparsed_bits, n_cycles):
+        return n_cycles * config.DP_WIDTH + prev_unparsed_bits
+
+    def get_prev_state(state):
+        assert type(state) is str
+        if state == 'start':
+            return []
         else:
-            state_stacks[name] = state_stacks[name] + 1
-        _name = "%s_%d" % (name, state_stacks[name])
-        print _name
-        stack.append(_name)
+            #FIXME: what if there are more than one prev_state?
+            prev_state = map_parse_state_reverse[state]
+            return prev_state
 
-        bits_in_curr_state = bits_from_prev_state
-        bits_in_curr_state += config.DP_WIDTH
+    def get_unparsed_bits(state):
+        assert type(state) is str
+        if state == 'start':
+            return 0
+        if state not in map_unparsed_bits:
+            return None # uninitialized
+        return map_unparsed_bits[state]
 
-        bits_to_next_state = 0
-        headers = state_to_header(state)
-        # loop extracted headers
-        for header in headers:
-            header_sz = header_to_width(header, json_dict)
-            if header_sz == None:
-                print 'terminate'
-                return
-            # compute constants needed for multi-cycle headers
-            num_steps, bits_to_next_state = expand_parse_state(bits_in_curr_state, offset_from_start, header_sz)
-            print 'xxx', num_steps
-            # collect info for generating parser
-            offset_from_start += config.DP_WIDTH * len(num_steps)
-            parse_rules[_name] = num_steps
-            transitions[_name] = name_to_transitions(name)
-            transition_key[_name] = name_to_transition_key(name)
-            header_instance[_name] = header
-            header_type[_name] = header_to_header_type(header, json_dict)
-            #TODO: handle multiple instances of header type
+    # build map: state -> prev_state
+    for idx, state in enumerate(parser['parse_states']):
+        _transitions = state['transitions']
+        for t in _transitions:
+            next_state = t['next_state']
+            if not t['next_state']: #ignore null state
+                continue
+            if next_state not in map_parse_state_reverse:
+                map_parse_state_reverse[next_state] = set()
+            map_parse_state_reverse[t['next_state']].add(state['name'])
 
-        for t in state["transitions"]:
-            next_state_name = t["next_state"]
-            # topological sort ??
-            if next_state_name:
-                next_state = name_to_parse_state(next_state_name)
-                walk_parse_states(bits_to_next_state, offset_from_start, next_state)
-        stack.pop()
+    # build map: state -> unparsed_bits, state -> rcvd_len
+    for idx, state in enumerate(parser['parse_states']):
+        state_name = state['name']
+        hdr_sz = to_header_size(state)
+        prev_states = get_prev_state(state_name)
+        for p in prev_states:
+            prev_unparsed_bits = get_unparsed_bits(p)
+            if prev_unparsed_bits is not None:
+                n_rules = to_num_rules(state_name, hdr_sz, prev_unparsed_bits)
+                unparsed_bits = to_unparsed_bits(prev_unparsed_bits, n_rules, hdr_sz)
+                print n_rules
+                rcvd_len = to_rcvd_len(prev_unparsed_bits, n_rules)
+                map_unparsed_bits[state_name] = unparsed_bits
+                map_rcvd_len[state_name] = rcvd_len
+                print 'xxx %s %s %s %s prev_unparsed:%s rcvdlen:%s unparsed:%s'%(state_name, prev_states, hdr_sz, n_rules, prev_unparsed_bits, rcvd_len, unparsed_bits)
 
-    obj_init_state = name_to_parse_state(str_init_state)
-    walk_parse_states(0, 0, obj_init_state)
-    ir.parsers['parser'] = Parser(ir, parse_rules, transitions, transition_key, header_type, header_instance)
+    # build map: state -> transition, transition_key
+    for idx, state in enumerate(parser['parse_states']):
+        state_name = state['name']
+        transitions[state_name] = state['transitions']
+        transition_key[state_name] = name_to_transition_key(state_name)
+
+    # build parse rules
+    rules = OrderedDict()
+    for idx, state in enumerate(parser['parse_states']):
+        state_name = state['name']
+        n_rules = get_num_rules(state_name)
+        if n_rules is None:
+            continue
+        rcvd_len = map_rcvd_len[state_name]
+        unparsed_bits = map_unparsed_bits[state_name]
+        hdr_sz = to_header_size(state)
+        parse_rules = []
+        print "xxx", state_name, rcvd_len
+
+        if n_rules == 0:
+            map_merged_to_prev_state[state_name] = True
+            rule = ParseRule(0, hdr_sz, 0, 0, True, True)
+            parse_rules.append(rule)
+        else:
+            map_merged_to_prev_state[state_name] = False
+            bits_to_next_state = None
+            for idx in range(n_rules):
+                first_element = False
+                last_element = False
+                if idx == range(n_rules)[0]:
+                    first_element = True
+                if idx == range(n_rules)[-1]:
+                    last_element = True
+                    bits_to_next_state = unparsed_bits
+                curr_len = rcvd_len - (config.DP_WIDTH) * (n_rules - 1 - idx)
+                #print "xxx", state_name, curr_len
+                rule = ParseRule(idx, hdr_sz, curr_len,
+                                 bits_to_next_state, first_element, last_element)
+                parse_rules.append(rule)
+        rules[state_name] = parse_rules
+    # create Parser object for codegen
+    ir.parsers['parser'] = Parser(rules, transitions, transition_key, map_merged_to_prev_state, map_parse_state_reverse)
 
 def render_deparsers(ir, json_dict):
     deparsers = json_dict['deparsers']

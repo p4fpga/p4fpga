@@ -39,7 +39,8 @@ class Control (object):
         TMP2 = "FIFOF#(MetadataResponse) default_rsp_ff <- mkFIFOF;"
         TMP3 = "FIFOF#(MetadataRequest) %(name)s_req_ff <- mkFIFOF;"
         TMP4 = "FIFOF#(MetadataResponse) %(name)s_rsp_ff <- mkFIFOF;"
-        TMP5 = "FIFOF#(MetadataRequest) currPacketFifo <- mkFIFOF;"
+        TMP5 = "FIFOF#(MetadataRequest) next_req_ff <- mkFIFOF;"
+        TMP6 = "FIFOF#(MetadataResponse) next_rsp_ff <- mkFIFOF;"
         stmt = []
         stmt.append(ast.Template(TMP1))
         stmt.append(ast.Template(TMP2))
@@ -47,6 +48,7 @@ class Control (object):
             stmt.append(ast.Template(TMP3, {"name": t.name} ))
             stmt.append(ast.Template(TMP4, {"name": t.name} ))
         stmt.append(ast.Template(TMP5))
+        stmt.append(ast.Template(TMP6))
         return stmt
 
     def buildRegisterArrays(self):
@@ -136,7 +138,7 @@ class Control (object):
             stmt += _stmt
         else:
             stmt.append(ast.Template("MetadataRequest req = MetadataRequest {pkt: pkt, meta: meta};"))
-            stmt.append(ast.Template("currPacketFifo.enq(req);"))
+            stmt.append(ast.Template("next_req_ff.enq(req);"))
         return stmt
 
     def buildIfStmt(self, true=None, false=None):
@@ -161,7 +163,7 @@ class Control (object):
 
         if tblName is None:
             stmt.append(ast.Template("MetadataRequest req = MetadataRequest {pkt: pkt, meta: meta};"))
-            stmt.append(ast.Template("currPacketFifo.enq(req);"))
+            stmt.append(ast.Template("next_req_ff.enq(req);"))
 
         if tblName in self.tables:
             stmt.append(ast.Template(TMP1))
@@ -251,13 +253,16 @@ class Control (object):
         stmt += self.buildRegisterArrays()
         stmt += self.buildBasicBlockConnection()
         stmt += self.buildRules()
-        stmt.append(ast.Template("interface eventPktSend = toPipeOut(currPacketFifo);"))
+        stmt.append(ast.Template("interface next = (interface Client#(MetadataRequest, MetadataResponse);"))
+        stmt.append(ast.Template("  interface request = toGet(next_req_ff);"))
+        stmt.append(ast.Template("  interface response = toPut(next_rsp_ff);"))
+        stmt.append(ast.Template("endinterface);"))
         return stmt
 
     def emitInterface(self, builder):
         iname = CamelCase(self.name)
         table_intf = ast.Interface(typedef=iname)
-        intf0 = ast.Interface("eventPktSend", "PipeOut#(MetadataRequest)")
+        intf0 = ast.Interface("next", "Client#(MetadataRequest, MetadataResponse)")
         table_intf.subinterfaces.append(intf0)
         table_intf.emitInterfaceDecl(builder)
 

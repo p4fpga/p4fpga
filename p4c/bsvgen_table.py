@@ -23,6 +23,7 @@ import astbsv as ast
 import math
 import logging
 import cppgen
+import sys
 from sourceCodeBuilder import SourceCodeBuilder
 from utils import CamelCase
 from bsvgen_struct import StructT, StructTableReqT, StructTableRspT

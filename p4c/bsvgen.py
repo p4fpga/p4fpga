@@ -12,15 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import argparse
-import json
-import logging
-import os
-import sys
-import yaml
-import p4fpga
-import top
-import bsvgen_table
+import argparse, logging, json, re, os, sys, yaml
+import p4fpga, top, bsvgen_table
 from sourceCodeBuilder import SourceCodeBuilder
 from collections import OrderedDict
 from p4c_bm import gen_json
@@ -121,6 +114,7 @@ def main():
         os.makedirs("generatedbsv")
 
     p4name = os.path.splitext(os.path.basename(options.source))[0]
+    p4name = re.sub(r'\d+[-]+','', p4name)
     generate_file(ir, os.path.join('generatedbsv', p4name+'.bsv'))
     generate_file(top.Top(p4name), os.path.join('generatedbsv', "Main.bsv"))
     generate_file(top.API(p4name), os.path.join('generatedbsv', "MainAPI.bsv"))
