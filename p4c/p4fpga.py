@@ -166,6 +166,7 @@ def render_parsers(ir, json_dict):
         if state == 'start':
             return 0
         if state not in map_unparsed_bits:
+            print 'TTTT'
             return None # uninitialized
         return map_unparsed_bits[state]
 
@@ -185,16 +186,25 @@ def render_parsers(ir, json_dict):
         state_name = state['name']
         hdr_sz = to_header_size(state)
         prev_states = get_prev_state(state_name)
+        #print 'TTTT', idx, state_name, hdr_sz, prev_states
+        if len(prev_states) == 0:
+            # start state
+            n_rules = to_num_rules(state_name, hdr_sz, 0)
+            unparsed_bits = to_unparsed_bits(0, n_rules, hdr_sz)
+            rcvd_len = to_rcvd_len(0, n_rules)
+            map_unparsed_bits[state_name] = unparsed_bits
+            map_rcvd_len[state_name] = rcvd_len
+            print 'xxx %s %s %s %s prev_unparsed:%s rcvdlen:%s unparsed:%s'%(state_name, prev_states, hdr_sz, n_rules, 0, rcvd_len, unparsed_bits)
+
         for p in prev_states:
             prev_unparsed_bits = get_unparsed_bits(p)
             if prev_unparsed_bits is not None:
                 n_rules = to_num_rules(state_name, hdr_sz, prev_unparsed_bits)
                 unparsed_bits = to_unparsed_bits(prev_unparsed_bits, n_rules, hdr_sz)
-                print n_rules
                 rcvd_len = to_rcvd_len(prev_unparsed_bits, n_rules)
                 map_unparsed_bits[state_name] = unparsed_bits
                 map_rcvd_len[state_name] = rcvd_len
-                print 'xxx %s %s %s %s prev_unparsed:%s rcvdlen:%s unparsed:%s'%(state_name, prev_states, hdr_sz, n_rules, prev_unparsed_bits, rcvd_len, unparsed_bits)
+                #print 'xxx %s %s %s %s prev_unparsed:%s rcvdlen:%s unparsed:%s'%(state_name, prev_states, hdr_sz, n_rules, prev_unparsed_bits, rcvd_len, unparsed_bits)
 
     # build map: state -> transition, transition_key
     for idx, state in enumerate(parser['parse_states']):
@@ -206,7 +216,9 @@ def render_parsers(ir, json_dict):
     rules = OrderedDict()
     for idx, state in enumerate(parser['parse_states']):
         state_name = state['name']
+        print idx, state_name
         n_rules = get_num_rules(state_name)
+        print n_rules
         if n_rules is None:
             continue
         rcvd_len = map_rcvd_len[state_name]
