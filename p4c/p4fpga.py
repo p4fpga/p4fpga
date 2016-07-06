@@ -31,7 +31,8 @@ from bsvgen_deparser import Deparser
 from bsvgen_basic_block import BasicBlock
 from bsvgen_table import Table
 from bsvgen_struct import Struct, StructT, StructMetadata
-from utils import CamelCase, header_type_to_width, header_to_width, state_to_header
+from utils import CamelCase, header_type_to_width, header_to_width
+from utils import state_to_header, build_expression
 
 def render_runtime_types(ir, json_dict):
     # metadata req/rsp
@@ -247,54 +248,6 @@ def render_deparsers(ir, json_dict):
     for idx, state in enumerate(deparse_states):
         print idx, state
     ir.deparsers['deparser'] = Deparser(deparse_states)
-
-def build_expression(json_data, sb=[], metadata=[]):
-    if not json_data:
-        return
-    json_type = json_data["type"]
-    json_value = json_data["value"]
-    if (json_type == "expression"):
-        op = json_value["op"]
-        json_left = json_value["left"]
-        json_right = json_value["right"]
-
-        sb.append("(")
-        if (op == "?"):
-            json_cond = json_data["cond"]
-            build_expression(value["left"], sb, metadata)
-            sb.append(op)
-            build_expression(value["right"], sb, metadata)
-            sb.append(")")
-        else:
-            if ((op == "+") or op == "-") and json_left is None:
-                print "expr push back load const"
-            else:
-                build_expression(json_left, sb, metadata)
-            sb.append(op)
-            build_expression(json_right, sb, metadata)
-            sb.append(")")
-    elif (json_type == "header"):
-        if type(json_value) == list:
-            sb.append("$".join(json_value))
-        else:
-            sb.append(json_value)
-        metadata.append(json_value)
-    elif (json_type == "field"):
-        if type(json_value) == list:
-            sb.append("$".join(json_value))
-        else:
-            sb.append(json_value)
-        metadata.append(json_value)
-    elif (json_type == "bool"):
-        sb.append(json_value)
-    elif (json_type == "hexstr"):
-        sb.append(json_value)
-    elif (json_type == "local"):
-        sb.append(json_value)
-    elif (json_type == "register"):
-        sb.append(json_value)
-    else:
-        assert "Error: unimplemented expression type", json_type
 
 def render_pipelines(ir, json_dict):
     '''

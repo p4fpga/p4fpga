@@ -21,6 +21,7 @@
 
 import config
 import os
+import pprint
 
 def CamelCase(name):
     output = ''.join(x for x in name.title() if x.isalnum())
@@ -55,14 +56,14 @@ def field_to_width (field, json_dict):
     for h in json_dict["headers"]:
         if h["name"] == field[0]:
             hty = h["header_type"]
-            #print hty
+            print hty
 
     for h in json_dict["header_types"]:
         if h["name"] == hty:
             fields = h["fields"]
     for f, width in fields:
         if f == field[1]:
-            #print field, width
+            print field, width
             return width
 
 def header_to_header_type(header):
@@ -73,7 +74,6 @@ def header_to_header_type(header):
     return None
 
 def field_width(field, header_types, headers):
-    #print field, header_types, headers
     header_type = None
     for h in headers:
         if h['name'] == field[0]:
@@ -107,6 +107,75 @@ def state_to_header (state_name):
                 headers.append("%s[%d]" % (value, 0))
     return headers
 
+def build_expression(json_data, sb=[], metadata=[]):
+    if not json_data:
+        return
+    json_type = json_data["type"]
+    json_value = json_data["value"]
+    if (json_type == "expression"):
+        op = json_value["op"]
+        json_left = json_value["left"]
+        json_right = json_value["right"]
+
+        sb.append("(")
+        if (op == "?"):
+            json_cond = json_data["cond"]
+            build_expression(value["left"], sb, metadata)
+            sb.append(op)
+            build_expression(value["right"], sb, metadata)
+            sb.append(")")
+        else:
+            if ((op == "+") or op == "-") and json_left is None:
+                print "expr push back load const"
+            else:
+                build_expression(json_left, sb, metadata)
+            sb.append(op)
+            build_expression(json_right, sb, metadata)
+            sb.append(")")
+    elif (json_type == "header"):
+        if type(json_value) == list:
+            sb.append("$".join(json_value))
+        else:
+            sb.append(json_value)
+        metadata.append(json_value)
+    elif (json_type == "field"):
+        if type(json_value) == list:
+            sb.append("$".join(json_value))
+        else:
+            sb.append(json_value)
+        metadata.append(json_value)
+    elif (json_type == "bool"):
+        sb.append(json_value)
+    elif (json_type == "hexstr"):
+        sb.append(json_value)
+    elif (json_type == "local"):
+        sb.append(json_value)
+    elif (json_type == "register"):
+        sb.append(json_value)
+    else:
+        assert "Error: unimplemented expression type", json_type
+
+
+def state_to_expression (state_name):
+    state = state_name_to_state(state_name)
+    # HACK: dealing with BMV2 json format
+    for op in state['parser_ops']:
+        src = []
+        dst = []
+        dst_hdr = []
+        src_hdr = []
+        if op['op'] == 'set':
+            exp0 = op['parameters'][0]
+            build_expression(exp0, dst, dst_hdr)
+            exp1 = op['parameters'][1]
+            if exp1['type'] == 'expression':
+                if exp1['value']:
+                    build_expression(exp1['value'], src, [])
+                    return 'expression', dst, src
+            else:
+                build_expression(exp1, [], src)
+                return 'field', dst, src[0]
+    return None, None, None
 
 def createDirAndOpen(f, m):
     (d, name) = os.path.split(f)
