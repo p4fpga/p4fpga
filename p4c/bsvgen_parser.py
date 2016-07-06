@@ -112,37 +112,54 @@ class Parser(object):
         return funct
 
     def funct_compute_next_states(self, rules, transitions, transition_key):
-        def compute_next_state(name, width, transition):
+        def compute_next_state(name, parameters, transition):
             TMP1 = "w_%(curr_state)s_%(next_state)s.send();"
             TMP2 = "nextState = %(next_state)s;"
-            pdict = {'width': width, 'name': name}
-            fname = "compute_next_state_%(name)s" % pdict
+            fname = "compute_next_state_%s" % (name)
             rtype = "Action"
-            params = "Bit#(%(width)s) v" % pdict
+            params = ', '.join(["Bit#(%s) %s" % (p[0], p[1]) for p in parameters])
             stmt = []
+            a_stmt = ast.Template("let v = {%s};" % (", ".join([p[1] for p in parameters])))
             caseExpr = "v"
             case_stmt = ast.Case(caseExpr)
-            for t in transition:
-                value = t['value'].replace("0x", "'h")
-                next_state = t['next_state']
-                next_name = "%s" % (next_state) if next_state != None else "parse_start"
-                action_stmt = []
-                action_stmt.append(ast.Template(TMP1 % {'curr_state': name, 'next_state': next_name}))
-                case_stmt.casePatItem[value] = value
-                case_stmt.casePatStmt[value] = action_stmt
-            #stmt.append(case_stmt)
-            stmt.append(ast.ActionBlock([case_stmt]))
+            ab_stmt = []
+            if len(parameters) != 0:
+                for t in transition:
+                    value = t['value'].replace("0x", "'h")
+                    next_state = t['next_state']
+                    next_name = "%s" % (next_state) if next_state != None else "parse_start"
+                    action_stmt = []
+                    action_stmt.append(ast.Template(TMP1 % {'curr_state': name, 'next_state': next_name}))
+                    case_stmt.casePatItem[value] = value
+                    case_stmt.casePatStmt[value] = action_stmt
+                ab_stmt.append(a_stmt)
+                ab_stmt.append(case_stmt)
+            else:
+                for t in transition:
+                    value = t['value'].replace("0x", "'h")
+                    next_state = t['next_state']
+                    next_name = "%s" % (next_state) if next_state != None else "parse_start"
+                    action_stmt = []
+                    action_stmt.append(ast.Template(TMP1 % {'curr_state': name, 'next_state': next_name}))
+                ab_stmt += action_stmt
+            stmt.append(ast.ActionBlock(ab_stmt))
             f = ast.Function(fname, rtype, params, stmt)
             return f
 
         funct = []
         for name, rule in rules.items():
             transition = transitions[name]
-            key = transition_key[name]
-            width = 0
-            for k in key:
-                width = k['width']
-                funct.append(compute_next_state(name, width, transition))
+            keys = transition_key[name]
+            # handle look ahead type
+            params = []
+            for k in keys:
+                if k['type'] == 'lookahead':
+                    value = k
+                    width = k['value'][1] - k['value'][0]
+                    params.append((width, 'current'))
+                else:
+                    params.append((k['width'], k['value'][1]))
+            funct.append(compute_next_state(name, params, transition))
         return funct
 
     def rule_start(self, first_state):
@@ -166,6 +183,7 @@ class Parser(object):
         if curr_state in self.map_merged_state and self.map_merged_state[curr_state] == True:
             prev_states = self.map_parse_state_reverse[curr_state]
             all_states = []
+            print 'xxxxxxxxx', all_states, curr_state, prev_states
             for state in prev_states:
                 all_states += self.find_prev_unmerged_state(state)
             return all_states
@@ -186,17 +204,17 @@ class Parser(object):
             if next_state in self.map_merged_state and self.map_merged_state[next_state] == True:
                 continue
 
-            for state in self.find_prev_unmerged_state(curr_state):
-                rname = "rl_%s_%s" % (state, next_state)
-                rcond = "(rg_parse_state == %s) && (%s)" % ("State%s"%(CamelCase(state)), wname)
-                rstmt = ast.Template("rg_parse_state <= %s;" % ("State%s"%(CamelCase(next_state))))
-                stmt.append(ast.Rule(rname, rcond, [rstmt]))
-                rules.append(rname)
-                # add rule to mutex rule dict
-                if state not in mutex_rules:
-                    mutex_rules[state] = [rname]
-                else:
-                    mutex_rules[state].append(rname)
+            #for state in self.find_prev_unmerged_state(curr_state):
+            #    rname = "rl_%s_%s" % (state, next_state)
+            #    rcond = "(rg_parse_state == %s) && (%s)" % ("State%s"%(CamelCase(state)), wname)
+            #    rstmt = ast.Template("rg_parse_state <= %s;" % ("State%s"%(CamelCase(next_state))))
+            #    stmt.append(ast.Rule(rname, rcond, [rstmt]))
+            #    rules.append(rname)
+            #    # add rule to mutex rule dict
+            #    if state not in mutex_rules:
+            #        mutex_rules[state] = [rname]
+            #    else:
+            #        mutex_rules[state].append(rname)
 
         #stmt.append(ast.Template(TMP1, {"rule": ",".join(rules)}))
         return stmt
@@ -326,6 +344,10 @@ class Parser(object):
         keys = []
         #FIXME : if key is metadata, check expression to update key
         for key in transition_key[name]:
+            #print 'xxx', transition_key[name]
+            if key['type'] == 'lookahead':
+                print "WARNING: unhandled lookahead header" 
+                continue
             keys.append("%s.%s" %(header_to_header_type(key['value'][0]), key['value'][1]))
 
         # Collect all next states except default transition to start state,
