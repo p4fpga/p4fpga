@@ -143,8 +143,7 @@ def build_expression(json_data, sb=[], metadata=[]):
     else:
         assert "Error: unimplemented expression type", json_type
 
-
-def state_to_expression (state_name):
+def GetExpressionInState (state_name):
     state = GetState(state_name)
     # HACK: dealing with BMV2 json format
     for op in state['parser_ops']:

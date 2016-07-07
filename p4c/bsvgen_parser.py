@@ -26,7 +26,7 @@ import logging
 from sourceCodeBuilder import SourceCodeBuilder
 from utils import CamelCase, camelCase, GetFieldWidth
 from utils import GetHeaderInState, GetHeaderType, GetHeaderWidth
-from utils import state_to_expression
+from utils import GetExpressionInState
 
 logger = logging.getLogger(__name__)
 
@@ -287,7 +287,7 @@ class Parser(object):
             stmt.append(ast.Template(TMP5, {"header_type": GetHeaderType(hdr),
                                             "header_offset": header_offset}))
             header_offset += GetHeaderWidth(hdr)
-        type, dst, src = state_to_expression(pdict['name'])
+        type, dst, src = GetExpressionInState(pdict['name'])
         if dst and src:
             if type == 'expression':
                 # replace 0x1 with 'h1
