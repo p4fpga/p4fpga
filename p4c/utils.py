@@ -41,14 +41,14 @@ def GetExpressionInState (state_name):
         src_hdr = []
         if op['op'] == 'set':
             exp0 = op['parameters'][0]
-            buildExpression(exp0, dst, dst_hdr)
+            BuildExpression(exp0, dst, dst_hdr)
             exp1 = op['parameters'][1]
             if exp1['type'] == 'expression':
                 if exp1['value']:
-                    buildExpression(exp1['value'], src, [])
+                    BuildExpression(exp1['value'], src, [])
                     return 'expression', dst, src
             else:
-                buildExpression(exp1, [], src)
+                BuildExpression(exp1, [], src)
                 return 'field', dst, src[0]
     return None, None, None
 
@@ -116,7 +116,7 @@ def GetState(state_name):
             return s
     return None
 
-def buildExpression(json_data, sb=[], metadata=[]):
+def BuildExpression(json_data, sb=[], metadata=[]):
     if not json_data:
         return
     json_type = json_data["type"]
@@ -129,17 +129,17 @@ def buildExpression(json_data, sb=[], metadata=[]):
         sb.append("(")
         if (op == "?"):
             json_cond = json_data["cond"]
-            buildExpression(value["left"], sb, metadata)
+            BuildExpression(value["left"], sb, metadata)
             sb.append(op)
-            buildExpression(value["right"], sb, metadata)
+            BuildExpression(value["right"], sb, metadata)
             sb.append(")")
         else:
             if ((op == "+") or op == "-") and json_left is None:
                 print "expr push back load const"
             else:
-                buildExpression(json_left, sb, metadata)
+                BuildExpression(json_left, sb, metadata)
             sb.append(op)
-            buildExpression(json_right, sb, metadata)
+            BuildExpression(json_right, sb, metadata)
             sb.append(")")
     elif (json_type == "header"):
         if type(json_value) == list:
