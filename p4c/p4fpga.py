@@ -21,9 +21,9 @@
 
 import math
 import config
+import pprint
 import astbsv as ast
 from collections import OrderedDict
-from pprint import pprint
 from bsvgen_program import Program
 from bsvgen_control import Control
 from bsvgen_parser import Parser
@@ -31,7 +31,7 @@ from bsvgen_deparser import Deparser
 from bsvgen_basic_block import BasicBlock
 from bsvgen_table import Table
 from bsvgen_struct import Struct, StructT, StructMetadata
-from utils import CamelCase, header_type_to_width, header_to_width
+from utils import CamelCase, GetHeaderWidth
 from utils import state_to_header, build_expression
 
 def render_runtime_types(ir, json_dict):
@@ -51,11 +51,7 @@ def render_runtime_types(ir, json_dict):
                 stmt.append(ast.StructMember("MetadataT", "meta"))
                 responses.append(ast.Struct(sname, stmt))
     ir.structs['metadata_response'] = ast.TypeDef("union tagged", "MetadataResponse", responses)
-
-    # metadata
-    header_types = json_dict['header_types']
-    header_instances = json_dict['headers']
-    ir.structs['metadata'] = StructMetadata("MetadataT", ir, header_types, header_instances)
+    ir.structs['metadata'] = StructMetadata("MetadataT", ir)
 
 def render_header_types(ir, json_dict):
     for s in json_dict["header_types"]:
@@ -82,6 +78,7 @@ class ParseRule():
 
 def render_parsers(ir, json_dict):
     """ """
+    pp = pprint.PrettyPrinter(indent=4)
     parsers = json_dict['parsers']
     assert (len(parsers) == 1), "Only one parser is supported."
     parser = parsers[0]
@@ -146,7 +143,7 @@ def render_parsers(ir, json_dict):
         hdrs = state_to_header(state_name)
         print hdrs
         for hdr in hdrs:
-            hdr_sz += header_to_width(hdr)
+            hdr_sz += GetHeaderWidth(hdr)
         return hdr_sz
 
     def to_rcvd_len(prev_unparsed_bits, n_cycles):
@@ -180,15 +177,15 @@ def render_parsers(ir, json_dict):
             if next_state not in map_parse_state_reverse:
                 map_parse_state_reverse[next_state] = set()
             map_parse_state_reverse[t['next_state']].add(state['name'])
+    pp.pprint(map_parse_state_reverse)
 
     # build map: state -> unparsed_bits, state -> rcvd_len
     for idx, state in enumerate(parser['parse_states']):
         state_name = state['name']
         hdr_sz = to_header_size(state)
         prev_states = get_prev_state(state_name)
-        #print 'TTTT', idx, state_name, hdr_sz, prev_states
+        print 'TTTT', idx, state_name, hdr_sz, prev_states
         if len(prev_states) == 0:
-            # start state
             n_rules = to_num_rules(state_name, hdr_sz, 0)
             unparsed_bits = to_unparsed_bits(0, n_rules, hdr_sz)
             rcvd_len = to_rcvd_len(0, n_rules)
@@ -204,21 +201,25 @@ def render_parsers(ir, json_dict):
                 rcvd_len = to_rcvd_len(prev_unparsed_bits, n_rules)
                 map_unparsed_bits[state_name] = unparsed_bits
                 map_rcvd_len[state_name] = rcvd_len
-                #print 'xxx %s %s %s %s prev_unparsed:%s rcvdlen:%s unparsed:%s'%(state_name, prev_states, hdr_sz, n_rules, prev_unparsed_bits, rcvd_len, unparsed_bits)
+                print 'xxx %s %s %s %s prev_unparsed:%s rcvdlen:%s unparsed:%s'%(state_name, prev_states, hdr_sz, n_rules, prev_unparsed_bits, rcvd_len, unparsed_bits)
+    print 'map_unparsed_bit', map_unparsed_bits
+    print 'map_rcvd_len', map_rcvd_len
 
     # build map: state -> transition, transition_key
     for idx, state in enumerate(parser['parse_states']):
         state_name = state['name']
         transitions[state_name] = state['transitions']
         transition_key[state_name] = name_to_transition_key(state_name)
+    print 'transitions', transitions
+    print 'transition_key', transition_key
 
     # build parse rules
     rules = OrderedDict()
     for idx, state in enumerate(parser['parse_states']):
         state_name = state['name']
-        print idx, state_name
+        print 'idx %s, state %s' % (idx, state_name)
         n_rules = get_num_rules(state_name)
-        print n_rules
+        print 'n_rules', n_rules
         if n_rules is None:
             continue
         rcvd_len = map_rcvd_len[state_name]
@@ -248,6 +249,7 @@ def render_parsers(ir, json_dict):
                                  bits_to_next_state, first_element, last_element)
                 parse_rules.append(rule)
         rules[state_name] = parse_rules
+    print 'rules', rules
     # create Parser object for codegen
     ir.parsers['parser'] = Parser(rules, transitions, transition_key, map_merged_to_prev_state, map_parse_state_reverse)
 

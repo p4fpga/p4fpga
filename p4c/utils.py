@@ -31,7 +31,7 @@ def camelCase(name):
     output = ''.join(x for x in name.title() if x.isalnum())
     return output[0].lower() + output[1:]
 
-def header_type_to_width (header_type):
+def GetHeaderTypeWidth(header_type):
     assert type(header_type) == str
     for h in config.jsondata["header_types"]:
         if h["name"] == header_type:
@@ -40,49 +40,37 @@ def header_type_to_width (header_type):
             return width
     return None
 
-def header_to_width (header):
+def GetHeaderWidth(header):
     assert type(header) == str
     #print 'htow', header
     for h in config.jsondata["headers"]:
         if h["name"] == header:
             hty = h["header_type"]
-            return header_type_to_width(hty)
+            return GetHeaderTypeWidth(hty)
     return None
 
-def field_to_width (field, json_dict):
-    assert type(field) is list
+def GetFieldWidth(field):
+    #assert type(field) is list
     hty = None
     fields = None
-    for h in json_dict["headers"]:
+    for h in config.jsondata["headers"]:
         if h["name"] == field[0]:
             hty = h["header_type"]
-            print hty
 
-    for h in json_dict["header_types"]:
+    for h in config.jsondata["header_types"]:
         if h["name"] == hty:
             fields = h["fields"]
+
     for f, width in fields:
         if f == field[1]:
-            print field, width
             return width
+    return None
 
-def header_to_header_type(header):
+def GetHeaderType(header):
     assert type(header) == str
     for h in config.jsondata["headers"]:
         if h["name"] == header:
             return h["header_type"]
-    return None
-
-def field_width(field, header_types, headers):
-    header_type = None
-    for h in headers:
-        if h['name'] == field[0]:
-            header_type = h['header_type']
-    for f in header_types:
-        if f['name'] == header_type:
-            for p in f['fields']:
-                if p[0] == field[1]:
-                    return p[1]
     return None
 
 def state_name_to_state (state_name):

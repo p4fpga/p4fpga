@@ -65,19 +65,16 @@ class BasicBlock(object):
         self.optimize()
         #print self.bypass_map
 
-        header_types = json_dict['header_types']
-        header_instances = json_dict['headers']
-
         # add runtime data to basic block request
         runtime_data = addRuntimeData(self.name, json_dict)
         self.runtime_data = runtime_data
         self.raw_runtime_data = addRawRuntimeData(self.name, json_dict)
 
         req_name = "%sReqT" % (CamelCase(self.name))
-        self.request = StructM(req_name, self.meta_read, header_types, header_instances, runtime_data=runtime_data)
+        self.request = StructM(req_name, self.meta_read, runtime_data=runtime_data)
 
         rsp_name = "%sRspT" % (CamelCase(self.name))
-        self.response = StructM(rsp_name, self.meta_write, header_types, header_instances, bypass_map=self.bypass_map)
+        self.response = StructM(rsp_name, self.meta_write, bypass_map=self.bypass_map)
 
         self.clientInterfaces = self.buildClientInterfaces(json_dict)
         self.serverInterfaces = self.buildServerInterfaces(json_dict)

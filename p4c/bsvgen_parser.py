@@ -24,13 +24,14 @@ import config
 import bsvgen_common
 import logging
 from sourceCodeBuilder import SourceCodeBuilder
-from utils import CamelCase, camelCase, field_width
-from utils import state_to_header, header_to_header_type, header_to_width
-from utils import state_to_expression, field_to_width
+from utils import CamelCase, camelCase, GetFieldWidth
+from utils import state_to_header, GetHeaderType, GetHeaderWidth
+from utils import state_to_expression
 
 logger = logging.getLogger(__name__)
 
 class Parser(object):
+    # proper use of parser class constant?
     def __init__(self, parse_rules, transitions, transition_key, map_merged_state, map_parse_state_reverse):
         self.rules = parse_rules
         self.transitions = transitions
@@ -175,17 +176,23 @@ class Parser(object):
         else_stmt.append(ast.Template(TMP3))
         stmt.append(ast.Else(else_stmt))
         rname = "rl_start_state"
-        rcond = "rg_parse_state == StateParseStart"
+        rcond = "rg_parse_state == StateDefault"
         rule = ast.Rule(rname, rcond, stmt)
         return rule
 
-    def find_prev_unmerged_state (self, curr_state):
+    def find_prev_unmerged_state (self, curr_state, visited):
         if curr_state in self.map_merged_state and self.map_merged_state[curr_state] == True:
-            prev_states = self.map_parse_state_reverse[curr_state]
+            if curr_state in visited:
+                return []
+            visited.add(curr_state)
+            prev_states = []
+            if curr_state in self.map_parse_state_reverse:
+                prev_states = self.map_parse_state_reverse[curr_state]
+
             all_states = []
             print 'xxxxxxxxx', all_states, curr_state, prev_states
             for state in prev_states:
-                all_states += self.find_prev_unmerged_state(state)
+                all_states += self.find_prev_unmerged_state(state, visited)
             return all_states
         else:
             return [ curr_state ]
@@ -193,6 +200,7 @@ class Parser(object):
     def build_transition_rules(self, curr_state, transitions, mutex_rules):
         stmt = []
         rules = []
+        visited = set()
         for transition in transitions:
             next_state = transition['next_state']
             if next_state == None:
@@ -204,19 +212,17 @@ class Parser(object):
             if next_state in self.map_merged_state and self.map_merged_state[next_state] == True:
                 continue
 
-            #for state in self.find_prev_unmerged_state(curr_state):
-            #    rname = "rl_%s_%s" % (state, next_state)
-            #    rcond = "(rg_parse_state == %s) && (%s)" % ("State%s"%(CamelCase(state)), wname)
-            #    rstmt = ast.Template("rg_parse_state <= %s;" % ("State%s"%(CamelCase(next_state))))
-            #    stmt.append(ast.Rule(rname, rcond, [rstmt]))
-            #    rules.append(rname)
-            #    # add rule to mutex rule dict
-            #    if state not in mutex_rules:
-            #        mutex_rules[state] = [rname]
-            #    else:
-            #        mutex_rules[state].append(rname)
-
-        #stmt.append(ast.Template(TMP1, {"rule": ",".join(rules)}))
+            for state in self.find_prev_unmerged_state(curr_state, visited):
+                rname = "rl_%s_%s" % (state, next_state)
+                rcond = "(rg_parse_state == %s) && (%s)" % ("State%s"%(CamelCase(state)), wname)
+                rstmt = ast.Template("rg_parse_state <= %s;" % ("State%s"%(CamelCase(next_state))))
+                stmt.append(ast.Rule(rname, rcond, [rstmt]))
+                rules.append(rname)
+                # add rule to mutex rule dict
+                if state not in mutex_rules:
+                    mutex_rules[state] = [rname]
+                else:
+                    mutex_rules[state].append(rname)
         return stmt
 
     def build_merged_parse_rule(self, name, pdict, next_states):
@@ -226,7 +232,9 @@ class Parser(object):
         TMP4 = "Vector#(%(nextLen)s, Bit#(1)) unparsed = takeAt(%(width)s, dataVec);"
         TMP5 = "rg_tmp_%(next_state)s <= zeroExtend(pack(unparsed));"
         TMP6 = "succeed_and_next(%(nextLen)s);"
-        prev_states = self.map_parse_state_reverse[name]
+        prev_states = []
+        if name in self.map_parse_state_reverse:
+            prev_states = self.map_parse_state_reverse[name]
         rules = []
         for state in prev_states:
             stmt = []
@@ -241,9 +249,9 @@ class Parser(object):
             hdr_offset = rcvdLen - unparsed
             hdr_len = 0
             for hdr in hdrs:
-                stmt.append(ast.Template(TMP2, {'header_type': header_to_header_type(hdr), 'header_offset': hdr_offset}))
-                hdr_offset += header_to_width(hdr)
-                hdr_len += header_to_width(hdr)
+                stmt.append(ast.Template(TMP2, {'header_type': GetHeaderType(hdr), 'header_offset': hdr_offset}))
+                hdr_offset += GetHeaderWidth(hdr)
+                hdr_len += GetHeaderWidth(hdr)
             stmt.append(ast.Template(TMP3, pdict))
             # if next state is not merged
             for nxt in next_states:
@@ -276,17 +284,17 @@ class Parser(object):
 
         header_offset = 0
         for hdr in hdrs:
-            stmt.append(ast.Template(TMP5, {"header_type": header_to_header_type(hdr),
+            stmt.append(ast.Template(TMP5, {"header_type": GetHeaderType(hdr),
                                             "header_offset": header_offset}))
-            header_offset += header_to_width(hdr)
+            header_offset += GetHeaderWidth(hdr)
         type, dst, src = state_to_expression(pdict['name'])
         if dst and src:
             if type == 'expression':
                 # replace 0x1 with 'h1
                 stmt.append(ast.Template(TMP13, {'expr' : ' '.join([x.replace('0x', "'h") for x in src])}))
             elif type == 'field':
-                width = field_width(src, config.jsondata['header_types'], config.jsondata['headers'])
-                src[0] = header_to_header_type(src[0]) #FIXME mutated data
+                width = GetFieldWidth(src)
+                src[0] = GetHeaderType(src[0]) #FIXME mutated data
                 stmt.append(ast.Template(TMP13, {'expr' : '.'.join(src)}))
                 self.regs.add((width, dst[0]))
 
@@ -348,7 +356,7 @@ class Parser(object):
             if key['type'] == 'lookahead':
                 print "WARNING: unhandled lookahead header" 
                 continue
-            keys.append("%s.%s" %(header_to_header_type(key['value'][0]), key['value'][1]))
+            keys.append("%s.%s" %(GetHeaderType(key['value'][0]), key['value'][1]))
 
         # Collect all next states except default transition to start state,
         # used to save temp unparsed bit in pipeline registers
@@ -404,17 +412,19 @@ class Parser(object):
     def buildFFs(self):
         TMP1 = "FIFOF#(EtherData) data_in_ff <- mkFIFOF;"
         TMP2 = "FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;"
-        TMP3 = "Reg#(ParserState) rg_parse_state <- mkReg(StateParseStart);"
-        TMP4 = "Wire#(ParserState) parse_state_w <- mkDWire(StateParseStart);"
         TMP5 = "Reg#(Bit#(32)) rg_offset <- mkReg(0);"
         TMP6 = "PulseWire parse_done <- mkPulseWire();"
         stmt = []
         stmt.append(ast.Template(TMP1))
         stmt.append(ast.Template(TMP2))
-        stmt.append(ast.Template(TMP3))
-        stmt.append(ast.Template(TMP4))
         stmt.append(ast.Template(TMP5))
         stmt.append(ast.Template(TMP6))
+        return stmt
+
+    def buildStateRegs(self):
+        TMP3 = "Reg#(ParserState) rg_parse_state <- mkReg(%(name)s);"
+        TMP4 = "Wire#(ParserState) parse_state_w <- mkDWire(%(name)s);"
+        stmt = []
         return stmt
 
     def buildTmpRegs(self, phv):
@@ -433,14 +443,12 @@ class Parser(object):
         return stmt
 
     def build_phv(self):
-        header_types = config.jsondata['header_types']
-        headers = config.jsondata['headers']
         metadata = set()
         fields = []
         for it in config.ir.basic_blocks.values():
             for f in it.request.members:
                 if f not in metadata:
-                    width = field_width(f, header_types, headers)
+                    width = GetFieldWidth(f)
                     name = "$".join(f)
                     fields.append((width, name))
                     metadata.add(f)
@@ -449,7 +457,7 @@ class Parser(object):
                 for k in v.key:
                     d = tuple(k['target'])
                     if d not in metadata:
-                        width = field_width(k['target'], header_types, headers)
+                        width = GetFieldWidth(k['target'])
                         name = "$".join(k['target'])
                         fields.append((width, name))
                         metadata.add(d)
@@ -465,14 +473,15 @@ class Parser(object):
         stmt += bsvgen_common.buildVerbosity()
         stmt += self.buildFFs()
         stmt += self.buildTmpRegs(phv)
+        stmt += self.buildStateRegs()
         stmt.append(self.funct_succeed())
         stmt.append(self.funct_failed())
         stmt.append(self.funct_push_phv(phv))
         stmt.append(self.funct_report_parse_action())
         stmt += self.funct_compute_next_states(self.rules, self.transitions,
                                                self.transition_key)
-        first_state = self.rules.keys()[0]
-        stmt.append(self.rule_start(first_state))
+        #first_state = self.rules.keys()[0]
+        #stmt.append(self.rule_start(first_state))
         stmt.append(ast.Template("let data_this_cycle = data_in_ff.first.data;"))
         for state, rules in self.rules.items():
             for rule in rules:
@@ -496,7 +505,7 @@ class Parser(object):
 
     def emitTypes(self, builder):
         elem = []
-        elem.append(ast.EnumElement("StateParseStart", None, None))
+        elem.append(ast.EnumElement("StateDefault", None, None))
         for state in self.rules.keys():
             elem.append(ast.EnumElement("State%s" % (CamelCase(state)), None, None))
         state = ast.Enum("ParserState", elem)

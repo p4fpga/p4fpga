@@ -14,7 +14,7 @@
 #
 
 import astbsv as ast
-from utils import CamelCase, field_to_width
+from utils import CamelCase, GetFieldWidth
 import primitives as prm
 
 def get_reg_array_size(name, json_dict):
@@ -56,9 +56,8 @@ class ModifyField(Primitive):
         stmt = []
         dst_value = self.parameters[0]['value']
         dst_type = self.parameters[0]['type']
-        #print dst_value
         field = "$".join(dst_value)
-        dsz = field_to_width(dst_value, json_dict)
+        dsz = GetFieldWidth(dst_value)
         pdict = {"dsz": dsz, "field": field}
         stmt.append(ast.Template(TMP1, pdict))
         return stmt

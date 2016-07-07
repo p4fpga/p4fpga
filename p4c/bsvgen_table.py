@@ -384,9 +384,7 @@ class Table(object):
 
     def emitKeyType(self, builder):
         global generated_table_sim
-        header_types = self.json_dict['header_types']
-        headers = self.json_dict['headers']
-        req_struct = StructTableReqT(self.name, self.key, header_types, headers)
+        req_struct = StructTableReqT(self.name, self.key)
         req_struct.emit(builder)
 
         action_info = self.json_dict['actions']

@@ -22,7 +22,7 @@
 import astbsv as ast
 import logging
 from sourceCodeBuilder import SourceCodeBuilder
-from utils import CamelCase, camelCase, field_width
+from utils import CamelCase, camelCase, GetFieldWidth
 from collections import OrderedDict
 
 STRUCT_DEFAULT="""\
@@ -69,7 +69,7 @@ class Struct(object):
         builder.newline()
 
 class StructM(object):
-    def __init__(self, name, members, header_types, headers, runtime_data=[], bypass_map=None):
+    def __init__(self, name, members, runtime_data=[], bypass_map=None):
         self.name = name
         self.members = members
         self.runtime_data = runtime_data
@@ -78,7 +78,7 @@ class StructM(object):
         e.append(ast.StructMember("PacketInstance", "pkt"))
         for m in members:
             _m = "$".join(m)
-            e.append(ast.StructMember("Bit#(%s)"%(field_width(m, header_types, headers)), _m))
+            e.append(ast.StructMember("Bit#(%s)"%(GetFieldWidth(m)), _m))
         for r in runtime_data:
             e.append(ast.StructMember("Bit#(%s)"%(r[0]), "runtime_%s"%(r[1])))
         self.struct = ast.Struct(name, e)
@@ -144,7 +144,7 @@ class StructMetadata(object):
     """
     TODO: improve to share code with StructM
     """
-    def __init__(self, name, ir, header_types, headers):
+    def __init__(self, name, ir):
         self.name = name
 
         metadata = set()
@@ -152,13 +152,13 @@ class StructMetadata(object):
         for it in ir.basic_blocks.values():
             for f in it.request.members:
                 if f not in metadata:
-                    width = field_width(f, header_types, headers)
+                    width = GetFieldWidth(f)
                     name = "$".join(f)
                     fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
                     metadata.add(f)
             for f in it.response.members:
                 if f not in metadata:
-                    width = field_width(f, header_types, headers)
+                    width = GetFieldWidth(f)
                     name = "$".join(f)
                     fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
                     metadata.add(f)
@@ -175,7 +175,7 @@ class StructMetadata(object):
                 for k in v.key:
                     d = tuple(k['target'])
                     if d not in metadata:
-                        width = field_width(k['target'], header_types, headers)
+                        width = GetFieldWidth(k['target'])
                         name = "$".join(k['target'])
                         fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
                         metadata.add(d)
@@ -197,13 +197,13 @@ class StructMetadata(object):
         self.emitDefault(builder)
 
 class StructTableReqT(object):
-    def __init__(self, name, key, header_types, headers):
+    def __init__(self, name, key):
         self.name = name
         fields = []
         total_width = 0
         pad_width = 0
         for k in key:
-            width = field_width(k['target'], header_types, headers)
+            width = GetFieldWidth(k['target'])
             total_width += width
             name = "$".join(k['target'])
             fields.append(ast.StructMember("Bit#(%s)" %(width), name))
