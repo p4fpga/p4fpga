@@ -53,7 +53,6 @@ def GetExpressionInState (state_name):
     return None, None, None
 
 def GetFieldWidth(field):
-    #assert type(field) is list
     hty = None
     fields = None
     for h in config.jsondata["headers"]:

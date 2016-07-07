@@ -124,7 +124,7 @@ def render_parsers(ir, json_dict):
         assert type(state) is str
         print 'w:%s, u:%s' % (header_width, unparsed_bits)
         n_cycles = int(math.ceil((header_width - unparsed_bits) / float(config.DP_WIDTH)))
-        map_parse_state_num_rules[state_name] = n_cycles
+        map_parse_state_num_rules[state] = n_cycles
         return n_cycles
 
     def get_num_rules(state):
@@ -167,43 +167,57 @@ def render_parsers(ir, json_dict):
             return None # uninitialized
         return map_unparsed_bits[state]
 
-    # build map: state -> prev_state
-    for idx, state in enumerate(parser['parse_states']):
-        _transitions = state['transitions']
-        for t in _transitions:
-            next_state = t['next_state']
-            if not t['next_state']: #ignore null state
-                continue
-            if next_state not in map_parse_state_reverse:
-                map_parse_state_reverse[next_state] = set()
-            map_parse_state_reverse[t['next_state']].add(state['name'])
-    pp.pprint(map_parse_state_reverse)
+    def build_map_inversed_transition():
+        # build map: state -> prev_state
+        for state in parser['parse_states']:
+            _transitions = state['transitions']
+            for t in _transitions:
+                next_state = t['next_state']
+                if not t['next_state']: #ignore null state
+                    continue
+                if next_state not in map_parse_state_reverse:
+                    map_parse_state_reverse[next_state] = set()
+                map_parse_state_reverse[t['next_state']].add(state['name'])
 
-    # build map: state -> unparsed_bits, state -> rcvd_len
-    for idx, state in enumerate(parser['parse_states']):
-        state_name = state['name']
-        hdr_sz = to_header_size(state)
-        prev_states = get_prev_state(state_name)
-        print 'TTTT', idx, state_name, hdr_sz, prev_states
-        if len(prev_states) == 0:
-            n_rules = to_num_rules(state_name, hdr_sz, 0)
-            unparsed_bits = to_unparsed_bits(0, n_rules, hdr_sz)
-            rcvd_len = to_rcvd_len(0, n_rules)
-            map_unparsed_bits[state_name] = unparsed_bits
-            map_rcvd_len[state_name] = rcvd_len
-            print 'xxx %s %s %s %s prev_unparsed:%s rcvdlen:%s unparsed:%s'%(state_name, prev_states, hdr_sz, n_rules, 0, rcvd_len, unparsed_bits)
-
-        for p in prev_states:
-            prev_unparsed_bits = get_unparsed_bits(p)
-            if prev_unparsed_bits is not None:
-                n_rules = to_num_rules(state_name, hdr_sz, prev_unparsed_bits)
-                unparsed_bits = to_unparsed_bits(prev_unparsed_bits, n_rules, hdr_sz)
-                rcvd_len = to_rcvd_len(prev_unparsed_bits, n_rules)
+    # build map: state -> unparsed_bits
+    def build_map_unparse_bits():
+        for state in parser['parse_states']:
+            state_name = state['name']
+            hdr_sz = to_header_size(state)
+            prev_states = get_prev_state(state_name)
+            if len(prev_states) == 0:
+                n_rules = to_num_rules(state_name, hdr_sz, 0)
+                unparsed_bits = to_unparsed_bits(0, n_rules, hdr_sz)
                 map_unparsed_bits[state_name] = unparsed_bits
+
+            for p in prev_states:
+                prev_unparsed_bits = get_unparsed_bits(p)
+                if prev_unparsed_bits is not None:
+                    n_rules = to_num_rules(state_name, hdr_sz, prev_unparsed_bits)
+                    unparsed_bits = to_unparsed_bits(prev_unparsed_bits, n_rules, hdr_sz)
+                    map_unparsed_bits[state_name] = unparsed_bits
+
+    # build map: state -> rcvd_len
+    def build_map_rcvd_len():
+        for state in parser['parse_states']:
+            state_name = state['name']
+            hdr_sz = to_header_size(state)
+            prev_states = get_prev_state(state_name)
+            if len(prev_states) == 0:
+                n_rules = to_num_rules(state_name, hdr_sz, 0)
+                rcvd_len = to_rcvd_len(0, n_rules)
                 map_rcvd_len[state_name] = rcvd_len
-                print 'xxx %s %s %s %s prev_unparsed:%s rcvdlen:%s unparsed:%s'%(state_name, prev_states, hdr_sz, n_rules, prev_unparsed_bits, rcvd_len, unparsed_bits)
-    print 'map_unparsed_bit', map_unparsed_bits
-    print 'map_rcvd_len', map_rcvd_len
+
+            for p in prev_states:
+                prev_unparsed_bits = get_unparsed_bits(p)
+                if prev_unparsed_bits is not None:
+                    n_rules = to_num_rules(state_name, hdr_sz, prev_unparsed_bits)
+                    rcvd_len = to_rcvd_len(prev_unparsed_bits, n_rules)
+                    map_rcvd_len[state_name] = rcvd_len
+
+    build_map_inversed_transition()
+    build_map_unparse_bits()
+    build_map_rcvd_len()
 
     # build map: state -> transition, transition_key
     for idx, state in enumerate(parser['parse_states']):
