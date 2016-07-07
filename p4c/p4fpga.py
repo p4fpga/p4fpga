@@ -32,7 +32,7 @@ from bsvgen_basic_block import BasicBlock
 from bsvgen_table import Table
 from bsvgen_struct import Struct, StructT, StructMetadata
 from utils import CamelCase, GetHeaderWidth
-from utils import GetHeaderInState, build_expression
+from utils import GetHeaderInState, buildExpression
 
 def render_runtime_types(ir, json_dict):
     # metadata req/rsp
@@ -287,7 +287,7 @@ def render_pipelines(ir, json_dict):
             cname = c['name']
             expr = []
             metadata = []
-            build_expression(c["expression"], expr, metadata)
+            buildExpression(c["expression"], expr, metadata)
             if expr[1] == "valid":
                 _expr = "isValid(%s)" % ("meta."+"_".join(expr[1:-1]))
             else:
