@@ -115,6 +115,16 @@ def GetState(state_name):
             return s
     return None
 
+def GetTransitionKey(state):
+    keys = state['transition_key']
+    for k in keys:
+        if k['type'] == 'lookahead':
+            k['width'] = k['value'][1] - k['value'][0]
+        else:
+            w = GetFieldWidth(k['value'])
+            k['width'] = w
+    return keys
+
 def BuildExpression(json_data, sb=[], metadata=[]):
     if not json_data:
         return

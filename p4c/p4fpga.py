@@ -31,8 +31,8 @@ from bsvgen_deparser import Deparser
 from bsvgen_basic_block import BasicBlock
 from bsvgen_table import Table
 from bsvgen_struct import Struct, StructT, StructMetadata
-from utils import CamelCase, GetHeaderWidth
-from utils import GetHeaderInState, BuildExpression
+from utils import CamelCase, GetHeaderWidth, GetFieldWidth
+from utils import GetHeaderInState, BuildExpression, GetTransitionKey
 
 def render_runtime_types(ir, json_dict):
     # metadata req/rsp
@@ -91,34 +91,6 @@ def render_parsers(ir, json_dict):
     header_stacks = dict()
     transitions = OrderedDict()
     transition_key = OrderedDict()
-
-    def name_to_transition_key (name):
-        """
-        map parse state to keys used for transition to next state.
-        """
-        keys = []
-        for state in parser['parse_states']:
-            if state["name"] == name:
-                keys = state['transition_key']
-
-        for k in keys:
-            w = key_to_width(k['value'])
-            k['width'] = w
-        return keys
-
-    def key_to_width (key):
-        header = key[0]
-        field = key[1]
-        for h in json_dict['headers']:
-            if h['name'] == header:
-                hty = h['header_type']
-                for t in json_dict['header_types']:
-                    if t['name'] == hty:
-                        fields = t['fields']
-                        for f in fields:
-                            if f[0] == field:
-                                return f[1]
-        return None
 
     def to_num_rules(state, header_width, unparsed_bits):
         assert type(state) is str
@@ -215,17 +187,17 @@ def render_parsers(ir, json_dict):
                     rcvd_len = to_rcvd_len(prev_unparsed_bits, n_rules)
                     map_rcvd_len[state_name] = rcvd_len
 
+    # build map: state -> transition, transition_key
+    def build_map_transitions():
+        for state in parser['parse_states']:
+            _name = state['name']
+            transitions[_name] = state['transitions']
+            transition_key[_name] = GetTransitionKey(state)
+ 
     build_map_inversed_transition()
     build_map_unparse_bits()
     build_map_rcvd_len()
-
-    # build map: state -> transition, transition_key
-    for idx, state in enumerate(parser['parse_states']):
-        state_name = state['name']
-        transitions[state_name] = state['transitions']
-        transition_key[state_name] = name_to_transition_key(state_name)
-    print 'transitions', transitions
-    print 'transition_key', transition_key
+    build_map_transitions()
 
     # build parse rules
     rules = OrderedDict()
