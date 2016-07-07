@@ -79,7 +79,7 @@ def GetState (state_name):
             return s
     return None
 
-def state_to_header (state_name):
+def GetHeaderInState (state_name):
     state = GetState(state_name)
     headers = []
     header_stacks = []

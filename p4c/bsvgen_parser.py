@@ -25,7 +25,7 @@ import bsvgen_common
 import logging
 from sourceCodeBuilder import SourceCodeBuilder
 from utils import CamelCase, camelCase, GetFieldWidth
-from utils import state_to_header, GetHeaderType, GetHeaderWidth
+from utils import GetHeaderInState, GetHeaderType, GetHeaderWidth
 from utils import state_to_expression
 
 logger = logging.getLogger(__name__)
@@ -245,7 +245,7 @@ class Parser(object):
             unparsed = self.rules[state][-1].nextLen
             rcond = "(rg_parse_state == State%s) && (rg_offset == %s) && (%s)" % (CamelCase(state), prevLen, wname)
             stmt.append(ast.Template(TMP1, {"rcvdLen": rcvdLen, 'w_name': 'w_%s_data' % (name)}))
-            hdrs = state_to_header(name)
+            hdrs = GetHeaderInState(name)
             hdr_offset = rcvdLen - unparsed
             hdr_len = 0
             for hdr in hdrs:
@@ -370,7 +370,7 @@ class Parser(object):
         # rule to do most of parsing work.
         # build data structure for bsvgen
         # this data structure does not consider merged state
-        hdrs = state_to_header(name)
+        hdrs = GetHeaderInState(name)
         pdict = {"name": name,
                  "idx": idx,
                  "state": "State"+CamelCase(name),

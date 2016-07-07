@@ -32,7 +32,7 @@ from bsvgen_basic_block import BasicBlock
 from bsvgen_table import Table
 from bsvgen_struct import Struct, StructT, StructMetadata
 from utils import CamelCase, GetHeaderWidth
-from utils import state_to_header, build_expression
+from utils import GetHeaderInState, build_expression
 
 def render_runtime_types(ir, json_dict):
     # metadata req/rsp
@@ -140,7 +140,7 @@ def render_parsers(ir, json_dict):
     def to_header_size(state):
         hdr_sz = 0
         state_name = state['name']
-        hdrs = state_to_header(state_name)
+        hdrs = GetHeaderInState(state_name)
         print hdrs
         for hdr in hdrs:
             hdr_sz += GetHeaderWidth(hdr)
