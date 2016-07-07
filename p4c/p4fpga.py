@@ -78,7 +78,6 @@ class ParseRule():
 
 def render_parsers(ir, json_dict):
     """ """
-    pp = pprint.PrettyPrinter(indent=4)
     parsers = json_dict['parsers']
     assert (len(parsers) == 1), "Only one parser is supported."
     parser = parsers[0]
@@ -106,7 +105,7 @@ def render_parsers(ir, json_dict):
 
     def to_unparsed_bits(prev_unparsed_bits, n_cycles, hdr_sz):
         unparsed_bits = prev_unparsed_bits + n_cycles * config.DP_WIDTH - hdr_sz
-        print unparsed_bits
+        #print unparsed_bits
         return unparsed_bits
 
     def to_header_size(state):
@@ -125,17 +124,14 @@ def render_parsers(ir, json_dict):
         assert type(state) is str
         if state == 'start':
             return []
-        else:
-            #FIXME: what if there are more than one prev_state?
-            prev_state = map_parse_state_reverse[state]
-            return prev_state
+        prev_state = map_parse_state_reverse[state]
+        return prev_state
 
     def get_unparsed_bits(state):
         assert type(state) is str
         if state == 'start':
             return 0
         if state not in map_unparsed_bits:
-            print 'TTTT'
             return None # uninitialized
         return map_unparsed_bits[state]
 
@@ -203,16 +199,13 @@ def render_parsers(ir, json_dict):
     rules = OrderedDict()
     for idx, state in enumerate(parser['parse_states']):
         state_name = state['name']
-        print 'idx %s, state %s' % (idx, state_name)
         n_rules = get_num_rules(state_name)
-        print 'n_rules', n_rules
         if n_rules is None:
             continue
         rcvd_len = map_rcvd_len[state_name]
         unparsed_bits = map_unparsed_bits[state_name]
         hdr_sz = to_header_size(state)
         parse_rules = []
-        print "xxx", state_name, rcvd_len
 
         if n_rules == 0:
             map_merged_to_prev_state[state_name] = True
@@ -230,7 +223,6 @@ def render_parsers(ir, json_dict):
                     last_element = True
                     bits_to_next_state = unparsed_bits
                 curr_len = rcvd_len - (config.DP_WIDTH) * (n_rules - 1 - idx)
-                #print "xxx", state_name, curr_len
                 rule = ParseRule(idx, hdr_sz, curr_len,
                                  bits_to_next_state, first_element, last_element)
                 parse_rules.append(rule)
