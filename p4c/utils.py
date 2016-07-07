@@ -73,14 +73,14 @@ def GetHeaderType(header):
             return h["header_type"]
     return None
 
-def state_name_to_state (state_name):
+def GetState (state_name):
     for s in config.jsondata['parsers'][0]['parse_states']:
         if s['name'] == state_name:
             return s
     return None
 
 def state_to_header (state_name):
-    state = state_name_to_state(state_name)
+    state = GetState(state_name)
     headers = []
     header_stacks = []
     stack = False
@@ -145,7 +145,7 @@ def build_expression(json_data, sb=[], metadata=[]):
 
 
 def state_to_expression (state_name):
-    state = state_name_to_state(state_name)
+    state = GetState(state_name)
     # HACK: dealing with BMV2 json format
     for op in state['parser_ops']:
         src = []
