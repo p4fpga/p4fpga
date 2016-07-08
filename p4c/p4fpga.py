@@ -19,10 +19,11 @@
 #
 # TODO: replace this module with a more proper c++ pass.
 
-import math
+import math, json
 import config
 import pprint
 import astbsv as ast
+import logging
 from collections import OrderedDict
 from bsvgen_program import Program
 from bsvgen_control import Control
@@ -31,8 +32,10 @@ from bsvgen_deparser import Deparser
 from bsvgen_basic_block import BasicBlock
 from bsvgen_table import Table
 from bsvgen_struct import Struct, StructT, StructMetadata
-from utils import CamelCase, GetHeaderWidth, GetFieldWidth
+from utils import CamelCase, GetHeaderWidth, GetFieldWidth, GetState
 from utils import GetHeaderInState, BuildExpression, GetTransitionKey
+
+logger = logging.getLogger(__name__)
 
 def render_runtime_types(ir, json_dict):
     # metadata req/rsp
@@ -105,7 +108,6 @@ def render_parsers(ir, json_dict):
 
     def to_unparsed_bits(prev_unparsed_bits, n_cycles, hdr_sz):
         unparsed_bits = prev_unparsed_bits + n_cycles * config.DP_WIDTH - hdr_sz
-        #print unparsed_bits
         return unparsed_bits
 
     def to_header_size(state):
@@ -122,17 +124,14 @@ def render_parsers(ir, json_dict):
 
     def get_prev_state(state):
         assert type(state) is str
-        if state == 'start':
+        if state not in map_parse_state_reverse:
             return []
-        prev_state = map_parse_state_reverse[state]
-        return prev_state
+        return map_parse_state_reverse[state]
 
     def get_unparsed_bits(state):
         assert type(state) is str
-        if state == 'start':
-            return 0
         if state not in map_unparsed_bits:
-            return None # uninitialized
+            return 0
         return map_unparsed_bits[state]
 
     def build_map_inversed_transition():
@@ -140,12 +139,16 @@ def render_parsers(ir, json_dict):
         for state in parser['parse_states']:
             _transitions = state['transitions']
             for t in _transitions:
-                next_state = t['next_state']
+                next_state_name = t['next_state']
+                next_state = GetState(next_state_name)
                 if not t['next_state']: #ignore null state
                     continue
-                if next_state not in map_parse_state_reverse:
-                    map_parse_state_reverse[next_state] = set()
-                map_parse_state_reverse[t['next_state']].add(state['name'])
+                if next_state_name not in map_parse_state_reverse:
+                    map_parse_state_reverse[next_state_name] = set()
+                if state['id'] < next_state['id']:
+                    map_parse_state_reverse[t['next_state']].add(state['name'])
+                else:
+                    logger.debug('skipped return transition %s -> %s'%(state['name'], next_state_name))
 
     # build map: state -> unparsed_bits
     def build_map_unparse_bits():
@@ -153,6 +156,7 @@ def render_parsers(ir, json_dict):
             state_name = state['name']
             hdr_sz = to_header_size(state)
             prev_states = get_prev_state(state_name)
+            print prev_states
             if len(prev_states) == 0:
                 n_rules = to_num_rules(state_name, hdr_sz, 0)
                 unparsed_bits = to_unparsed_bits(0, n_rules, hdr_sz)
@@ -172,6 +176,7 @@ def render_parsers(ir, json_dict):
             hdr_sz = to_header_size(state)
             prev_states = get_prev_state(state_name)
             if len(prev_states) == 0:
+                print 'no prev-state', state_name
                 n_rules = to_num_rules(state_name, hdr_sz, 0)
                 rcvd_len = to_rcvd_len(0, n_rules)
                 map_rcvd_len[state_name] = rcvd_len
@@ -194,6 +199,12 @@ def render_parsers(ir, json_dict):
     build_map_unparse_bits()
     build_map_rcvd_len()
     build_map_transitions()
+
+    pprint.pprint(list(map_parse_state_reverse.items()))
+    pprint.pprint(list(map_unparsed_bits.items()))
+    pprint.pprint(list(map_rcvd_len.items()))
+    pprint.pprint(list(transitions.items()))
+    pprint.pprint(list(transition_key.items()))
 
     # build parse rules
     rules = OrderedDict()
@@ -227,7 +238,7 @@ def render_parsers(ir, json_dict):
                                  bits_to_next_state, first_element, last_element)
                 parse_rules.append(rule)
         rules[state_name] = parse_rules
-    print 'rules', rules
+    pprint.pprint(list(rules.items()))
     # create Parser object for codegen
     ir.parsers['parser'] = Parser(rules, transitions, transition_key, map_merged_to_prev_state, map_parse_state_reverse)
 
@@ -238,7 +249,7 @@ def render_deparsers(ir, json_dict):
     deparse_states = deparser['order']
     deparse_state0 = deparse_states[0]
     for idx, state in enumerate(deparse_states):
-        print idx, state
+        print 'deparser', idx, state
     ir.deparsers['deparser'] = Deparser(deparse_states)
 
 def render_pipelines(ir, json_dict):

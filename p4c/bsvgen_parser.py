@@ -128,7 +128,7 @@ class Parser(object):
                 for t in transition:
                     value = t['value'].replace("0x", "'h")
                     next_state = t['next_state']
-                    next_name = "%s" % (next_state) if next_state != None else "parse_start"
+                    next_name = "%s" % (next_state) if next_state != None else "default"
                     action_stmt = []
                     action_stmt.append(ast.Template(TMP1 % {'curr_state': name, 'next_state': next_name}))
                     case_stmt.casePatItem[value] = value
@@ -139,7 +139,7 @@ class Parser(object):
                 for t in transition:
                     value = t['value'].replace("0x", "'h")
                     next_state = t['next_state']
-                    next_name = "%s" % (next_state) if next_state != None else "parse_start"
+                    next_name = "%s" % (next_state) if next_state != None else "default"
                     action_stmt = []
                     action_stmt.append(ast.Template(TMP1 % {'curr_state': name, 'next_state': next_name}))
                 ab_stmt += action_stmt
@@ -163,6 +163,7 @@ class Parser(object):
             funct.append(compute_next_state(name, params, transition))
         return funct
 
+    # need a default state to skip payload after processing header
     def rule_start(self, first_state):
         TMP1 = "let v = data_in_ff.first;"
         TMP2 = "rg_parse_state <= %(state)s;"
@@ -204,7 +205,7 @@ class Parser(object):
         for transition in transitions:
             next_state = transition['next_state']
             if next_state == None:
-                next_state = 'parse_start'
+                next_state = 'default'
 
             wname = "w_%s_%s" % (curr_state, next_state)
             self.pulse_wires.add(wname)
@@ -215,6 +216,7 @@ class Parser(object):
             for state in self.find_prev_unmerged_state(curr_state, visited):
                 rname = "rl_%s_%s" % (state, next_state)
                 rcond = "(rg_parse_state == %s) && (%s)" % ("State%s"%(CamelCase(state)), wname)
+                print 'xxx', next_state
                 rstmt = ast.Template("rg_parse_state <= %s;" % ("State%s"%(CamelCase(next_state))))
                 stmt.append(ast.Rule(rname, rcond, [rstmt]))
                 rules.append(rname)
@@ -385,6 +387,10 @@ class Parser(object):
         # Variable to save all generated bluespec rules
         rules = []
         if self.map_merged_state[name] == True:
+            if name in self.map_parse_state_reverse:
+                last_state = self.map_parse_state_reverse[name]
+                print ("%s: %s" % (name, last_state))
+                print 'merge go ahead'
             rules += self.build_merged_parse_rule(name, pdict, next_states)
         else:
             rname = TMP1 % pdict
@@ -412,19 +418,17 @@ class Parser(object):
     def buildFFs(self):
         TMP1 = "FIFOF#(EtherData) data_in_ff <- mkFIFOF;"
         TMP2 = "FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;"
+        TMP3 = "Reg#(ParserState) rg_parse_state <- mkReg(StateDefault);"
+        TMP4 = "Wire#(ParserState) parse_state_w <- mkDWire(StateDefault);"
         TMP5 = "Reg#(Bit#(32)) rg_offset <- mkReg(0);"
         TMP6 = "PulseWire parse_done <- mkPulseWire();"
         stmt = []
         stmt.append(ast.Template(TMP1))
         stmt.append(ast.Template(TMP2))
+        stmt.append(ast.Template(TMP3))
+        stmt.append(ast.Template(TMP4))
         stmt.append(ast.Template(TMP5))
         stmt.append(ast.Template(TMP6))
-        return stmt
-
-    def buildStateRegs(self):
-        TMP3 = "Reg#(ParserState) rg_parse_state <- mkReg(%(name)s);"
-        TMP4 = "Wire#(ParserState) parse_state_w <- mkDWire(%(name)s);"
-        stmt = []
         return stmt
 
     def buildTmpRegs(self, phv):
@@ -473,15 +477,14 @@ class Parser(object):
         stmt += bsvgen_common.buildVerbosity()
         stmt += self.buildFFs()
         stmt += self.buildTmpRegs(phv)
-        stmt += self.buildStateRegs()
         stmt.append(self.funct_succeed())
         stmt.append(self.funct_failed())
         stmt.append(self.funct_push_phv(phv))
         stmt.append(self.funct_report_parse_action())
         stmt += self.funct_compute_next_states(self.rules, self.transitions,
                                                self.transition_key)
-        #first_state = self.rules.keys()[0]
-        #stmt.append(self.rule_start(first_state))
+        first_state = self.rules.keys()[0]
+        stmt.append(self.rule_start(first_state))
         stmt.append(ast.Template("let data_this_cycle = data_in_ff.first.data;"))
         for state, rules in self.rules.items():
             for rule in rules:

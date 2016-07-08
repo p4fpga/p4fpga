@@ -2,3 +2,5 @@
 generatedbsv/
 generatedcpp/
 bluesim/
+*.dot
+*.png
