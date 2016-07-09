@@ -79,11 +79,42 @@ class ParseRule():
                 self.width, self.rcvdLen, self.nextLen, self.firstBeat,
                 self.lastBeat, self.offset)
 
+
+# Generate ParseState Object from parseGraph
+#
+class ParseState(object):
+    def __init__(self, id, name):
+        self.id = id
+        self.name = name
+        self.rules = []
+        self.len = 0
+        self.prevStates = set()
+        self.transitions = set()
+
+    def __repr__(self):
+        return "ParseState: %s %s %s %s" % (self.id, self.prevStates, self.transitions, self.rules)
+
+    def setPrevState(self, prevState):
+        if prevState not in self.prevStates:
+            self.prevStates.add(prevState)
+
+    def setTransition(self, transition):
+        if transition not in self.transitions:
+            self.transitions.add(transition)
+
+    def setRule(self, rule):
+        self.rules.append(rule)
+
+    def setLen(self, plen):
+        self.len = plen
+
 def render_parsers(ir, json_dict):
     """ """
     parsers = json_dict['parsers']
     assert (len(parsers) == 1), "Only one parser is supported."
     parser = parsers[0]
+
+    map_state = OrderedDict() # id -> state
 
     map_parse_state_reverse = {}
     map_merged_to_prev_state = {}
@@ -200,15 +231,24 @@ def render_parsers(ir, json_dict):
     build_map_rcvd_len()
     build_map_transitions()
 
-    pprint.pprint(list(map_parse_state_reverse.items()))
-    pprint.pprint(list(map_unparsed_bits.items()))
-    pprint.pprint(list(map_rcvd_len.items()))
-    pprint.pprint(list(transitions.items()))
-    pprint.pprint(list(transition_key.items()))
+    #pprint.pprint(list(map_parse_state_reverse.items()))
+    #pprint.pprint(list(map_unparsed_bits.items()))
+    #pprint.pprint(list(map_rcvd_len.items()))
+    #pprint.pprint(list(transitions.items()))
+    #pprint.pprint(list(transition_key.items()))
 
     # build parse rules
     rules = OrderedDict()
     for idx, state in enumerate(parser['parse_states']):
+        id = state['id']
+        name = state['name']
+        parse_state = ParseState(id, name)
+        map_state[id] = parse_state
+
+        #parse_state.rcvd_len = map_rcvd_len[id]
+
+    for idx, state in enumerate(parser['parse_states']):
+        id = state['id']
         state_name = state['name']
         n_rules = get_num_rules(state_name)
         if n_rules is None:
@@ -218,10 +258,14 @@ def render_parsers(ir, json_dict):
         hdr_sz = to_header_size(state)
         parse_rules = []
 
+        # append rule to state
+        # decide type of Rule
+        #print 
+
         if n_rules == 0:
             map_merged_to_prev_state[state_name] = True
-            rule = ParseRule(0, hdr_sz, 0, 0, True, True)
-            parse_rules.append(rule)
+            rule = ParseRule( 0, hdr_sz, 0, 0, True, True)
+            map_state[id].setRule(rule)
         else:
             map_merged_to_prev_state[state_name] = False
             bits_to_next_state = None
@@ -234,13 +278,12 @@ def render_parsers(ir, json_dict):
                     last_element = True
                     bits_to_next_state = unparsed_bits
                 curr_len = rcvd_len - (config.DP_WIDTH) * (n_rules - 1 - idx)
-                rule = ParseRule(idx, hdr_sz, curr_len,
+                rule = ParseRule( idx, hdr_sz, curr_len,
                                  bits_to_next_state, first_element, last_element)
-                parse_rules.append(rule)
+                map_state[id].setRule(rule)
         rules[state_name] = parse_rules
-    pprint.pprint(list(rules.items()))
-    # create Parser object for codegen
-    ir.parsers['parser'] = Parser(rules, transitions, transition_key, map_merged_to_prev_state, map_parse_state_reverse)
+    # pprint.pprint(list(rules.items()))
+    ir.parsers['parser'] = Parser(rules, transitions, transition_key, map_merged_to_prev_state, map_parse_state_reverse, map_state)
 
 def render_deparsers(ir, json_dict):
     deparsers = json_dict['deparsers']

@@ -32,17 +32,22 @@ logger = logging.getLogger(__name__)
 
 class Parser(object):
     # proper use of parser class constant?
-    def __init__(self, parse_rules, transitions, transition_key, map_merged_state, map_parse_state_reverse):
+    def __init__(self, parse_rules, transitions, transition_key, map_merged_state, map_parse_state_reverse, states):
+        #def __init__(self, states):
+
         self.rules = parse_rules
         self.transitions = transitions
         self.transition_key = transition_key
         self.map_merged_state = map_merged_state
         self.map_parse_state_reverse = map_parse_state_reverse
+
         self.mutex_rules = {}
         self.transition_rules = {}
         self.pulse_wires = set()
         self.dwires = set()
         self.regs = set()
+
+        self.states = states
 
     def emitInterface(self, builder):
         logger.info("emitParser")
@@ -181,7 +186,7 @@ class Parser(object):
         rule = ast.Rule(rname, rcond, stmt)
         return rule
 
-    def find_prev_unmerged_state (self, curr_state, visited):
+    def find_prev_unmerged_state(self, curr_state, visited):
         if curr_state in self.map_merged_state and self.map_merged_state[curr_state] == True:
             if curr_state in visited:
                 return []
@@ -198,6 +203,8 @@ class Parser(object):
         else:
             return [ curr_state ]
 
+    #def rule_transition():
+    # FIXME: merge each of this rule into a PARSE_RULE class
     def build_transition_rules(self, curr_state, transitions, mutex_rules):
         stmt = []
         rules = []
@@ -227,6 +234,10 @@ class Parser(object):
                     mutex_rules[state].append(rname)
         return stmt
 
+    #FIXME: to its own PARSE_RULE subclass
+    #class ParseRuleBegin(ParseRule):
+    # mergedRule(ruleObject):
+    # rule.emit()
     def build_merged_parse_rule(self, name, pdict, next_states):
         TMP1 = "Vector#(%(rcvdLen)s, Bit#(1)) dataVec = unpack(%(w_name)s);"
         TMP2 = "let %(header_type)s = extract_%(header_type)s(pack(takeAt(%(header_offset)s, dataVec)));"
@@ -242,9 +253,9 @@ class Parser(object):
             stmt = []
             rname = "rl_%s" % (name)
             wname = "w_%s_%s" % (state, name)
-            rcvdLen = self.rules[state][-1].rcvdLen
+            rcvdLen = 0#self.rules[state][-1].rcvdLen
             prevLen = rcvdLen - config.DP_WIDTH
-            unparsed = self.rules[state][-1].nextLen
+            unparsed = 0#self.rules[state][-1].nextLen
             rcond = "(rg_parse_state == State%s) && (rg_offset == %s) && (%s)" % (CamelCase(state), prevLen, wname)
             stmt.append(ast.Template(TMP1, {"rcvdLen": rcvdLen, 'w_name': 'w_%s_data' % (name)}))
             hdrs = GetHeaderInState(name)
@@ -264,6 +275,8 @@ class Parser(object):
             rules.append(ast.Rule(rname, rcond, stmt))
         return rules
 
+    # PARSE_RULE
+    # class ParseRuleFinalize (ParseRule):
     def build_last_rule_for_header(self, pdict, hdrs, next_states):
         TMP1 = "Vector#(%(prevLen)s, Bit#(1)) tmp_dataVec = unpack(truncate(rg_tmp_%(name)s));"
         TMP2 = "Bit#(%(prevLen)s) data_last_cycle = pack(takeAt(0, tmp_dataVec));"
@@ -335,16 +348,16 @@ class Parser(object):
         stmt.append(ast.Template(TMP5, pdict))
         return stmt
 
-    def rule_parse(self, rule_attrs, transition_key, transitions):
+    def gen_parse_rule(self, rule_attrs, transition_key, transitions):
         TMP1 = "rl_parse_%(name)s_%(idx)s"
         TMP2 = "(rg_parse_state == %(state)s) && (rg_offset == %(prevLen)s)"
         TMP3 = "report_parse_action(rg_parse_state, rg_offset, data_this_cycle);"
 
         # Rule info from jsondata after expanded for multi-cycles
         # it does not consider merging rules.
+        name = rule_attrs.name
         first = rule_attrs.firstBeat
         last = rule_attrs.lastBeat
-        name = rule_attrs.name
         idx = rule_attrs.idx
         rcvdLen = rule_attrs.rcvdLen
         nextLen = rule_attrs.nextLen
@@ -352,6 +365,7 @@ class Parser(object):
         width = rule_attrs.width
         # Transition may depend on multiple keys, represent with a list
         keys = []
+        print rule_attrs
         #FIXME : if key is metadata, check expression to update key
         for key in transition_key[name]:
             #print 'xxx', transition_key[name]
@@ -384,6 +398,7 @@ class Parser(object):
                  "width": width,
                  "dp_width": config.DP_WIDTH,
                  "field": ",".join(keys)}
+
         # Variable to save all generated bluespec rules
         rules = []
         if self.map_merged_state[name] == True:
@@ -472,6 +487,7 @@ class Parser(object):
         return fields
 
     def buildModuleStmt(self):
+        # boiler plate
         phv = self.build_phv()
         stmt = []
         stmt += bsvgen_common.buildVerbosity()
@@ -486,13 +502,21 @@ class Parser(object):
         first_state = self.rules.keys()[0]
         stmt.append(self.rule_start(first_state))
         stmt.append(ast.Template("let data_this_cycle = data_in_ff.first.data;"))
-        for state, rules in self.rules.items():
-            for rule in rules:
-                rule.name = state
-                transition_key = self.transition_key
-                transitions = self.transitions
-                # later rules may need prior rule
-                stmt += self.rule_parse(rule, transition_key, transitions)
+
+        # stmt += self.generate_functions()
+
+        for _, state in self.states.items():
+            for rule in state.rules:
+                rule.name = state.name #FIXME
+                #FIXME
+                self.gen_parse_rule(rule, self.transition_key, self.transitions)
+
+        #for state, rules in self.rules.items():
+        #    for rule in rules:
+        #        transition_key = self.transition_key
+        #        transitions = self.transitions
+        #        # later rules may need prior rule
+        #        stmt += self.rule_parse(rule, transition_key, transitions)
 
         # fill in missing registers
         for reg in self.regs:
