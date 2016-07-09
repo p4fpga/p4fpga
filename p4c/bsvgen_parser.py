@@ -186,6 +186,7 @@ class Parser(object):
         rule = ast.Rule(rname, rcond, stmt)
         return rule
 
+    #FIXME: need to factor out this logic
     def find_prev_unmerged_state(self, curr_state, visited):
         if curr_state in self.map_merged_state and self.map_merged_state[curr_state] == True:
             if curr_state in visited:
@@ -239,12 +240,12 @@ class Parser(object):
     # mergedRule(ruleObject):
     # rule.emit()
     def build_merged_parse_rule(self, name, pdict, next_states):
-        TMP1 = "Vector#(%(rcvdLen)s, Bit#(1)) dataVec = unpack(%(w_name)s);"
+        TMP1 = "Vector#(%(rcvdlen)s, Bit#(1)) dataVec = unpack(%(w_name)s);"
         TMP2 = "let %(header_type)s = extract_%(header_type)s(pack(takeAt(%(header_offset)s, dataVec)));"
         TMP3 = "compute_next_state_%(name)s(%(field)s);"
-        TMP4 = "Vector#(%(nextLen)s, Bit#(1)) unparsed = takeAt(%(width)s, dataVec);"
+        TMP4 = "Vector#(%(nextlen)s, Bit#(1)) unparsed = takeAt(%(width)s, dataVec);"
         TMP5 = "rg_tmp_%(next_state)s <= zeroExtend(pack(unparsed));"
-        TMP6 = "succeed_and_next(%(nextLen)s);"
+        TMP6 = "succeed_and_next(%(nextlen)s);"
         prev_states = []
         if name in self.map_parse_state_reverse:
             prev_states = self.map_parse_state_reverse[name]
@@ -253,13 +254,13 @@ class Parser(object):
             stmt = []
             rname = "rl_%s" % (name)
             wname = "w_%s_%s" % (state, name)
-            rcvdLen = 0#self.rules[state][-1].rcvdLen
-            prevLen = rcvdLen - config.DP_WIDTH
-            unparsed = 0#self.rules[state][-1].nextLen
+            rcvdlen = 0#self.rules[state][-1].rcvdlen
+            prevLen = rcvdlen - config.DP_WIDTH
+            unparsed = 0#self.rules[state][-1].nextlen
             rcond = "(rg_parse_state == State%s) && (rg_offset == %s) && (%s)" % (CamelCase(state), prevLen, wname)
-            stmt.append(ast.Template(TMP1, {"rcvdLen": rcvdLen, 'w_name': 'w_%s_data' % (name)}))
+            stmt.append(ast.Template(TMP1, {"rcvdlen": rcvdlen, 'w_name': 'w_%s_data' % (name)}))
             hdrs = GetHeaderInState(name)
-            hdr_offset = rcvdLen - unparsed
+            hdr_offset = rcvdlen - unparsed
             hdr_len = 0
             for hdr in hdrs:
                 stmt.append(ast.Template(TMP2, {'header_type': GetHeaderType(hdr), 'header_offset': hdr_offset}))
@@ -269,9 +270,9 @@ class Parser(object):
             # if next state is not merged
             for nxt in next_states:
                 if self.map_merged_state[nxt] == False:
-                    stmt.append(ast.Template(TMP4, {'nextLen': unparsed - hdr_len, 'width': hdr_offset}))
+                    stmt.append(ast.Template(TMP4, {'nextlen': unparsed - hdr_len, 'width': hdr_offset}))
                     stmt.append(ast.Template(TMP5, {'next_state': nxt}))
-                    stmt.append(ast.Template(TMP6, {'nextLen': unparsed - hdr_len}))
+                    stmt.append(ast.Template(TMP6, {'nextlen': unparsed - hdr_len}))
             rules.append(ast.Rule(rname, rcond, stmt))
         return rules
 
@@ -280,14 +281,14 @@ class Parser(object):
     def build_last_rule_for_header(self, pdict, hdrs, next_states):
         TMP1 = "Vector#(%(prevLen)s, Bit#(1)) tmp_dataVec = unpack(truncate(rg_tmp_%(name)s));"
         TMP2 = "Bit#(%(prevLen)s) data_last_cycle = pack(takeAt(0, tmp_dataVec));"
-        TMP3 = "Bit#(%(rcvdLen)s) data = {data_this_cycle, data_last_cycle};"
-        TMP4 = "Vector#(%(rcvdLen)s, Bit#(1)) dataVec = unpack(data);"
+        TMP3 = "Bit#(%(rcvdlen)s) data = {data_this_cycle, data_last_cycle};"
+        TMP4 = "Vector#(%(rcvdlen)s, Bit#(1)) dataVec = unpack(data);"
         TMP5 = "let %(header_type)s = extract_%(header_type)s(pack(takeAt(%(header_offset)s, dataVec)));"
         TMP6 = "compute_next_state_%(name)s(%(field)s);"
-        TMP8 = "Vector#(%(nextLen)s, Bit#(1)) unparsed = takeAt(%(width)s, dataVec);"
+        TMP8 = "Vector#(%(nextlen)s, Bit#(1)) unparsed = takeAt(%(width)s, dataVec);"
         TMP9 = "rg_tmp_%(next_state)s <= zeroExtend(pack(unparsed));"
         TMP10 = "parse_state_w <= %(state)s;"
-        TMP11 = "succeed_and_next(%(nextLen)s);"
+        TMP11 = "succeed_and_next(%(nextlen)s);"
         TMP12 = "push_phv(%(state)s);"
         TMP13 = "let v = %(expr)s;"
         TMP14 = "%(name)s <= v;"
@@ -323,7 +324,7 @@ class Parser(object):
         for s in next_states:
             if s in self.map_merged_state and self.map_merged_state[s] == True:
                 stmt.append(ast.Template("w_%s_data <= data;" % (s)))
-                self.dwires.add(("w_%s_data"%(s), pdict['rcvdLen']))
+                self.dwires.add(("w_%s_data"%(s), pdict['rcvdlen']))
                 continue
             stmt.append(ast.Template(TMP9, {'next_state': s, 'name': pdict['name']}))
             if b_incr_offset == False:
@@ -337,9 +338,9 @@ class Parser(object):
     def build_non_last_rule_for_header(self, pdict):
         TMP1 = "Vector#(%(prevLen)s, Bit#(1)) tmp_dataVec = unpack(truncate(rg_tmp_%(name)s));"
         TMP2 = "Bit#(%(prevLen)s) data_last_cycle = pack(takeAt(0, tmp_dataVec));"
-        TMP3 = "Bit#(%(rcvdLen)s) data = {data_this_cycle, data_last_cycle};"
+        TMP3 = "Bit#(%(rcvdlen)s) data = {data_this_cycle, data_last_cycle};"
         TMP4 = "rg_tmp_%(name)s <= zeroExtend(data);"
-        TMP5 = "succeed_and_next(%(rcvdLen)s);"
+        TMP5 = "succeed_and_next(%(rcvdlen)s);"
         stmt = []
         stmt.append(ast.Template(TMP1, pdict))
         stmt.append(ast.Template(TMP2, pdict))
@@ -348,24 +349,25 @@ class Parser(object):
         stmt.append(ast.Template(TMP5, pdict))
         return stmt
 
-    def gen_parse_rule(self, rule_attrs, transition_key, transitions):
+    def compile_rule(self, rule, transition_key, transitions):
         TMP1 = "rl_parse_%(name)s_%(idx)s"
         TMP2 = "(rg_parse_state == %(state)s) && (rg_offset == %(prevLen)s)"
         TMP3 = "report_parse_action(rg_parse_state, rg_offset, data_this_cycle);"
 
         # Rule info from jsondata after expanded for multi-cycles
         # it does not consider merging rules.
-        name = rule_attrs.name
-        first = rule_attrs.firstBeat
-        last = rule_attrs.lastBeat
-        idx = rule_attrs.idx
-        rcvdLen = rule_attrs.rcvdLen
-        nextLen = rule_attrs.nextLen
-        offset = rule_attrs.offset
-        width = rule_attrs.width
+        #FIXME: remove all these...
+        name = rule.name
+        first = rule.firstBeat
+        last = rule.lastBeat
+        idx = rule.idx
+        rcvdlen = rule.rcvdlen
+        nextlen = rule.nextlen
+        offset = rule.offset
+        width = rule.width
         # Transition may depend on multiple keys, represent with a list
+        # select key should be set at p4fpga.py
         keys = []
-        print rule_attrs
         #FIXME : if key is metadata, check expression to update key
         for key in transition_key[name]:
             #print 'xxx', transition_key[name]
@@ -376,6 +378,7 @@ class Parser(object):
 
         # Collect all next states except default transition to start state,
         # used to save temp unparsed bit in pipeline registers
+        #FIXME: next_state should be set at p4fpga.py
         next_states = set()
         for transition in transitions[name]:
             next_state = transition['next_state']
@@ -392,20 +395,32 @@ class Parser(object):
                  "state": "State"+CamelCase(name),
                  "header_type": hdrs,
                  "offset": offset,
-                 "rcvdLen": rcvdLen,
-                 "prevLen": rcvdLen - config.DP_WIDTH,
-                 "nextLen": nextLen,
+                 "rcvdlen": rcvdlen,
+                 "prevLen": rcvdlen - config.DP_WIDTH,
+                 "nextlen": nextlen,
                  "width": width,
                  "dp_width": config.DP_WIDTH,
                  "field": ",".join(keys)}
 
         # Variable to save all generated bluespec rules
+        # determine rule type
+        # if rule_type == "RULE_PROC"
+        #    self.build_dequeue_rule()
+        # elif rule_type == "RULE_FINAL"
+        #    self.build_extract_rule()
+        # elif rule_type == "RULE_TRANSIT"
+        #    self.build_transit_rule()
+        # elif rule_type == "RULE_MERGE"
+        #    self.build_merged_extract_rule()
+        # else:
+        #    #error
         rules = []
         if self.map_merged_state[name] == True:
             if name in self.map_parse_state_reverse:
                 last_state = self.map_parse_state_reverse[name]
                 print ("%s: %s" % (name, last_state))
                 print 'merge go ahead'
+            # rule_type = RULE_MERGED
             rules += self.build_merged_parse_rule(name, pdict, next_states)
         else:
             rname = TMP1 % pdict
@@ -418,7 +433,10 @@ class Parser(object):
                 stmt += self.build_last_rule_for_header(pdict, hdrs, next_states)
             else:
                 stmt += self.build_non_last_rule_for_header(pdict)
+            # rule_type = RULE_DEQUEUE
+            # rule_type = RULE_EXTRACT
             rules.append(ast.Rule(rname, rcond, stmt))
+        print rule
 
         if last:
             temp = self.build_transition_rules(name, transitions[name], self.mutex_rules)
@@ -450,11 +468,11 @@ class Parser(object):
         TMP1 = "Reg#(Bit#(%(sz)s)) rg_tmp_%(name)s <- mkReg(0);"
         stmt = []
         for state, parse_steps in self.rules.items():
-            for rule_attrs in parse_steps:
-                rcvdLen = rule_attrs.rcvdLen
-                last = rule_attrs.lastBeat
+            for rule in parse_steps:
+                rcvdlen = rule.rcvdlen
+                last = rule.lastBeat
                 if last:
-                    stmt.append(ast.Template(TMP1, {'sz': rcvdLen, 'name': state}))
+                    stmt.append(ast.Template(TMP1, {'sz': rcvdlen, 'name': state}))
 
         for sz, name in phv:
             stmt.append(ast.Template(TMP1, {'sz': sz, 'name': name}))
@@ -497,27 +515,22 @@ class Parser(object):
         stmt.append(self.funct_failed())
         stmt.append(self.funct_push_phv(phv))
         stmt.append(self.funct_report_parse_action())
-        stmt += self.funct_compute_next_states(self.rules, self.transitions,
-                                               self.transition_key)
-        first_state = self.rules.keys()[0]
-        stmt.append(self.rule_start(first_state))
+        # FIXME
+        stmt += self.funct_compute_next_states(self.rules, self.transitions, self.transition_key)
         stmt.append(ast.Template("let data_this_cycle = data_in_ff.first.data;"))
 
-        # stmt += self.generate_functions()
+        #FIXME
+        #first_state = self.rules.keys()[0]
+        #stmt.append(self.rule_start(first_state))
 
+        # stmt += self.generate_functions()
         for _, state in self.states.items():
             for rule in state.rules:
                 rule.name = state.name #FIXME
                 #FIXME
-                self.gen_parse_rule(rule, self.transition_key, self.transitions)
+                self.compile_rule(rule, self.transition_key, self.transitions)
 
-        #for state, rules in self.rules.items():
-        #    for rule in rules:
-        #        transition_key = self.transition_key
-        #        transitions = self.transitions
-        #        # later rules may need prior rule
-        #        stmt += self.rule_parse(rule, transition_key, transitions)
-
+        #HACK
         # fill in missing registers
         for reg in self.regs:
             stmt.insert(0, ast.Template("Reg#(Bit#(%s)) %s <- mkReg(0);"% (reg[0], reg[1])))

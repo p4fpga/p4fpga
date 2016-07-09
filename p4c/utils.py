@@ -115,6 +115,13 @@ def GetState(state_name):
             return s
     return None
 
+def GetStateWithId(id):
+    for s in config.jsondata['parsers'][0]['parse_states']:
+        if s['id'] == id:
+            return s
+    return None
+
+
 def GetTransitionKey(state):
     keys = state['transition_key']
     for k in keys:

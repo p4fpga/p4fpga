@@ -63,25 +63,26 @@ def render_header_types(ir, json_dict):
         ir.structs[name] = struct
 
 class ParseRule():
-    def __init__(self, idx=0, width=0, rcvdLen=0, nextLen=0,
+    def __init__(self, idx=0, width=0, rcvdlen=0, nextlen=0,
             firstBeat=False, lastBeat=False, offset=0):
         self.name = None
         self.idx = idx
         self.width = width
-        self.rcvdLen = rcvdLen
-        self.nextLen = nextLen
+        self.rcvdlen = rcvdlen
+        self.nextlen = nextlen
         self.firstBeat = firstBeat
         self.lastBeat = lastBeat
         self.offset = offset
 
     def __repr__(self):
         return "idx:%s width:%s rl:%s nl:%s fb:%s lb:%s off:%s" % (self.idx,
-                self.width, self.rcvdLen, self.nextLen, self.firstBeat,
+                self.width, self.rcvdlen, self.nextlen, self.firstBeat,
                 self.lastBeat, self.offset)
+
+    #define @property
 
 
 # Generate ParseState Object from parseGraph
-#
 class ParseState(object):
     def __init__(self, id, name):
         self.id = id
@@ -125,17 +126,17 @@ def render_parsers(ir, json_dict):
     transitions = OrderedDict()
     transition_key = OrderedDict()
 
-    def to_num_rules(state, header_width, unparsed_bits):
-        assert type(state) is str
+    def to_num_rules(_id, header_width, unparsed_bits):
+        assert type(_id) is int
         print 'w:%s, u:%s' % (header_width, unparsed_bits)
         n_cycles = int(math.ceil((header_width - unparsed_bits) / float(config.DP_WIDTH)))
-        map_parse_state_num_rules[state] = n_cycles
+        map_parse_state_num_rules[_id] = n_cycles
         return n_cycles
 
-    def get_num_rules(state):
-        if state not in map_parse_state_num_rules:
+    def get_num_rules(_id):
+        if _id not in map_parse_state_num_rules:
             return None
-        return map_parse_state_num_rules[state]
+        return map_parse_state_num_rules[_id]
 
     def to_unparsed_bits(prev_unparsed_bits, n_cycles, hdr_sz):
         unparsed_bits = prev_unparsed_bits + n_cycles * config.DP_WIDTH - hdr_sz
@@ -153,71 +154,75 @@ def render_parsers(ir, json_dict):
     def to_rcvd_len(prev_unparsed_bits, n_cycles):
         return n_cycles * config.DP_WIDTH + prev_unparsed_bits
 
-    def get_prev_state(state):
-        assert type(state) is str
-        if state not in map_parse_state_reverse:
+    def get_prev_state(id):
+        assert type(id) is int
+        if id not in map_parse_state_reverse:
             return []
-        return map_parse_state_reverse[state]
+        return map_parse_state_reverse[id]
 
-    def get_unparsed_bits(state):
-        assert type(state) is str
-        if state not in map_unparsed_bits:
+    def get_unparsed_bits(_id):
+        assert type(_id) is int
+        if _id not in map_unparsed_bits:
             return 0
-        return map_unparsed_bits[state]
+        return map_unparsed_bits[_id]
 
     def build_map_inversed_transition():
         # build map: state -> prev_state
         for state in parser['parse_states']:
+            _id = state['id']
             _transitions = state['transitions']
             for t in _transitions:
                 next_state_name = t['next_state']
                 next_state = GetState(next_state_name)
                 if not t['next_state']: #ignore null state
                     continue
-                if next_state_name not in map_parse_state_reverse:
-                    map_parse_state_reverse[next_state_name] = set()
-                if state['id'] < next_state['id']:
-                    map_parse_state_reverse[t['next_state']].add(state['name'])
+                next_state_id = next_state['id']
+                if next_state_id not in map_parse_state_reverse:
+                    map_parse_state_reverse[next_state_id] = set()
+                if _id < next_state_id:
+                    map_parse_state_reverse[next_state_id].add(_id)
                 else:
                     logger.debug('skipped return transition %s -> %s'%(state['name'], next_state_name))
 
     # build map: state -> unparsed_bits
     def build_map_unparse_bits():
         for state in parser['parse_states']:
+            _id = state['id']
             state_name = state['name']
             hdr_sz = to_header_size(state)
-            prev_states = get_prev_state(state_name)
+            prev_states = get_prev_state(_id)
             print prev_states
             if len(prev_states) == 0:
-                n_rules = to_num_rules(state_name, hdr_sz, 0)
+                n_rules = to_num_rules(_id, hdr_sz, 0)
                 unparsed_bits = to_unparsed_bits(0, n_rules, hdr_sz)
-                map_unparsed_bits[state_name] = unparsed_bits
+                map_unparsed_bits[_id] = unparsed_bits
 
             for p in prev_states:
                 prev_unparsed_bits = get_unparsed_bits(p)
                 if prev_unparsed_bits is not None:
-                    n_rules = to_num_rules(state_name, hdr_sz, prev_unparsed_bits)
+                    n_rules = to_num_rules(_id, hdr_sz, prev_unparsed_bits)
                     unparsed_bits = to_unparsed_bits(prev_unparsed_bits, n_rules, hdr_sz)
-                    map_unparsed_bits[state_name] = unparsed_bits
+                    map_unparsed_bits[_id] = unparsed_bits
 
     # build map: state -> rcvd_len
     def build_map_rcvd_len():
         for state in parser['parse_states']:
+            _id = state['id']
             state_name = state['name']
             hdr_sz = to_header_size(state)
-            prev_states = get_prev_state(state_name)
+            prev_states = get_prev_state(_id)
             if len(prev_states) == 0:
                 print 'no prev-state', state_name
-                n_rules = to_num_rules(state_name, hdr_sz, 0)
+                n_rules = to_num_rules(_id, hdr_sz, 0)
                 rcvd_len = to_rcvd_len(0, n_rules)
-                map_rcvd_len[state_name] = rcvd_len
+                map_rcvd_len[_id] = rcvd_len
 
             for p in prev_states:
                 prev_unparsed_bits = get_unparsed_bits(p)
                 if prev_unparsed_bits is not None:
-                    n_rules = to_num_rules(state_name, hdr_sz, prev_unparsed_bits)
+                    n_rules = to_num_rules(_id, hdr_sz, prev_unparsed_bits)
                     rcvd_len = to_rcvd_len(prev_unparsed_bits, n_rules)
-                    map_rcvd_len[state_name] = rcvd_len
+                    map_rcvd_len[_id] = rcvd_len
 
     # build map: state -> transition, transition_key
     def build_map_transitions():
@@ -231,36 +236,34 @@ def render_parsers(ir, json_dict):
     build_map_rcvd_len()
     build_map_transitions()
 
-    #pprint.pprint(list(map_parse_state_reverse.items()))
-    #pprint.pprint(list(map_unparsed_bits.items()))
-    #pprint.pprint(list(map_rcvd_len.items()))
+    pprint.pprint(list(map_parse_state_reverse.items()))
+    pprint.pprint(list(map_unparsed_bits.items()))
+    pprint.pprint(list(map_rcvd_len.items()))
     #pprint.pprint(list(transitions.items()))
     #pprint.pprint(list(transition_key.items()))
 
-    # build parse rules
     rules = OrderedDict()
     for idx, state in enumerate(parser['parse_states']):
-        id = state['id']
+        _id = state['id']
         name = state['name']
-        parse_state = ParseState(id, name)
-        map_state[id] = parse_state
-
-        #parse_state.rcvd_len = map_rcvd_len[id]
+        parse_state = ParseState(_id, name)
+        map_state[_id] = parse_state
+        # initialize parse_state
+        parse_state.rcvdlen = map_rcvd_len[_id]
 
     for idx, state in enumerate(parser['parse_states']):
-        id = state['id']
+        _id = state['id']
         state_name = state['name']
         n_rules = get_num_rules(state_name)
         if n_rules is None:
             continue
-        rcvd_len = map_rcvd_len[state_name]
-        unparsed_bits = map_unparsed_bits[state_name]
+        rcvd_len = map_rcvd_len[_id]
+        unparsed_bits = map_unparsed_bits[_id]
         hdr_sz = to_header_size(state)
         parse_rules = []
 
         # append rule to state
         # decide type of Rule
-        #print 
 
         if n_rules == 0:
             map_merged_to_prev_state[state_name] = True
