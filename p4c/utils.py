@@ -93,6 +93,14 @@ def GetHeaderWidth(header):
             return GetHeaderTypeWidth(hty)
     return None
 
+def GetHeaderWidthInState(state):
+    hdr_sz = 0
+    state_name = state['name']
+    hdrs = GetHeaderInState(state_name)
+    for hdr in hdrs:
+        hdr_sz += GetHeaderWidth(hdr)
+    return hdr_sz
+
 def GetHeaderInState(state_name):
     state = GetState(state_name)
     headers = []
@@ -120,7 +128,6 @@ def GetStateWithId(id):
         if s['id'] == id:
             return s
     return None
-
 
 def GetTransitionKey(state):
     keys = state['transition_key']
