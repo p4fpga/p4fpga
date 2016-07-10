@@ -22,6 +22,7 @@
 import config
 import os
 import pprint
+import astbsv as ast
 
 def CamelCase(name):
     output = ''.join(x for x in name.title() if x.isalnum())
@@ -93,10 +94,9 @@ def GetHeaderWidth(header):
             return GetHeaderTypeWidth(hty)
     return None
 
-def GetHeaderWidthInState(state):
+def GetHeaderWidthInState(name):
     hdr_sz = 0
-    state_name = state['name']
-    hdrs = GetHeaderInState(state_name)
+    hdrs = GetHeaderInState(name)
     for hdr in hdrs:
         hdr_sz += GetHeaderWidth(hdr)
     return hdr_sz

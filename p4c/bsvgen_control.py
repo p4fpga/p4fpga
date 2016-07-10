@@ -214,13 +214,14 @@ class Control (object):
         for action, next_table in self.tables[tblName].next_tables.items():
             ctype = "%s%sRspT"%(CamelCase(tblName), CamelCase(action))
             pdict = {"type": ctype, "field": "meta: .meta, pkt: .pkt"}
-            case_stmt.casePatItem[ctype] = ast.Template(TMP6, pdict)
+            _ctype = ast.Template(TMP6, pdict)
+            #case_stmt.casePatItem[ctype] = ast.Template(TMP6, pdict)
             _stmt, _meta, metadata = [], [], set()
             self.buildConditionalStmt(next_table, _stmt, metadata)
             for m in metadata:
                 if type(m) is tuple:
                     _meta.append(ast.Template(TMP5, {"name": "$".join(m)}))
-            case_stmt.casePatStmt[ctype] = _meta + _stmt
+            case_stmt.casePatStmt[_ctype] = _meta + _stmt
         stmt.append(case_stmt)
         return stmt
 

@@ -215,8 +215,7 @@ class Table(object):
             tagname = "%s%sRspT" % (CamelCase(self.name), CamelCase(action))
             action_stmt.append(ast.Template(TMP4 % {"name": tagname}))
             action_stmt.append(ast.Template(TMP5 % {"name": "metadata"}))
-            case_stmt.casePatItem[action] = TMP3 % {"name": CamelCase(action),
-                                                    "field": fields}
+            action = TMP3 % {"name": CamelCase(action), "field": fields}
             case_stmt.casePatStmt[action] = action_stmt
 
         stmt.append(ast.Template(TMP1))
@@ -299,8 +298,7 @@ class Table(object):
                                                     "action": CamelCase(action)}))
             action_stmt.append(ast.Template(TMP5 % {"name": "metadata"}))
 
-            case_stmt.casePatItem[action] = TMP3 % {"name": CamelCase(action),
-                                                    "field": fields}
+            action = TMP3 % {"name": CamelCase(action), "field": fields}
             case_stmt.casePatStmt[action] = action_stmt
 
         stmt.append(ast.Template(TMP1))

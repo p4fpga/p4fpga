@@ -104,21 +104,21 @@ def classInfo(item):
     return rc
 
 class Method:
-    def __init__(self, name, return_type, params=None, stmt=[]):
+    def __init__(self, name, rtype, params=None, stmt=[]):
         self.type = 'Method'
         self.name = name
-        self.return_type = return_type
+        self.rtype = rtype
         self.params = params
         self.stmt = stmt
 
     def __repr__(self):
         sparams = [p.__repr__() for p in self.params]
-        return '<method: %s %s %s>' % (self.name, self.return_type, str(self.params or ""))
+        return '<method: %s %s %s>' % (self.name, self.rtype, str(self.params or ""))
 
     def emitSubinterfaceDecl(self, builder):
         builder.emitIndent()
         params = str(self.params or "")
-        builder.append("method {} {} ({});".format(self.return_type, self.name, params))
+        builder.append("method {} {} ({});".format(self.rtype, self.name, params))
         builder.newline()
 
     def emit(self, builder):
@@ -137,6 +137,7 @@ class Method:
 class ActionBlock:
     def __init__(self, stmt):
         self.stmt = stmt
+
     def emit(self, builder):
         builder.emitIndent()
         builder.append("action")
@@ -165,29 +166,29 @@ class ActionValueBlock:
         builder.append("endactionvalue")
 
 class Function:
-    def __init__(self, name, return_type, params, stmt=[], provisos=None):
+    def __init__(self, name, rtype, params, stmt=[], provisos=None):
         self.type = 'Function'
         self.name = name
-        self.return_type = return_type
+        self.rtype = rtype
         self.params = params
         self.stmt = stmt
         self.provisos = provisos
 
     def __repr__(self):
         if not self.params:
-            return '<function: %s %s NONE>' % (self.name, self.return_type)
+            return '<function: %s %s NONE>' % (self.name, self.rtype)
         sparams = map(str, self.params)
-        return '<function: %s %s %s>' % (self.name, self.return_type, sparams)
+        return '<function: %s %s %s>' % (self.name, self.rtype, sparams)
 
     def emit(self, builder):
         builder.emitIndent()
         if self.provisos:
-            builder.append("function {} {}({})".format(self.return_type, self.name, self.params))
+            builder.append("function {} {}({})".format(self.rtype, self.name, self.params))
             builder.newline()
             builder.emitIndent()
             builder.append(" provisos ({});".format(self.provisos))
         else:
-            builder.append("function {} {}({});".format(self.return_type, self.name, self.params))
+            builder.append("function {} {}({});".format(self.rtype, self.name, self.params))
         builder.newline()
         builder.increaseIndent()
         for s in self.stmt:
@@ -481,7 +482,7 @@ class Case:
     def __init__(self, expression):
         self.expression = expression
         self.casePatItem = OrderedDict()
-        self.casePatStmt = {} # {'casePat' : [stmt]}
+        self.casePatStmt = OrderedDict()
         self.defaultItem = []
 
     def __repr__(self):
@@ -491,11 +492,11 @@ class Case:
         builder.emitIndent()
         builder.appendLine("case ({}) matches".format(self.expression))
         builder.increaseIndent()
-        for k, v in self.casePatItem.items():
+        for key, stmt in self.casePatStmt.items():
             builder.emitIndent()
-            builder.appendLine("{}: begin".format(v))
+            builder.appendLine("{}: begin".format(key))
             builder.increaseIndent()
-            for s in self.casePatStmt[k]:
+            for s in stmt:
                 s.emit(builder)
                 builder.newline()
             builder.decreaseIndent()
@@ -504,7 +505,6 @@ class Case:
         builder.decreaseIndent()
         builder.emitIndent()
         builder.append("endcase")
-        #builder.newline()
 
 class If:
     def __init__(self, expression, stmt):

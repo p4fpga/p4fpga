@@ -251,7 +251,8 @@ class BasicBlock(object):
         stmt.append(ast.Template(TMP3))
 
         case_stmt = ast.Case("v")
-        case_stmt.casePatItem[ctype] = ast.Template(TMP1, pdict)
+        ctype = ast.Template(TMP1, pdict)
+        #case_stmt.casePatItem[ctype] = ast.Template(TMP1, pdict)
         case_stmt.casePatStmt[ctype] = casePatStmts
         stmt.append(case_stmt)
         rule = ast.Rule(rname, [], stmt)
