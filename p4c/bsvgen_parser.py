@@ -62,7 +62,7 @@ class Parser(object):
         tmpl = []
         tmpl.append("rg_buffered[0] <= rg_buffered[0] - offset;")
         tmpl.append("rg_shift_amt[0] <= rg_buffered[0] - offset;")
-        tmpl.append("dbg3($format(\"succeed_and_next %%h\", rg_buffered[0] - offset));")
+        tmpl.append("dbg3($format(\"succeed_and_next subtract offset = %%d shift_amt/buffered = %%d\", offset, rg_buffered[0] - offset));")
         stmt = apply_pdict(tmpl, {})
         ablock = apply_action_block(stmt)
         funct = ast.Function("succeed_and_next", 'Action', "Bit#(32) offset", ablock)
@@ -100,11 +100,11 @@ class Parser(object):
 
     def build_funct_report_parse_action(self):
         tmpl = []
-        tmpl.append("$display(\"(%%0d) Parser State %%h buffered %%h, %%h\", $time, state, offset, data);")
+        tmpl.append("$display(\"(%%0d) Parser State %%h buffered %%d, %%h, %%h\", $time, state, offset, data, buff);")
         stmt = apply_pdict(tmpl, {})
         ifstmt = apply_if_verbosity(3, stmt)
         ablock = apply_action_block(ifstmt)
-        params = "ParserState state, Bit#(32) offset, Bit#(128) data"
+        params = "ParserState state, Bit#(32) offset, Bit#(128) data, Bit#(512) buff"
         funct = ast.Function('report_parse_action', 'Action', params, ablock)
         return funct
 
@@ -159,57 +159,69 @@ class Parser(object):
 
     # need a default state to skip payload after processing header
     def build_rule_start(self, curr_state, next_state):
-        TMP1 = "let v = data_in_ff.first;"
-        TMP2 = "rg_parse_state <= %(state)s;"
-        TMP4 = "rg_buffered[0] <= 128;"
-        TMP5 = "rg_shift_amt[0] <= 0;"
-        TMP3 = "data_in_ff.deq;"
-        stmt = []
-        stmt.append(ast.Template(TMP1))
-        if_stmt = []
-        if_stmt.append(ast.Template(TMP2, {"state": "State{}".format(CamelCase(next_state))}))
-        if_stmt.append(ast.Template(TMP4))
-        if_stmt.append(ast.Template(TMP5))
-        stmt.append(ast.If("v.sop", if_stmt))
-        else_stmt = []
-        else_stmt.append(ast.Template(TMP3))
-        stmt.append(ast.Else(else_stmt))
-        rcond = "rg_parse_state == State{}".format(CamelCase(curr_state))
-        rule = ast.Rule('rl_start_state', rcond, stmt)
-        return [rule]
+        tmpl = []
+        tmpl.append("let v = data_in_ff.first;")
+        tmpl.append("rg_parse_state <= %(state)s;")
+        tmpl.append("rg_buffered[0] <= 128;")
+        tmpl.append("rg_shift_amt[0] <= 0;")
+        tmpl.append("rg_dequeue_data[2] <= True;")
+        rules = []
+        stmt = apply_pdict(tmpl, {"state": "State{}".format(CamelCase(next_state))})
+        rcond = "rg_parse_state == State{} && sop_this_cycle".format(CamelCase(curr_state))
+        rules.append(ast.Rule('rl_start_state_deq', rcond, stmt))
+        tmpl2 = []
+        tmpl2.append("data_in_ff.deq;")
+        stmt2 = apply_pdict(tmpl2, {})
+        rcond2 = "rg_parse_state == State{} && !sop_this_cycle".format(CamelCase(curr_state))
+        rules.append(ast.Rule('rl_start_state_idle', rcond2, stmt2))
+        return rules
 
     def build_rule_data_ff_load(self):
         tmpl = []
         tmpl.append("rg_buffered[1] <= rg_buffered[1] + %s;"%(config.DP_WIDTH))
         tmpl.append("data_in_ff.deq;")
-        tmpl.append("dbg3($format(\"dequeue data %%h %%h\", rg_buffered[1], rg_next_header_len[1]));")
+        tmpl.append("rg_dequeue_data[1] <= True;")
+        tmpl.append("dbg3($format(\"dequeue data %%d %%d\", rg_buffered[1], rg_next_header_len[1]));")
         stmt = apply_pdict(tmpl, {})
         rcond = 'rg_buffered[1] < rg_next_header_len[1]'
         rule = ast.Rule('rl_data_ff_load', rcond, stmt)
         return [rule]
 
+    def build_rule_data_ff_idle(self):
+        tmpl = []
+        tmpl.append("rg_dequeue_data[1] <= False;")
+        stmt = apply_pdict(tmpl, {})
+        rcond = 'rg_buffered[1] >= rg_next_header_len[1]'
+        rule = ast.Rule('rl_data_ff_idle', rcond, stmt)
+        return [rule]
+
     def build_rule_state_load(self, state):
         tmpl = []
-        tmpl.append("report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle);")
+        tmpl.append("report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle, rg_tmp);")
         pdict = {}
         pdict['name'] = state.name
         pdict['CurrState'] = 'State%s' % (CamelCase(state.name))
         pdict['len'] = state.len
         stmt = apply_pdict(tmpl, pdict)
         rcond = '(rg_parse_state == %(CurrState)s) && (rg_buffered[0] < %(len)s)' % pdict
-        rule = ast.Rule('rl_%(name)s_load' % pdict, rcond, stmt)
+        attr = ['fire_when_enabled']
+        rule = ast.Rule('rl_%(name)s_load' % pdict, rcond, stmt, attr)
         return [rule]
 
     def build_rule_state_extract(self, state):
         tmpl = []
-        tmpl.append("report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle);")
-        tmpl.append("let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp;")
+        tmpl.append("let data = rg_tmp;")
+        tmpl.append("if (rg_dequeue_data[0] == True) begin")
+        tmpl.append("  data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp;")
+        tmpl.append("end")
+        tmpl.append("report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle, data);")
         TMP = "let %(ktype)s = extract_%(ktype)s(truncate(data));"
         tmpl2 = []
         tmpl2.append("compute_next_state_%(name)s(%(field)s);")
         tmpl2.append("rg_tmp <= zeroExtend(data >> %(len)s);")
         tmpl2.append("succeed_and_next(%(len)s);")
-        tmpl2.append("dbg3($format(\"extract %%s %%h\", \"%(name)s\", \"%(ktype)s\"));")
+        tmpl2.append("dbg3($format(\"extract %%s %%h\", \"%(name)s\", rg_dequeue_data[0]));")
+
         pdict = {}
         pdict['name'] = state.name
         pdict['CurrState'] = 'State%s' % (CamelCase(state.name))
@@ -223,14 +235,29 @@ class Parser(object):
             keys.append("%s.%s" % (GetHeaderType(k['value'][0]), k['value'][1]))
             pdict['ktype'].add(GetHeaderType(k['value'][0]))
         pdict['field'] = ",".join(keys)
+
         stmt = apply_pdict(tmpl, pdict)
         for ktype in pdict['ktype']:
             stmt += [ast.Template(TMP, {'ktype': ktype})]
         stmt += apply_pdict(tmpl2, pdict)
         rcond = '(rg_parse_state == %(CurrState)s) && (rg_buffered[0] >= %(len)s)' % pdict
         rname = 'rl_%(name)s_extract' % pdict
-        rule = ast.Rule(rname, rcond, stmt)
+        attr = ['fire_when_enabled']
+        rule = ast.Rule(rname, rcond, stmt, attr)
         return [rule]
+
+    def build_mutually_exclusive_attribute(self, state):
+        attribute = []
+        stmt = []
+        for s in state.transitions:
+            next_state_name = s['next_state']
+            if next_state_name is None:
+                next_state_name = self.initial_state
+            rname = 'rl_%s_%s' % (state.name, next_state_name)
+            attribute.append(rname)
+        TMP="(* mutually_exclusive=\"{}\" *)".format(", ".join(attribute))
+        stmt.append(ast.Template(TMP))
+        return stmt
 
     def build_rule_state_transitions(self, state):
         def build_rule_state_transition(state, next_state):
@@ -269,6 +296,7 @@ class Parser(object):
         tmpl.append("Reg#(Bit#(32)) rg_buffered[3] <- mkCReg(3, 0);")
         tmpl.append("Reg#(Bit#(32)) rg_shift_amt[3] <- mkCReg(3, 0);")
         tmpl.append("Reg#(Bit#(512)) rg_tmp <- mkReg(0);")
+        tmpl.append("Reg#(Bool) rg_dequeue_data[3] <- mkCReg(3, False);")
         stmt = apply_pdict(tmpl, {})
         return stmt
 
@@ -324,16 +352,18 @@ class Parser(object):
         stmt.append(self.build_funct_failed_and_trap())
         #stmt.append(self.build_funct_push_phv(phv))
         stmt.append(self.build_funct_report_parse_action())
+        stmt.append(ast.Template("let sop_this_cycle = data_in_ff.first.sop;"))
+        stmt.append(ast.Template("let eop_this_cycle = data_in_ff.first.eop;"))
+        stmt.append(ast.Template("let data_this_cycle = data_in_ff.first.data;"))
         return stmt
 
     def buildModuleStmt(self):
-        # boiler plate
         self.decide_default_state()
         stmt = []
         stmt += self.build_boiler_plates()
         stmt += self.build_funct_transition()
-        stmt.append(ast.Template("let data_this_cycle = data_in_ff.first.data;"))
         stmt += self.build_rule_data_ff_load()
+        stmt += self.build_rule_data_ff_idle()
 
         for idx, s in enumerate(self.states.values()):
             if idx == 0:
@@ -347,11 +377,11 @@ class Parser(object):
                     self.regs.add(('ParserState', 'rg_parse_state', 'StateDefault'))
             stmt += self.build_rule_state_load(s)
             stmt += self.build_rule_state_extract(s)
+            stmt += self.build_mutually_exclusive_attribute(s)
             stmt += self.build_rule_state_transitions(s)
 
         # fill in missing registers
         for reg in self.regs:
-            print 'xxxx'
             stmt.insert(0, ast.Template("Reg#(%s) %s <- mkReg(%s);"% (reg[0], reg[1], reg[2])))
         for wire in self.pulse_wires:
             stmt.insert(0, ast.Template("PulseWire %(name)s <- mkPulseWireOR();", {'name': wire}))

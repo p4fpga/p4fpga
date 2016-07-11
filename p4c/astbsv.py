@@ -311,12 +311,17 @@ class Module:
         builder.newline()
 
 class Rule:
-    def __init__(self, name, ruleCond, actionStmt):
+    def __init__(self, name, ruleCond, actionStmt, attribute=[]):
         self.name = name
         self.ruleCond = ruleCond
         self.actionStmt = actionStmt
+        self.attribute = attribute 
 
     def emit(self, builder):
+        if self.attribute != []:
+            builder.emitIndent()
+            builder.append("(* {} *)".format(", ".join(self.attribute)))
+            builder.newline()
         builder.emitIndent()
         if self.ruleCond:
             builder.append("rule {} if ({});".format(self.name, self.ruleCond))
