@@ -178,8 +178,8 @@ class Table(object):
             action_stmt.append(ast.Template(TMP8, {"type": CamelCase(action),
                                                    "field": fields}))
             action_stmt.append(ast.Template(TMP9, {"id": idx}))
-            case_stmt.casePatItem[action] = action.lstrip('_').upper()
-            case_stmt.casePatStmt[action] = action_stmt
+            _action = action.lstrip('_').upper()
+            case_stmt.casePatStmt[_action] = action_stmt
 
         if_stmt = ast.If("rsp matches tagged Valid .data", [])
         if_stmt.stmt.append(ast.Template(TMP4, {"type": self.rsp_name}))
