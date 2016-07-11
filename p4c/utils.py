@@ -103,6 +103,8 @@ def GetHeaderWidthInState(name):
 
 def GetHeaderInState(state_name):
     state = GetState(state_name)
+    if state is None:
+        return []
     headers = []
     header_stacks = []
     stack = False

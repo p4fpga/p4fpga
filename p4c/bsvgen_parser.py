@@ -76,6 +76,14 @@ class Parser(object):
         funct = ast.Function('fetch_next_header', 'Action', 'Bit#(32) len', ablock)
         return funct
 
+    def build_funct_move_shift_amt(self):
+        tmpl = []
+        tmpl.append("rg_shift_amt[0] <= rg_shift_amt[0] + len;")
+        stmt = apply_pdict(tmpl, {})
+        ablock = apply_action_block(stmt)
+        funct = ast.Function('move_shift_amt', 'Action', 'Bit#(32) len', ablock)
+        return funct
+
     def build_funct_failed_and_trap(self):
         tmpl = []
         tmpl.append("rg_buffered[0] <= 0;")
@@ -198,6 +206,9 @@ class Parser(object):
     def build_rule_state_load(self, state):
         tmpl = []
         tmpl.append("report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle, rg_tmp);")
+        tmpl.append("let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp;")
+        tmpl.append("rg_tmp <= zeroExtend(data);")
+        tmpl.append("move_shift_amt(%d);" % (config.DP_WIDTH))
         pdict = {}
         pdict['name'] = state.name
         pdict['CurrState'] = 'State%s' % (CamelCase(state.name))
@@ -349,6 +360,7 @@ class Parser(object):
         stmt.append(build_funct_dbg3())
         stmt.append(self.build_funct_succeed())
         stmt.append(self.build_funct_fetch_next_header())
+        stmt.append(self.build_funct_move_shift_amt())
         stmt.append(self.build_funct_failed_and_trap())
         #stmt.append(self.build_funct_push_phv(phv))
         stmt.append(self.build_funct_report_parse_action())
