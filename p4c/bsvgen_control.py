@@ -171,7 +171,7 @@ class Control (object):
 
         if tblName in self.conditionals:
             cond = search_conditional(tblName)
-            expr = cond['expression']
+            expr = cond['expression'].replace("0x", "'h")
             true_next = cond['true_next']
             false_next = cond['false_next']
             _meta = cond['metadata']

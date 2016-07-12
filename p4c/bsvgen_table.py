@@ -47,12 +47,13 @@ def simgen():
     cppgen.generate_cpp('generatedcpp', False, generated_table_sim)
 
 class MatchTableSim:
-    def __init__(self, name, ksz, vsz):
+    def __init__(self, name, tid, ksz, vsz):
         self.name = name
+        self.tid = tid
         self.ksz = ksz
         self.vsz = vsz
 
-    def build_bdpi(self, ksz, vsz):
+    def build_bdpi(self, tid, ksz, vsz):
         global generated_table_sim
         TMP1 = "import \"BDPI\" function ActionValue#(Bit#(%s)) matchtable_read_%s(Bit#(%s) msgtype);"
         TMP2 = "import \"BDPI\" function Action matchtable_write_%s(Bit#(%s) msgtype, Bit#(%s) data);"
@@ -61,12 +62,12 @@ class MatchTableSim:
         stmt.append(ast.Template(TMP2 % (self.name, ksz, vsz)))
         return stmt
 
-    def build_read_function(self, ksz, vsz):
+    def build_read_function(self, tid, ksz, vsz):
         TMP1 = "let v <- matchtable_read_%s(key);" % (self.name)
         TMP2 = "return v;"
         name = "matchtable_read"
         type = "ActionValue#(Bit#(%s))" % (vsz)
-        params = "Bit#(%s) key" % (ksz)
+        params = "Bit#(%s) id, Bit#(%s) key" % (tid, ksz)
         stmt = []
         stmt.append(ast.Template(TMP1))
         stmt.append(ast.Template(TMP2))
@@ -74,11 +75,11 @@ class MatchTableSim:
         funct = ast.Function(name, type, params, stmt=[action_block])
         return funct
 
-    def build_write_function(self, ksz, vsz):
+    def build_write_function(self, tid, ksz, vsz):
         TMP1 = "matchtable_write_%s(key, data);" % (self.name)
         name = "matchtable_write"
         type = "Action"
-        params = "Bit#(%s) key, Bit#(%s) data" % (ksz, vsz)
+        params = "Bit#(%s) id, Bit#(%s) key, Bit#(%s) data" % (tid, ksz, vsz)
         stmt = []
         stmt.append(ast.Template(TMP1))
         action_block = ast.ActionBlock(stmt)
@@ -86,14 +87,14 @@ class MatchTableSim:
         return funct
 
     def emit(self, builder):
-        TMP1 = "MatchTableSim#(%s, %s)"
-        for s in self.build_bdpi(self.ksz, self.vsz):
+        TMP1 = "MatchTableSim#(%d, %s, %s)"
+        for s in self.build_bdpi(self.tid, self.ksz, self.vsz):
             s.emit(builder)
             builder.newline()
         stmt = []
-        stmt.append(self.build_read_function(self.ksz, self.vsz))
-        stmt.append(self.build_write_function(self.ksz, self.vsz))
-        inst = ast.Instance(TMP1%(self.ksz, self.vsz), stmt)
+        stmt.append(self.build_read_function(self.tid, self.ksz, self.vsz))
+        stmt.append(self.build_write_function(self.tid, self.ksz, self.vsz))
+        inst = ast.Instance(TMP1%(self.tid, self.ksz, self.vsz), stmt)
         inst.emit(builder)
         generated_table_sim.append({'name': self.name, 'ksz': self.ksz, 'vsz': self.vsz})
 
@@ -101,6 +102,7 @@ class Table(object):
     required_attributes = ["name", "match_type", "max_size", "key", "actions"]
     def __init__(self, table_attrs, basic_block_map, json_dict):
         self.name = table_attrs["name"]
+        self.tid = table_attrs["id"]
         self.match_type = table_attrs['match_type']
         self.depth = 256 if table_attrs['max_size'] == 16384 else table_attrs['max_size']
         self.key = table_attrs.get('key', None)
@@ -313,7 +315,7 @@ class Table(object):
     def buildModuleStmt(self):
         TMP1 = "Vector#(%(num)s, FIFOF#(BBRequest)) bbReqFifo <- replicateM(mkFIFOF);"
         TMP2 = "Vector#(%(num)s, FIFOF#(BBResponse)) bbRspFifo <- replicateM(mkFIFOF);"
-        TMP3 = "MatchTable#(%(sz)s, SizeOf#(%(reqT)s), SizeOf#(%(rspT)s)) matchTable <- mkMatchTable();"
+        TMP3 = "MatchTable#(%(tid)s, %(sz)s, SizeOf#(%(reqT)s), SizeOf#(%(rspT)s)) matchTable <- mkMatchTable();"
         TMP4 = "interface next_control_state_%(id)s = toClient(bbReqFifo[%(id)s], bbRspFifo[%(id)s]);"
         TMP5 = "interface prev_control_state_%(id)s = toServer(rx_%(name)s.e, tx_%(name)s.e);"
         TMP6 = "Vector#(2, FIFOF#(MetadataT)) metadata_ff <- replicateM(mkFIFOF);"
@@ -333,7 +335,8 @@ class Table(object):
             rspT = "%sRspT" % (CamelCase(self.name))
             # size must be 256 or multiple of 256
             size = int(256 * math.ceil(float(self.depth)/256))
-            pdict = {"sz": size, "reqT": reqT, "rspT": rspT}
+            tid = self.tid;
+            pdict = {"sz": size, "reqT": reqT, "rspT": rspT, "tid": tid}
             stmt.append(ast.Template(TMP3, pdict))
 
         pdict = {"sz": num, "szminus1": num-1, "fifo": "bbRspFifo"}
@@ -389,7 +392,7 @@ class Table(object):
         rsp_struct = StructTableRspT(self.name, self.actions, action_info)
         rsp_struct.emit(builder)
 
-        simmodel = MatchTableSim(self.name, req_struct.width, rsp_struct.width)
+        simmodel = MatchTableSim(self.name, self.tid, req_struct.width, rsp_struct.width)
         simmodel.emit(builder)
 
     def emitValueType(self, builder):
