@@ -81,6 +81,7 @@ class Parser(object):
     def build_funct_move_shift_amt(self):
         tmpl = []
         tmpl.append("rg_shift_amt[0] <= rg_shift_amt[0] + len;")
+        tmpl.append("w_load_header.send();")
         stmt = apply_pdict(tmpl, {})
         ablock = apply_action_block(stmt)
         funct = ast.Function('move_shift_amt', 'Action', 'Bit#(32) len', ablock)
@@ -172,9 +173,9 @@ class Parser(object):
         tmpl = []
         tmpl.append("let v = data_in_ff.first;")
         tmpl.append("rg_parse_state[1] <= %(state)s;")
-        tmpl.append("rg_buffered[0] <= 128;")
-        tmpl.append("rg_shift_amt[0] <= 0;")
-        tmpl.append("rg_dequeue_data[2] <= True;")
+        tmpl.append("rg_buffered[1] <= 128;")
+        tmpl.append("rg_shift_amt[1] <= 0;")
+        tmpl.append("rg_dequeue_data[1] <= True;")
         rules = []
         stmt = apply_pdict(tmpl, {"state": "State{}".format(CamelCase(next_state))})
         rcond = "rg_parse_state[1] == State{} && sop_this_cycle && !w_parse_header_done".format(CamelCase(curr_state))
@@ -194,7 +195,7 @@ class Parser(object):
         tmpl.append("dbg3($format(\"dequeue data %%d %%d\", rg_buffered[1], rg_next_header_len[1]));")
         stmt = apply_pdict(tmpl, {})
         init_state = "State%s" % (CamelCase(initial_state))
-        rcond = '(rg_buffered[1] < rg_next_header_len[1]) && (rg_parse_state[1] != %s) && (w_parse_header_done)' % init_state
+        rcond = '(rg_buffered[1] < rg_next_header_len[1]) && (rg_parse_state[1] != %s) && (w_parse_header_done || w_load_header)' % init_state
         rule = ast.Rule('rl_data_ff_load', rcond, stmt)
         return [rule]
 
@@ -203,7 +204,7 @@ class Parser(object):
         tmpl.append("rg_dequeue_data[1] <= False;")
         stmt = apply_pdict(tmpl, {})
         init_state = "State%s" % (CamelCase(initial_state))
-        rcond = '(rg_buffered[1] >= rg_next_header_len[1]) && (rg_parse_state[1] != %s) && (w_parse_header_done)' % init_state
+        rcond = '(rg_buffered[1] >= rg_next_header_len[1]) && (rg_parse_state[1] != %s) && (w_parse_header_done || w_load_header)' % init_state
         rule = ast.Rule('rl_data_ff_idle', rcond, stmt)
         return [rule]
 
@@ -308,6 +309,7 @@ class Parser(object):
         tmpl.append("FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;")
         tmpl.append("PulseWire parse_done <- mkPulseWire();")
         tmpl.append("PulseWire w_parse_header_done <- mkPulseWireOR();")
+        tmpl.append("PulseWire w_load_header <- mkPulseWireOR();")
         tmpl.append("Reg#(Bit#(32)) rg_next_header_len[3] <- mkCReg(3, 0);")
         tmpl.append("Reg#(Bit#(32)) rg_buffered[3] <- mkCReg(3, 0);")
         tmpl.append("Reg#(Bit#(32)) rg_shift_amt[3] <- mkCReg(3, 0);")
