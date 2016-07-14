@@ -267,6 +267,16 @@ interface Parser;
   method ParserPerfRec read_perf_info ();
 endinterface
 module mkParser  (Parser);
+  FIFO#(ParserState) parse_state_ff <- mkPipelineFIFO();
+  FIFO#(ParserState) parse_state_ethernet_ff <- mkPipelineFIFO();
+  FIFO#(ParserState) parse_state_ipv4_ff <- mkPipelineFIFO();
+  FIFO#(ParserState) parse_state_tcp_ff <- mkPipelineFIFO();
+  FIFO#(ParserState) parse_state_tcp_options_ff <- mkPipelineFIFO();
+  FIFO#(ParserState) parse_state_end_ff <- mkPipelineFIFO();
+  FIFO#(ParserState) parse_state_nop_ff <- mkPipelineFIFO();
+  FIFO#(ParserState) parse_state_mss_ff <- mkPipelineFIFO();
+  FIFO#(ParserState) parse_state_sack_ff <- mkPipelineFIFO();
+  FIFO#(ParserState) parse_state_ts_ff <- mkPipelineFIFO();
   PulseWire w_parse_tcp_options_parse_mss <- mkPulseWireOR();
   PulseWire w_parse_mss_parse_tcp_options <- mkPulseWireOR();
   PulseWire w_parse_ipv4_start <- mkPulseWireOR();
@@ -286,6 +296,9 @@ module mkParser  (Parser);
   PulseWire w_parse_tcp_options_parse_ts <- mkPulseWireOR();
   PulseWire w_parse_tcp_options_parse_end <- mkPulseWireOR();
   PulseWire w_parse_ipv4_parse_tcp <- mkPulseWireOR();
+  Reg#(ParserState) rg_parse_state[3] <- mkCReg(3, StateStart);
+  FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
+  Reg#(Bool) parse_done[2] <- mkCReg(2, True);
   Reg#(Bit#(8)) my_metadata$parse_tcp_options_counter[2] <- mkCReg(2, 0);
   Wire#(Bit#(8)) w_parse_tcp_options <- mkDWire(0);
   Reg#(int) cr_verbosity[2] <- mkCRegU(2);
@@ -298,16 +311,12 @@ module mkParser  (Parser);
 
   FIFOF#(EtherData) data_in_ff <- mkFIFOF;
   FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;
-  PulseWire parse_done <- mkPulseWire();
   PulseWire w_parse_header_done <- mkPulseWireOR();
   PulseWire w_load_header <- mkPulseWireOR();
-  Reg#(ParserState) rg_parse_state[3] <- mkCReg(3, StateStart);
   Reg#(Bit#(32)) rg_next_header_len[3] <- mkCReg(3, 0);
   Reg#(Bit#(32)) rg_buffered[3] <- mkCReg(3, 0);
   Reg#(Bit#(32)) rg_shift_amt[3] <- mkCReg(3, 0);
-  //Reg#(Bit#(512)) rg_tmp <- mkReg(0);
   Reg#(Bit#(512)) rg_tmp[2] <- mkCReg(2, 0);
-  Reg#(Bool) rg_dequeue_data[3] <- mkCReg(3, False);
   function Action dbg3(Fmt msg);
     action
       if (cr_verbosity[0] > 3) begin
@@ -322,7 +331,7 @@ module mkParser  (Parser);
       dbg3($format("succeed_and_next subtract offset = %d shift_amt/buffered = %d", offset, rg_buffered[0] - offset));
     endaction
   endfunction
-  function Action fetch_next_header(Bit#(32) len);
+  function Action fetch_next_header0(Bit#(32) len);
     action
       rg_next_header_len[0] <= len;
       w_parse_header_done.send();
@@ -397,7 +406,6 @@ module mkParser  (Parser);
   function Action compute_next_state_parse_tcp_options(Bit#(8) parse_tcp_options_counter, Bit#(8) current);
     action
       let v = {parse_tcp_options_counter, current};
-      dbg3($format("%h", v));
       if ((v & 'hff00) == 'h0000) begin
         dbg3($format("transit to start"));
         w_parse_tcp_options_start.send();
@@ -464,114 +472,128 @@ module mkParser  (Parser);
       w_parse_ts_parse_tcp_options.send();
     endaction
   endfunction
-  rule rl_data_ff_load if ((rg_buffered[2] < rg_next_header_len[2] + 8) && (rg_parse_state[2] != StateStart) && (w_parse_header_done || w_load_header));
-    rg_buffered[2] <= rg_buffered[2] + 128;
+
+  // Three rules to handle data_in_ff;
+  rule rl_data_ff_load if (!parse_done[1] && (rg_buffered[2] < rg_next_header_len[2] + 8) && (w_parse_header_done || w_load_header));
+    let v = data_in_ff.first.data;
     data_in_ff.deq;
-    rg_dequeue_data[2] <= True;
+    rg_buffered[2] <= rg_buffered[2] + 128;
+    data_ff.enq(tagged Valid v);
     dbg3($format("dequeue data %d %d", rg_buffered[2], rg_next_header_len[2]));
   endrule
 
-  rule rl_data_ff_idle if ((rg_buffered[2] >= rg_next_header_len[2] + 8) && (rg_parse_state[2] != StateStart) && (w_parse_header_done || w_load_header));
-    rg_dequeue_data[2] <= False;
-  endrule
-
-  rule rl_start_state_deq if (rg_parse_state[2] == StateStart && sop_this_cycle && !w_parse_header_done);
-    let v = data_in_ff.first;
+  rule rl_start_state_deq if (parse_done[1] && sop_this_cycle && !w_parse_header_done);
+    let v = data_in_ff.first.data;
+    data_ff.enq(tagged Valid v);
     rg_parse_state[2] <= StateParseEthernet;
     rg_buffered[2] <= 128;
     rg_shift_amt[2] <= 0;
-    rg_dequeue_data[2] <= True;
+    parse_done[1] <= False;
+    parse_state_ff.enq(StateParseEthernet);
   endrule
 
-  rule rl_start_state_idle if (rg_parse_state[2] == StateStart && (!sop_this_cycle || w_parse_header_done));
+  rule rl_start_state_idle if (parse_done[1] && (!sop_this_cycle || w_parse_header_done));
     data_in_ff.deq;
   endrule
 
+  // Rules to parse ethernet
   (* fire_when_enabled *)
-  rule rl_parse_ethernet_load if ((rg_parse_state[0] == StateParseEthernet) && (rg_buffered[0] < 112));
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, rg_tmp[0]);
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
-    move_shift_amt(128);
+  rule rl_parse_ethernet_load if ((parse_state_ff.first == StateParseEthernet) && (rg_buffered[0] < 112));
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+    if (isValid(data_ff.first)) begin
+       let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+       data_ff.deq;
+       rg_tmp[0] <= zeroExtend(data);
+       move_shift_amt(128);
+    end
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_ethernet_extract if ((rg_parse_state[0] == StateParseEthernet) && (rg_buffered[0] >= 112));
+  rule rl_parse_ethernet_extract if ((parse_state_ff.first == StateParseEthernet) && (rg_buffered[0] >= 112));
     let data = rg_tmp[0];
-    if (rg_dequeue_data[0] == True) begin
+    if (isValid(data_ff.first)) begin
+      data_ff.deq;
       data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
     end
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, data);
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
     let ethernet_t = extract_ethernet_t(truncate(data));
     compute_next_state_parse_ethernet(ethernet_t.etherType);
     rg_tmp[0] <= zeroExtend(data >> 112);
     succeed_and_next(112);
-    dbg3($format("extract %s %h", "parse_ethernet", rg_dequeue_data[0]));
+    dbg3($format("extract %s", "parse_ethernet"));
+    parse_state_ff.deq;
   endrule
 
-  (* mutually_exclusive="rl_parse_ethernet_parse_ipv4, rl_parse_ethernet_start" *)
-  rule rl_parse_ethernet_parse_ipv4 if ((rg_parse_state[0] == StateParseEthernet) && (w_parse_ethernet_parse_ipv4));
+  (* mutually_exclusive="rl_parse_ethernet_parse_ipv4, rl_parse_ethernet_start, rl_parse_ipv4_parse_tcp" *)
+  rule rl_parse_ethernet_parse_ipv4 if ((w_parse_ethernet_parse_ipv4));
     rg_parse_state[0] <= StateParseIpv4;
+    parse_state_ff.enq(StateParseIpv4);
     dbg3($format("%s -> %s", "parse_ethernet", "parse_ipv4"));
-    fetch_next_header(160);
+    fetch_next_header0(160);
   endrule
 
-  rule rl_parse_ethernet_start if ((rg_parse_state[0] == StateParseEthernet) && (w_parse_ethernet_start));
-    rg_parse_state[0] <= StateStart;
+  rule rl_parse_ethernet_start if ((w_parse_ethernet_start));
+    parse_done[0] <= True;
     dbg3($format("%s -> %s", "parse_ethernet", "start"));
-    fetch_next_header(0);
+    fetch_next_header0(0);
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_ipv4_load if ((rg_parse_state[0] == StateParseIpv4) && (rg_buffered[0] < 160));
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, rg_tmp[0]);
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
-    move_shift_amt(128);
+  rule rl_parse_ipv4_load if ((parse_state_ff.first == StateParseIpv4) && (rg_buffered[0] < 160));
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+    if (isValid(data_ff.first)) begin
+       data_ff.deq;
+       let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+       rg_tmp[0] <= zeroExtend(data);
+       move_shift_amt(128);
+    end
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_ipv4_extract if ((rg_parse_state[0] == StateParseIpv4) && (rg_buffered[0] >= 160));
+  rule rl_parse_ipv4_extract if ((parse_state_ff.first == StateParseIpv4) && (rg_buffered[0] >= 160));
     let data = rg_tmp[0];
-    if (rg_dequeue_data[0] == True) begin
+    if (isValid(data_ff.first)) begin
+      data_ff.deq;
       data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
     end
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, data);
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
     let ipv4_t = extract_ipv4_t(truncate(data));
     compute_next_state_parse_ipv4(ipv4_t.protocol);
     rg_tmp[0] <= zeroExtend(data >> 160);
     succeed_and_next(160);
-    dbg3($format("extract %s %h", "parse_ipv4", rg_dequeue_data[0]));
+    dbg3($format("extract %s", "parse_ipv4"));
+    parse_state_ff.deq;
   endrule
 
-  (* mutually_exclusive="rl_parse_ipv4_parse_tcp, rl_parse_ipv4_start" *)
-  rule rl_parse_ipv4_parse_tcp if ((rg_parse_state[0] == StateParseIpv4) && (w_parse_ipv4_parse_tcp));
-    rg_parse_state[0] <= StateParseTcp;
+  rule rl_parse_ipv4_parse_tcp if ((w_parse_ipv4_parse_tcp));
+    parse_state_ff.enq(StateParseTcp);
     dbg3($format("%s -> %s", "parse_ipv4", "parse_tcp"));
-    fetch_next_header(160);
+    fetch_next_header0(160);
   endrule
 
-  rule rl_parse_ipv4_start if ((rg_parse_state[0] == StateParseIpv4) && (w_parse_ipv4_start));
-    rg_parse_state[0] <= StateStart;
+  rule rl_parse_ipv4_start if ((w_parse_ipv4_start));
+    parse_done[0] <= True;
     dbg3($format("%s -> %s", "parse_ipv4", "start"));
-    fetch_next_header(0);
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_tcp_load if ((rg_parse_state[0] == StateParseTcp) && (rg_buffered[0] < 160));
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, rg_tmp[0]);
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
-    move_shift_amt(128);
+  rule rl_parse_tcp_load if ((parse_state_ff.first == StateParseTcp) && (rg_buffered[0] < 160));
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+    if (isValid(data_ff.first)) begin
+       let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+       rg_tmp[0] <= zeroExtend(data);
+       move_shift_amt(128);
+    end
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_tcp_extract if ((rg_parse_state[0] == StateParseTcp) && (rg_buffered[0] >= 160));
+  rule rl_parse_tcp_extract if ((parse_state_ff.first == StateParseTcp) && (rg_buffered[0] >= 160));
     let data = rg_tmp[0];
-    if (rg_dequeue_data[0] == True) begin
+    if (isValid(data_ff.first)) begin
+       data_ff.deq;
       data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
     end
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, data);
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
     let tcp_t = extract_tcp_t(truncate(data));
     Bit#(8) tcp$dataOffset = zeroExtend(tcp_t.dataOffset);
     let v = ( ( tcp$dataOffset * 'h4 ) - 20 );
@@ -579,250 +601,285 @@ module mkParser  (Parser);
     compute_next_state_parse_tcp(tcp_t.syn);
     rg_tmp[0] <= zeroExtend(data >> 160);
     succeed_and_next(160);
-    dbg3($format("extract %s %h", "parse_tcp", rg_dequeue_data[0]));
+    parse_state_ff.deq;
+    dbg3($format("extract %s", "parse_tcp"));
   endrule
 
-  //(* mutually_exclusive="rl_parse_tcp_parse_tcp_options, rl_parse_tcp_start" *)
-  rule rl_parse_tcp_parse_tcp_options if ( (rg_parse_state[0] == StateParseTcp ||
-                                            rg_parse_state[0] == StateParseEnd || 
-                                            rg_parse_state[0] == StateParseNop || 
-                                            rg_parse_state[0] == StateParseMss || 
-                                            rg_parse_state[0] == StateParseWscale || 
-                                            rg_parse_state[0] == StateParseSack || 
-                                            rg_parse_state[0] == StateParseTs) &&
-                                            (w_parse_tcp_parse_tcp_options) );
+  (* mutually_exclusive="rl_parse_ethernet_parse_ipv4, rl_parse_ipv4_parse_tcp, rl_parse_tcp_parse_tcp_options, rl_parse_ts_parse_tcp_options, rl_parse_mss_parse_tcp_options, rl_parse_sack_parse_tcp_options, rl_parse_wscale_parse_tcp_options, rl_parse_nop_parse_tcp_options, rl_parse_end_parse_tcp_options" *)
+  rule rl_parse_tcp_parse_tcp_options if ((w_parse_tcp_parse_tcp_options));
     Vector#(512, Bit#(1)) buffer = unpack(rg_tmp[1]);
     Bit#(8) lookahead = pack(takeAt(0, buffer));
     dbg3($format("look ahead %h, %h", lookahead, rg_tmp[1]));
     compute_next_state_parse_tcp_options(my_metadata$parse_tcp_options_counter[1], lookahead);
-    rg_parse_state[0] <= StateParseTcpOptions;
     dbg3($format("metadata counter %h", my_metadata$parse_tcp_options_counter[1]));
     dbg3($format("%s -> %s", "parse_tcp", "parse_tcp_options"));
-    fetch_next_header(0);
+    fetch_next_header0(0);
   endrule
 
-  //rule rl_parse_tcp_start if ((w_parse_tcp_start));
-  //  rg_parse_state[0] <= StateStart;
-  //  dbg3($format("%s -> %s", "parse_tcp", "start"));
-  //  fetch_next_header(0);
-  //endrule
+  rule rl_parse_ts_parse_tcp_options if ((w_parse_ts_parse_tcp_options));
+    Vector#(512, Bit#(1)) buffer = unpack(rg_tmp[1]);
+    Bit#(8) lookahead = pack(takeAt(0, buffer));
+    dbg3($format("look ahead %h, %h", lookahead, rg_tmp[1]));
+    compute_next_state_parse_tcp_options(my_metadata$parse_tcp_options_counter[1], lookahead);
+    dbg3($format("metadata counter %h", my_metadata$parse_tcp_options_counter[1]));
+    dbg3($format("%s -> %s", "parse_tcp", "parse_tcp_options"));
+    fetch_next_header0(0);
+  endrule
+
+  rule rl_parse_mss_parse_tcp_options if ((w_parse_mss_parse_tcp_options));
+    Vector#(512, Bit#(1)) buffer = unpack(rg_tmp[1]);
+    Bit#(8) lookahead = pack(takeAt(0, buffer));
+    dbg3($format("look ahead %h, %h", lookahead, rg_tmp[1]));
+    compute_next_state_parse_tcp_options(my_metadata$parse_tcp_options_counter[1], lookahead);
+    dbg3($format("metadata counter %h", my_metadata$parse_tcp_options_counter[1]));
+    dbg3($format("%s -> %s", "parse_tcp", "parse_tcp_options"));
+    fetch_next_header0(0);
+  endrule
+
+  rule rl_parse_sack_parse_tcp_options if ((w_parse_sack_parse_tcp_options));
+    Vector#(512, Bit#(1)) buffer = unpack(rg_tmp[1]);
+    Bit#(8) lookahead = pack(takeAt(0, buffer));
+    dbg3($format("look ahead %h, %h", lookahead, rg_tmp[1]));
+    compute_next_state_parse_tcp_options(my_metadata$parse_tcp_options_counter[1], lookahead);
+    dbg3($format("metadata counter %h", my_metadata$parse_tcp_options_counter[1]));
+    dbg3($format("%s -> %s", "parse_tcp", "parse_tcp_options"));
+    fetch_next_header0(0);
+  endrule
+
+  rule rl_parse_wscale_parse_tcp_options if ((w_parse_wscale_parse_tcp_options));
+    Vector#(512, Bit#(1)) buffer = unpack(rg_tmp[1]);
+    Bit#(8) lookahead = pack(takeAt(0, buffer));
+    dbg3($format("look ahead %h, %h", lookahead, rg_tmp[1]));
+    compute_next_state_parse_tcp_options(my_metadata$parse_tcp_options_counter[1], lookahead);
+    dbg3($format("metadata counter %h", my_metadata$parse_tcp_options_counter[1]));
+    dbg3($format("%s -> %s", "parse_tcp", "parse_tcp_options"));
+    fetch_next_header0(0);
+  endrule
+
+  rule rl_parse_end_parse_tcp_options if ((w_parse_end_parse_tcp_options));
+    Vector#(512, Bit#(1)) buffer = unpack(rg_tmp[1]);
+    Bit#(8) lookahead = pack(takeAt(0, buffer));
+    dbg3($format("look ahead %h, %h", lookahead, rg_tmp[1]));
+    compute_next_state_parse_tcp_options(my_metadata$parse_tcp_options_counter[1], lookahead);
+    dbg3($format("metadata counter %h", my_metadata$parse_tcp_options_counter[1]));
+    dbg3($format("%s -> %s", "parse_tcp", "parse_tcp_options"));
+    fetch_next_header0(0);
+  endrule
+
+  rule rl_parse_nop_parse_tcp_options if ((w_parse_nop_parse_tcp_options));
+    Vector#(512, Bit#(1)) buffer = unpack(rg_tmp[1]);
+    Bit#(8) lookahead = pack(takeAt(0, buffer));
+    dbg3($format("look ahead %h, %h", lookahead, rg_tmp[1]));
+    compute_next_state_parse_tcp_options(my_metadata$parse_tcp_options_counter[1], lookahead);
+    dbg3($format("metadata counter %h", my_metadata$parse_tcp_options_counter[1]));
+    dbg3($format("%s -> %s", "parse_tcp", "parse_tcp_options"));
+    fetch_next_header0(0);
+  endrule
 
   (* mutually_exclusive="rl_parse_tcp_options_start, rl_parse_tcp_options_parse_end, rl_parse_tcp_options_parse_nop, rl_parse_tcp_options_parse_mss, rl_parse_tcp_options_parse_wscale, rl_parse_tcp_options_parse_sack, rl_parse_tcp_options_parse_ts" *)
-  rule rl_parse_tcp_options_start if ((rg_parse_state[1] == StateParseTcpOptions) && (w_parse_tcp_options_start));
-    rg_parse_state[1] <= StateStart;
+  rule rl_parse_tcp_options_start if ((w_parse_tcp_options_start));
+    parse_done[0] <= True;
     dbg3($format("%s -> %s", "parse_tcp_options", "start"));
     fetch_next_header1(0);
   endrule
 
-  rule rl_parse_tcp_options_parse_end if ((rg_parse_state[1] == StateParseTcpOptions) && (w_parse_tcp_options_parse_end));
-    rg_parse_state[1] <= StateParseEnd;
+  rule rl_parse_tcp_options_parse_end if ((w_parse_tcp_options_parse_end));
+    parse_state_ff.enq(StateParseEnd);
     dbg3($format("%s -> %s", "parse_tcp_options", "parse_end"));
     fetch_next_header1(8);
   endrule
 
-  rule rl_parse_tcp_options_parse_nop if ((rg_parse_state[1] == StateParseTcpOptions) && (w_parse_tcp_options_parse_nop));
-    rg_parse_state[1] <= StateParseNop;
+  rule rl_parse_tcp_options_parse_nop if ((w_parse_tcp_options_parse_nop));
+    parse_state_ff.enq(StateParseNop);
     dbg3($format("%s -> %s", "parse_tcp_options", "parse_nop"));
     fetch_next_header1(8);
   endrule
 
-  rule rl_parse_tcp_options_parse_mss if ((rg_parse_state[1] == StateParseTcpOptions) && (w_parse_tcp_options_parse_mss));
-    rg_parse_state[1] <= StateParseMss;
+  rule rl_parse_tcp_options_parse_mss if ((w_parse_tcp_options_parse_mss));
+    parse_state_ff.enq(StateParseMss);
     dbg3($format("%s -> %s", "parse_tcp_options", "parse_mss"));
     fetch_next_header1(32);
   endrule
 
-  rule rl_parse_tcp_options_parse_wscale if ((rg_parse_state[1] == StateParseTcpOptions) && (w_parse_tcp_options_parse_wscale));
-    rg_parse_state[1] <= StateParseWscale;
+  rule rl_parse_tcp_options_parse_wscale if ((w_parse_tcp_options_parse_wscale));
+    parse_state_ff.enq(StateParseWscale);
     dbg3($format("%s -> %s", "parse_tcp_options", "parse_wscale"));
     fetch_next_header1(24);
   endrule
 
-  rule rl_parse_tcp_options_parse_sack if ((rg_parse_state[1] == StateParseTcpOptions) && (w_parse_tcp_options_parse_sack));
-    rg_parse_state[1] <= StateParseSack;
+  rule rl_parse_tcp_options_parse_sack if ((w_parse_tcp_options_parse_sack));
+    parse_state_ff.enq(StateParseSack);
     dbg3($format("%s -> %s", "parse_tcp_options", "parse_sack"));
     fetch_next_header1(16);
   endrule
 
-  rule rl_parse_tcp_options_parse_ts if ((rg_parse_state[1] == StateParseTcpOptions) && (w_parse_tcp_options_parse_ts));
-    rg_parse_state[1] <= StateParseTs;
+  rule rl_parse_tcp_options_parse_ts if ((w_parse_tcp_options_parse_ts));
+    parse_state_ff.enq(StateParseTs);
     dbg3($format("%s -> %s", "parse_tcp_options", "parse_ts"));
     fetch_next_header1(80);
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_end_load if ((rg_parse_state[0] == StateParseEnd) && (rg_buffered[0] < 8 + 8));
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, rg_tmp[0]);
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
-    move_shift_amt(128);
+  rule rl_parse_end_load if ((parse_state_ff.first == StateParseEnd) && (rg_buffered[0] < 8 + 8));
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+    if (isValid(data_ff.first)) begin
+       data_ff.deq;
+       let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+       rg_tmp[0] <= zeroExtend(data);
+       move_shift_amt(128);
+    end
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_end_extract if ((rg_parse_state[0] == StateParseEnd) && (rg_buffered[0] >= 8 + 8));
+  rule rl_parse_end_extract if ((parse_state_ff.first == StateParseEnd) && (rg_buffered[0] >= 8 + 8));
     let data = rg_tmp[0];
-    if (rg_dequeue_data[0] == True) begin
+    if (isValid(data_ff.first)) begin
+      data_ff.deq;
       data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
     end
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, data);
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
     compute_next_state_parse_end();
     rg_tmp[0] <= zeroExtend(data >> 8);
     succeed_and_next(8);
     my_metadata$parse_tcp_options_counter[0] <= my_metadata$parse_tcp_options_counter[0] - 1;
-    dbg3($format("extract %s %h", "parse_end", rg_dequeue_data[0]));
-  endrule
-
-  (* mutually_exclusive="rl_parse_end_parse_tcp_options" *)
-  rule rl_parse_end_parse_tcp_options if ((rg_parse_state[0] == StateParseEnd) && (w_parse_end_parse_tcp_options));
-    w_parse_tcp_parse_tcp_options.send();
-    dbg3($format("%s -> %s", "parse_end", "parse_tcp_options"));
-    //fetch_next_header(8);
+    dbg3($format("extract %s", "parse_end"));
+    parse_state_ff.deq;
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_nop_load if ((rg_parse_state[0] == StateParseNop) && (rg_buffered[0] < 8 + 8));
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, rg_tmp[0]);
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
-    move_shift_amt(128);
+  rule rl_parse_nop_load if ((parse_state_ff.first == StateParseNop) && (rg_buffered[0] < 8 + 8));
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+    if (isValid(data_ff.first)) begin
+       data_ff.deq;
+       let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+       rg_tmp[0] <= zeroExtend(data);
+       move_shift_amt(128);
+    end
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_nop_extract if ((rg_parse_state[0] == StateParseNop) && (rg_buffered[0] >= 8 + 8));
+  rule rl_parse_nop_extract if ((parse_state_ff.first == StateParseNop) && (rg_buffered[0] >= 8 + 8));
     let data = rg_tmp[0];
-    if (rg_dequeue_data[0] == True) begin
+    if (isValid(data_ff.first)) begin
+       data_ff.deq;
       data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
     end
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, data);
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
     compute_next_state_parse_nop();
     rg_tmp[0] <= zeroExtend(data >> 8);
     succeed_and_next(8);
     my_metadata$parse_tcp_options_counter[0] <= my_metadata$parse_tcp_options_counter[0] - 1;
-    dbg3($format("extract %s %h", "parse_nop", rg_dequeue_data[0]));
-  endrule
-
-  (* mutually_exclusive="rl_parse_nop_parse_tcp_options" *)
-  rule rl_parse_nop_parse_tcp_options if ((rg_parse_state[0] == StateParseNop) && (w_parse_nop_parse_tcp_options));
-    w_parse_tcp_parse_tcp_options.send();
-    dbg3($format("%s -> %s", "parse_nop", "parse_tcp_options"));
-    //fetch_next_header(8);
+    dbg3($format("extract %s", "parse_nop"));
+    parse_state_ff.deq;
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_mss_load if ((rg_parse_state[0] == StateParseMss) && (rg_buffered[0] < 32 + 8));
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, rg_tmp[0]);
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
-    move_shift_amt(128);
+  rule rl_parse_mss_load if ((parse_state_ff.first == StateParseMss) && (rg_buffered[0] < 32 + 8));
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+    if (isValid(data_ff.first)) begin
+       data_ff.deq;
+       let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+       rg_tmp[0] <= zeroExtend(data);
+       move_shift_amt(128);
+    end
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_mss_extract if ((rg_parse_state[0] == StateParseMss) && (rg_buffered[0] >= 32 + 8));
+  rule rl_parse_mss_extract if ((parse_state_ff.first == StateParseMss) && (rg_buffered[0] >= 32 + 8));
     let data = rg_tmp[0];
-    if (rg_dequeue_data[0] == True) begin
+    if (isValid(data_ff.first)) begin
+       data_ff.deq;
       data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
     end
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, data);
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
     compute_next_state_parse_mss();
     rg_tmp[0] <= zeroExtend(data >> 32);
     succeed_and_next(32);
     my_metadata$parse_tcp_options_counter[0] <= my_metadata$parse_tcp_options_counter[0] - 4;
-    dbg3($format("extract %s %h", "parse_mss", rg_dequeue_data[0]));
-  endrule
-
-  (* mutually_exclusive="rl_parse_mss_parse_tcp_options" *)
-  rule rl_parse_mss_parse_tcp_options if ((rg_parse_state[0] == StateParseMss) && (w_parse_mss_parse_tcp_options));
-    w_parse_tcp_parse_tcp_options.send();
-    dbg3($format("%s -> %s", "parse_mss", "parse_tcp_options"));
-    //fetch_next_header(8);
+    dbg3($format("extract %s", "parse_mss"));
+    parse_state_ff.deq;
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_wscale_load if ((rg_parse_state[0] == StateParseWscale) && (rg_buffered[0] < 24 + 8));
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, rg_tmp[0]);
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
-    move_shift_amt(128);
+  rule rl_parse_wscale_load if ((parse_state_ff.first == StateParseWscale) && (rg_buffered[0] < 24 + 8));
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+    if (isValid(data_ff.first)) begin
+       data_ff.deq;
+       let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+       rg_tmp[0] <= zeroExtend(data);
+       move_shift_amt(128);
+    end
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_wscale_extract if ((rg_parse_state[0] == StateParseWscale) && (rg_buffered[0] >= 24 + 8));
+  rule rl_parse_wscale_extract if ((parse_state_ff.first == StateParseWscale) && (rg_buffered[0] >= 24 + 8));
     let data = rg_tmp[0];
-    if (rg_dequeue_data[0] == True) begin
+    if (isValid(data_ff.first)) begin
+       data_ff.deq;
       data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
     end
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, data);
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
     compute_next_state_parse_wscale();
     rg_tmp[0] <= zeroExtend(data >> 24);
     succeed_and_next(24);
     my_metadata$parse_tcp_options_counter[0] <= my_metadata$parse_tcp_options_counter[0] - 3;
-    dbg3($format("extract %s %h", "parse_wscale", rg_dequeue_data[0]));
-  endrule
-
-  (* mutually_exclusive="rl_parse_wscale_parse_tcp_options" *)
-  rule rl_parse_wscale_parse_tcp_options if ((rg_parse_state[0] == StateParseWscale) && (w_parse_wscale_parse_tcp_options));
-    w_parse_tcp_parse_tcp_options.send();
-    dbg3($format("%s -> %s", "parse_wscale", "parse_tcp_options"));
-    //fetch_next_header(8);
+    dbg3($format("extract %s", "parse_wscale"));
+    parse_state_ff.deq;
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_sack_load if ((rg_parse_state[0] == StateParseSack) && (rg_buffered[0] < 16 + 8));
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, rg_tmp[0]);
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
-    move_shift_amt(128);
+  rule rl_parse_sack_load if ((parse_state_ff.first == StateParseSack) && (rg_buffered[0] < 16 + 8));
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+    if (isValid(data_ff.first)) begin
+       data_ff.deq;
+       let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+       rg_tmp[0] <= zeroExtend(data);
+       move_shift_amt(128);
+    end
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_sack_extract if ((rg_parse_state[0] == StateParseSack) && (rg_buffered[0] >= 16 + 8));
+  rule rl_parse_sack_extract if ((parse_state_ff.first == StateParseSack) && (rg_buffered[0] >= 16 + 8));
     let data = rg_tmp[0];
-    if (rg_dequeue_data[0] == True) begin
+    if (isValid(data_ff.first)) begin
+       data_ff.deq;
       data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
     end
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, data);
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
     compute_next_state_parse_sack();
     rg_tmp[0] <= zeroExtend(data >> 16);
     succeed_and_next(16);
     my_metadata$parse_tcp_options_counter[0] <= my_metadata$parse_tcp_options_counter[0] - 2;
-    dbg3($format("extract %s %h", "parse_sack", rg_dequeue_data[0]));
-  endrule
-
-  (* mutually_exclusive="rl_parse_sack_parse_tcp_options" *)
-  rule rl_parse_sack_parse_tcp_options if ((rg_parse_state[0] == StateParseSack) && (w_parse_sack_parse_tcp_options));
-    w_parse_tcp_parse_tcp_options.send();
-    dbg3($format("%s -> %s", "parse_sack", "parse_tcp_options"));
-    //fetch_next_header(8);
+    dbg3($format("extra]ct %s", "parse_sack"));
+    parse_state_ff.deq;
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_ts_load if ((rg_parse_state[0] == StateParseTs) && (rg_buffered[0] < 80 + 8));
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, rg_tmp[0]);
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
-    move_shift_amt(128);
-    dbg3($format("load tcp option ts %h", data));
+  rule rl_parse_ts_load if ((parse_state_ff.first == StateParseTs) && (rg_buffered[0] < 80 + 8));
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+    if (isValid(data_ff.first)) begin
+       data_ff.deq;
+       let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+       rg_tmp[0] <= zeroExtend(data);
+       move_shift_amt(128);
+       dbg3($format("load tcp option ts %h", data));
+    end
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_ts_extract if ((rg_parse_state[0] == StateParseTs) && (rg_buffered[0] >= 80 + 8));
+  rule rl_parse_ts_extract if ((parse_state_ff.first == StateParseTs) && (rg_buffered[0] >= 80 + 8));
     let data = rg_tmp[0];
-    if (rg_dequeue_data[0] == True) begin
+    if (isValid(data_ff.first)) begin
+       data_ff.deq;
       data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
     end
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, data);
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
     compute_next_state_parse_ts();
     rg_tmp[0] <= zeroExtend(data >> 80);
     succeed_and_next(80);
     my_metadata$parse_tcp_options_counter[0] <= my_metadata$parse_tcp_options_counter[0] - 10;
-    dbg3($format("extract %s %h", "parse_ts", rg_dequeue_data[0]));
-  endrule
-
-  (* mutually_exclusive="rl_parse_ts_parse_tcp_options" *)
-  rule rl_parse_ts_parse_tcp_options if ((rg_parse_state[0] == StateParseTs) && (w_parse_ts_parse_tcp_options));
-    w_parse_tcp_parse_tcp_options.send();
-    dbg3($format("%s -> %s", "parse_ts", "parse_tcp_options"));
-    //fetch_next_header(8);
+    dbg3($format("extract %s", "parse_ts"));
+    parse_state_ff.deq;
   endrule
 
   interface frameIn = toPut(data_in_ff);
