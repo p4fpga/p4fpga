@@ -46,7 +46,7 @@ class Parser(object):
         self.cregs = set()
 
         self.states = states
-        self.initial_state = "default"
+        self.initial_state = "start"
 
     def emitInterface(self, builder):
         logger.info("emitParser")
@@ -139,7 +139,7 @@ class Parser(object):
         def build_funct(name, parameters, transition):
             ab_stmt = []
 
-            if len(parameters) == 0 or (len(parameters) == 1 and transition[0]['value'] == 'default'):
+            if len(parameters) == 0 or (len(parameters) == 1 and transition[0]['value'] == 'start'):
                 for t in transition:
                     _, _, _stmt = build_transition(name, t)
                     ab_stmt += _stmt
@@ -149,7 +149,7 @@ class Parser(object):
                 for idx, t in enumerate(transition):
                     _value, _mask, _stmt = build_transition(name, t)
                     expr = "(v & %s) == %s" % (_mask, _value) if _mask != None else "v == %s" % (_value)
-                    if _value == 'default':
+                    if _value == 'start':
                         ab_stmt.append(ast.Else(_stmt))
                     else:
                         if idx == 0:
@@ -181,7 +181,7 @@ class Parser(object):
         return funct
 
     # need a default state to skip payload after processing header
-    def build_rule_start(self, curr_state, next_state):
+    def build_rule_start(self, next_state):
         tmpl = []
         tmpl.append("let v = data_in_ff.first.data;")
         tmpl.append("data_ff.enq(tagged Valid v);")
@@ -196,7 +196,7 @@ class Parser(object):
         tmpl2 = []
         tmpl2.append("data_in_ff.deq;")
         stmt2 = apply_pdict(tmpl2, {})
-        rcond2 = "parse_done[1] && (!sop_this_cycle || w_parse_header_done)".format(CamelCase(curr_state))
+        rcond2 = "parse_done[1] && (!sop_this_cycle || w_parse_header_done)"
         rules.append(ast.Rule('rl_start_state_idle', rcond2, stmt2))
         return rules
 
@@ -263,10 +263,19 @@ class Parser(object):
             pdict['ktype'].add(GetHeaderType(k['value'][0]))
         pdict['field'] = ",".join(keys)
 
+
         stmt = apply_pdict(tmpl, pdict)
         for ktype in pdict['ktype']:
             stmt += [ast.Template(TMP, {'ktype': ktype})]
         stmt += apply_pdict(tmpl2, pdict)
+
+        # build expression
+        setexpr = GetExpressionInState(state.name)
+        if setexpr[2] != None and setexpr[1] != None:
+            dst = "".join(setexpr[1])+"[0]"
+            src = "".join(setexpr[2])
+            stmt += [ast.Template(dst + " <= " + src.replace("0x", "'h") + ";")]
+
         rcond = '(parse_state_ff.first == %(CurrState)s) && (rg_buffered[0] >= %(len)s)' % pdict
         rname = 'rl_%(name)s_extract' % pdict
         attr = ['fire_when_enabled']
@@ -289,31 +298,26 @@ class Parser(object):
     def build_rule_state_transitions(self, cregIdx, state):
         def build_rule_state_transition(cregIdx, state, next_state):
             # forward transition
-            tmpl = []
-            tmpl.append("parse_state_ff.enq(%(NextState)s);")
-            tmpl.append("dbg3($format(\"%%s -> %%s\", \"%(name)s\", \"%(next_state)s\"));")
-            tmpl.append("fetch_next_header%(cregIdx)s(%(length)s);")
-
-            # backward transition
-            tmpl2 = []
-            tmpl2.append("w_%(name)s_%(next_state)s.send();")
-            tmpl2.append("dbg3($format(\"%%s -> %%s\", \"%(name)s\", \"%(next_state)s\"));")
+            tmpl_forward_flow = []
+            tmpl_forward_flow.append("parse_state_ff.enq(%(NextState)s);")
+            tmpl_forward_flow.append("dbg3($format(\"%%s -> %%s\", \"%(name)s\", \"%(next_state)s\"));")
+            tmpl_forward_flow.append("fetch_next_header%(cregIdx)s(%(length)s);")
 
             # back to start
-            tmpl3 = []
-            tmpl3.append("parse_done[0] <= True;")
-            tmpl3.append("dbg3($format(\"%%s -> %%s\", \"%(name)s\", \"%(next_state)s\"));")
-            tmpl3.append("fetch_next_header%(cregIdx)s(0);")
+            tmpl_to_start = []
+            tmpl_to_start.append("parse_done[0] <= True;")
+            tmpl_to_start.append("dbg3($format(\"%%s -> %%s\", \"%(name)s\", \"%(next_state)s\"));")
+            tmpl_to_start.append("fetch_next_header%(cregIdx)s(0);")
 
             # transition with lookahead
-            tmpl4 = []
-            tmpl4.append("Vector#(512, Bit#(1)) buffer = unpack(rg_tmp[1]);")
-            tmpl4.append("Bit#(%(lookahead)s) lookahead = pack(takeAt(0, buffer));")
-            tmpl4.append("dbg3($format(\"look ahead %%h, %%h\", lookahead, rg_tmp[1]));")
-            tmpl4.append("compute_next_state_%(next_state)s(%(field)s);")
-            tmpl4.append("dbg3($format(\"counter\", %(field)s ));")
-            tmpl4.append("dbg3($format(\"%%s -> %%s\", \"%(name)s\", \"%(next_state)s\"));")
-            tmpl4.append('fetch_next_header%(cregIdx)s(0);')
+            tmpl_lookahead = []
+            tmpl_lookahead.append("Vector#(512, Bit#(1)) buffer = unpack(rg_tmp[1]);")
+            tmpl_lookahead.append("Bit#(%(lookahead)s) lookahead = pack(takeAt(0, buffer));")
+            tmpl_lookahead.append("dbg3($format(\"look ahead %%h, %%h\", lookahead, rg_tmp[1]));")
+            tmpl_lookahead.append("compute_next_state_%(next_state)s(%(field)s);")
+            tmpl_lookahead.append("dbg3($format(\"counter\", %(field)s ));")
+            tmpl_lookahead.append("dbg3($format(\"%%s -> %%s\", \"%(name)s\", \"%(next_state)s\"));")
+            tmpl_lookahead.append('fetch_next_header%(cregIdx)s(0);')
 
             pdict = {}
             pdict['name'] = state.name
@@ -333,13 +337,13 @@ class Parser(object):
 
             #print state.name, state.state_type
             if next_state.id == 0:
-                stmt = apply_pdict(tmpl3, pdict)
+                stmt = apply_pdict(tmpl_to_start, pdict)
             elif state.id > next_state.id and state.state_type == ParseState.EMPTY:
-                stmt = apply_pdict(tmpl4, pdict)
+                stmt = apply_pdict(tmpl_lookahead, pdict)
             elif next_state.state_type == ParseState.EMPTY:
-                stmt = apply_pdict(tmpl4, pdict)
+                stmt = apply_pdict(tmpl_lookahead, pdict)
             else:
-                stmt = apply_pdict(tmpl, pdict)
+                stmt = apply_pdict(tmpl_forward_flow, pdict)
             rname = 'rl_%(name)s_%(next_state)s' % pdict
             rcond = "(w_%(name)s_%(next_state)s)" % pdict
             rule = ast.Rule(rname, rcond, stmt)
@@ -354,6 +358,7 @@ class Parser(object):
             next_state_name = s['next_state']
             if next_state_name is None:
                 next_state_name = self.initial_state
+            print next_state_name
             state_dict = GetState(next_state_name)
             state_id = state_dict['id']
             next_state = self.states[state_id]
@@ -439,17 +444,9 @@ class Parser(object):
         stmt = []
         stmt += self.build_boiler_plates()
         stmt += self.build_funct_transition()
-
+        stmt += self.build_rule_data_ff_load(self.initial_state)
+        stmt += self.build_rule_start(self.initial_state)
         for idx, s in enumerate(self.states.values()):
-            if idx == 0:
-                if self.initial_state == s.name:
-                    stmt += self.build_rule_data_ff_load(s.name)
-                    stmt += self.build_rule_start(s.name, s.transitions[0]['next_state'])
-                    _name = "State%s" % (CamelCase(s.name))
-                    continue
-                else:
-                    stmt += self.build_rule_data_ff_load('Default')
-                    stmt += self.build_rule_start('Default', s.name)
             if s.state_type == ParseState.REGULAR:
                 stmt += self.build_rule_state_load(s)
                 stmt += self.build_rule_state_extract(s)
@@ -481,7 +478,9 @@ class Parser(object):
             return (idx==0) and (s.parse_ops==[])
         for idx, s in enumerate(self.states.values()):
             if first_state_has_no_extract(idx, s):
-                self.initial_state = s.name # use 'start' as default state
+                self.initial_state = s.name
+            else:
+                self.initial_state = "start"
 
     def emitTypes(self, builder):
         elem = []
