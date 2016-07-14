@@ -183,46 +183,39 @@ class Parser(object):
     # need a default state to skip payload after processing header
     def build_rule_start(self, curr_state, next_state):
         tmpl = []
-        tmpl.append("let v = data_in_ff.first;")
-        tmpl.append("rg_parse_state[2] <= %(state)s;")
+        tmpl.append("let v = data_in_ff.first.data;")
+        tmpl.append("data_ff.enq(tagged Valid v);")
         tmpl.append("rg_buffered[2] <= 128;")
         tmpl.append("rg_shift_amt[2] <= 0;")
-        tmpl.append("rg_dequeue_data[2] <= True;")
+        tmpl.append("parse_done[1] <= False;")
+        tmpl.append("parse_state_ff.enq(%(state)s);")
         rules = []
         stmt = apply_pdict(tmpl, {"state": "State{}".format(CamelCase(next_state))})
-        rcond = "rg_parse_state[2] == State{} && sop_this_cycle && !w_parse_header_done".format(CamelCase(curr_state))
+        rcond = "parse_done[1] && sop_this_cycle && !w_parse_header_done"
         rules.append(ast.Rule('rl_start_state_deq', rcond, stmt))
         tmpl2 = []
         tmpl2.append("data_in_ff.deq;")
         stmt2 = apply_pdict(tmpl2, {})
-        rcond2 = "rg_parse_state[2] == State{} && (!sop_this_cycle || w_parse_header_done)".format(CamelCase(curr_state))
+        rcond2 = "parse_done[1] && (!sop_this_cycle || w_parse_header_done)".format(CamelCase(curr_state))
         rules.append(ast.Rule('rl_start_state_idle', rcond2, stmt2))
         return rules
 
     def build_rule_data_ff_load(self, initial_state):
         tmpl = []
-        tmpl.append("rg_buffered[2] <= rg_buffered[2] + %s;"%(config.DP_WIDTH))
+        tmpl.append("let v = data_in_ff.first.data;")
         tmpl.append("data_in_ff.deq;")
-        tmpl.append("rg_dequeue_data[2] <= True;")
+        tmpl.append("rg_buffered[2] <= rg_buffered[2] + %s;"%(config.DP_WIDTH))
+        tmpl.append("data_ff.enq(tagged Valid v);")
         tmpl.append("dbg3($format(\"dequeue data %%d %%d\", rg_buffered[2], rg_next_header_len[2]));")
         stmt = apply_pdict(tmpl, {})
-        init_state = "State%s" % (CamelCase(initial_state))
-        rcond = '(rg_buffered[2] < rg_next_header_len[2]) && (rg_parse_state[2] != %s) && (w_parse_header_done || w_load_header)' % init_state
+        #FIXME: lookahead..
+        rcond = '(!parse_done[1] && rg_buffered[2] < rg_next_header_len[2]) && (w_parse_header_done || w_load_header)'
         rule = ast.Rule('rl_data_ff_load', rcond, stmt)
-        return [rule]
-
-    def build_rule_data_ff_idle(self, initial_state):
-        tmpl = []
-        tmpl.append("rg_dequeue_data[2] <= False;")
-        stmt = apply_pdict(tmpl, {})
-        init_state = "State%s" % (CamelCase(initial_state))
-        rcond = '(rg_buffered[2] >= rg_next_header_len[2]) && (rg_parse_state[2] != %s) && (w_parse_header_done || w_load_header)' % init_state
-        rule = ast.Rule('rl_data_ff_idle', rcond, stmt)
         return [rule]
 
     def build_rule_state_load(self, state):
         tmpl = []
-        tmpl.append("report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, rg_tmp[0]);")
+        tmpl.append("data_ff.deq;")
         tmpl.append("let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];")
         tmpl.append("rg_tmp[0] <= zeroExtend(data);")
         tmpl.append("move_shift_amt(%d);" % (config.DP_WIDTH))
@@ -231,24 +224,30 @@ class Parser(object):
         pdict['CurrState'] = 'State%s' % (CamelCase(state.name))
         pdict['len'] = state.len
         stmt = apply_pdict(tmpl, pdict)
-        rcond = '(rg_parse_state[0] == %(CurrState)s) && (rg_buffered[0] < %(len)s)' % pdict
+        expr = "isValid(data_ff.first)"
+        ifstmt = []
+        ifstmt.append(ast.Template("report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);"))
+        ifstmt.append(ast.If(expr, stmt))
+        rcond = '(parse_state_ff.first == %(CurrState)s) && (rg_buffered[0] < %(len)s)' % pdict
         attr = ['fire_when_enabled']
-        rule = ast.Rule('rl_%(name)s_load' % pdict, rcond, stmt, attr)
+        rule = ast.Rule('rl_%(name)s_load' % pdict, rcond, ifstmt, attr)
         return [rule]
 
     def build_rule_state_extract(self, state):
         tmpl = []
         tmpl.append("let data = rg_tmp[0];")
-        tmpl.append("if (rg_dequeue_data[0] == True) begin")
+        tmpl.append("if (isValid(data_ff.first)) begin")
+        tmpl.append("  data_ff.deq;")
         tmpl.append("  data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];")
         tmpl.append("end")
-        tmpl.append("report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, data);")
+        tmpl.append("report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);")
         TMP = "let %(ktype)s = extract_%(ktype)s(truncate(data));"
         tmpl2 = []
         tmpl2.append("compute_next_state_%(name)s(%(field)s);")
         tmpl2.append("rg_tmp[0] <= zeroExtend(data >> %(len)s);")
         tmpl2.append("succeed_and_next(%(len)s);")
-        tmpl2.append("dbg3($format(\"extract %%s %%h\", \"%(name)s\", rg_dequeue_data[0]));")
+        tmpl2.append("dbg3($format(\"extract %%s\", \"%(name)s\"));")
+        tmpl2.append("parse_state_ff.deq;")
 
         pdict = {}
         pdict['name'] = state.name
@@ -268,7 +267,7 @@ class Parser(object):
         for ktype in pdict['ktype']:
             stmt += [ast.Template(TMP, {'ktype': ktype})]
         stmt += apply_pdict(tmpl2, pdict)
-        rcond = '(rg_parse_state[0] == %(CurrState)s) && (rg_buffered[0] >= %(len)s)' % pdict
+        rcond = '(parse_state_ff.first == %(CurrState)s) && (rg_buffered[0] >= %(len)s)' % pdict
         rname = 'rl_%(name)s_extract' % pdict
         attr = ['fire_when_enabled']
         rule = ast.Rule(rname, rcond, stmt, attr)
@@ -291,7 +290,7 @@ class Parser(object):
         def build_rule_state_transition(cregIdx, state, next_state):
             # forward transition
             tmpl = []
-            tmpl.append("rg_parse_state[%(cregIdx)s] <= %(NextState)s;")
+            tmpl.append("parse_state_ff.enq(%(NextState)s);")
             tmpl.append("dbg3($format(\"%%s -> %%s\", \"%(name)s\", \"%(next_state)s\"));")
             tmpl.append("fetch_next_header%(cregIdx)s(%(length)s);")
 
@@ -299,6 +298,23 @@ class Parser(object):
             tmpl2 = []
             tmpl2.append("w_%(name)s_%(next_state)s.send();")
             tmpl2.append("dbg3($format(\"%%s -> %%s\", \"%(name)s\", \"%(next_state)s\"));")
+
+            # back to start
+            tmpl3 = []
+            tmpl3.append("parse_done[0] <= True;")
+            tmpl3.append("dbg3($format(\"%%s -> %%s\", \"%(name)s\", \"%(next_state)s\"));")
+            tmpl3.append("fetch_next_header%(cregIdx)s(0);")
+
+            # transition with lookahead
+            tmpl4 = []
+            tmpl4.append("Vector#(512, Bit#(1)) buffer = unpack(rg_tmp[1]);")
+            tmpl4.append("Bit#(%(lookahead)s) lookahead = pack(takeAt(0, buffer));")
+            tmpl4.append("dbg3($format(\"look ahead %%h, %%h\", lookahead, rg_tmp[1]));")
+            tmpl4.append("compute_next_state_%(next_state)s(%(field)s);")
+            tmpl4.append("dbg3($format(\"counter\", %(field)s ));")
+            tmpl4.append("dbg3($format(\"%%s -> %%s\", \"%(name)s\", \"%(next_state)s\"));")
+            tmpl4.append('fetch_next_header%(cregIdx)s(0);')
+
             pdict = {}
             pdict['name'] = state.name
             pdict['CurrState'] = "State%s" % (CamelCase(state.name))
@@ -306,16 +322,26 @@ class Parser(object):
             pdict['NextState'] = "State%s" % (CamelCase(next_state.name))
             pdict['length'] = GetHeaderWidthInState(next_state.name)
             pdict['cregIdx'] = cregIdx
+            pdict['lookahead'] = 8 #FIXME
+            keys = []
+            for k in next_state.transition_keys:
+                if k['type'] == 'lookahead':
+                    keys.append("lookahead")
+                else:
+                    keys.append("%s$%s[1]" % (k['value'][0], k['value'][1]))
+            pdict['field'] = ", ".join(keys)
 
-            print state.state_type
-            if state.id > next_state.id and state.state_type == ParseState.EMPTY:
-                stmt = apply_pdict(tmpl2, pdict)
-            if state.id > next_state.id and next_state.state_type == ParseState.EMPTY:
-                stmt = apply_pdict(tmpl2, pdict)
+            #print state.name, state.state_type
+            if next_state.id == 0:
+                stmt = apply_pdict(tmpl3, pdict)
+            elif state.id > next_state.id and state.state_type == ParseState.EMPTY:
+                stmt = apply_pdict(tmpl4, pdict)
+            elif next_state.state_type == ParseState.EMPTY:
+                stmt = apply_pdict(tmpl4, pdict)
             else:
                 stmt = apply_pdict(tmpl, pdict)
             rname = 'rl_%(name)s_%(next_state)s' % pdict
-            rcond = "(rg_parse_state[%(cregIdx)s] == %(CurrState)s) && (w_%(name)s_%(next_state)s)" % pdict
+            rcond = "(w_%(name)s_%(next_state)s)" % pdict
             rule = ast.Rule(rname, rcond, stmt)
             # 
             wname = "w_%s_%s" % (state.name, next_state.name)
@@ -336,16 +362,16 @@ class Parser(object):
 
     def build_ff(self):
         tmpl = []
+        tmpl.append("FIFO#(ParserState) parse_state_ff <- mkPipelineFIFO();")
+        tmpl.append("FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);")
         tmpl.append("FIFOF#(EtherData) data_in_ff <- mkFIFOF;")
         tmpl.append("FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;")
-        tmpl.append("PulseWire parse_done <- mkPulseWire();")
         tmpl.append("PulseWire w_parse_header_done <- mkPulseWireOR();")
         tmpl.append("PulseWire w_load_header <- mkPulseWireOR();")
         tmpl.append("Reg#(Bit#(32)) rg_next_header_len[3] <- mkCReg(3, 0);")
         tmpl.append("Reg#(Bit#(32)) rg_buffered[3] <- mkCReg(3, 0);")
         tmpl.append("Reg#(Bit#(32)) rg_shift_amt[3] <- mkCReg(3, 0);")
         tmpl.append("Reg#(Bit#(512)) rg_tmp[2] <- mkCReg(2, 0);")
-        tmpl.append("Reg#(Bool) rg_dequeue_data[3] <- mkCReg(3, False);")
         stmt = apply_pdict(tmpl, {})
         return stmt
 
@@ -418,16 +444,12 @@ class Parser(object):
             if idx == 0:
                 if self.initial_state == s.name:
                     stmt += self.build_rule_data_ff_load(s.name)
-                    stmt += self.build_rule_data_ff_idle(s.name)
                     stmt += self.build_rule_start(s.name, s.transitions[0]['next_state'])
                     _name = "State%s" % (CamelCase(s.name))
-                    self.cregs.add(('ParserState', 'rg_parse_state', 3, _name))
                     continue
                 else:
                     stmt += self.build_rule_data_ff_load('Default')
-                    stmt += self.build_rule_data_ff_idle('Default')
                     stmt += self.build_rule_start('Default', s.name)
-                    self.cregs.add(('ParserState', 'rg_parse_state', 3, 'StateDefault'))
             if s.state_type == ParseState.REGULAR:
                 stmt += self.build_rule_state_load(s)
                 stmt += self.build_rule_state_extract(s)
@@ -436,6 +458,8 @@ class Parser(object):
             else:
                 print s.state_type
                 stmt += self.build_rule_state_transitions(1, s)
+
+        self.cregs.add(('Bool', 'parse_done', 2, 'True'))
 
         # fill in missing registers
         for reg in self.regs:
