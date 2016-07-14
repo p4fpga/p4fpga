@@ -528,6 +528,23 @@ class If:
         builder.emitIndent()
         builder.append("end")
 
+class ElseIf:
+    def __init__(self, expression, stmt):
+        self.expression = expression
+        self.stmt = stmt
+
+    def emit(self, builder):
+        builder.emitIndent()
+        builder.append("else if ({}) begin".format(self.expression))
+        builder.newline()
+        builder.increaseIndent()
+        for s in self.stmt:
+            s.emit(builder)
+            builder.newline()
+        builder.decreaseIndent()
+        builder.emitIndent()
+        builder.append("end")
+
 class Else:
     def __init__(self, stmt):
         self.stmt = stmt

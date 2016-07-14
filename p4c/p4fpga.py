@@ -35,6 +35,7 @@ from bsvgen_struct import Struct, StructT, StructMetadata
 from utils import CamelCase, GetHeaderWidth, GetFieldWidth, GetState
 from utils import GetHeaderInState, BuildExpression, GetTransitionKey
 from utils import GetHeaderWidthInState
+from ast_util import ParseState
 
 logger = logging.getLogger(__name__)
 
@@ -74,19 +75,6 @@ class ParseRule():
 
     #define @property
 
-# Generate ParseState Object from parseGraph
-class ParseState(object):
-    def __init__(self, id, name):
-        self.id = id
-        self.name = name
-        self.len = GetHeaderWidthInState(name)
-        self.transitions = None
-        self.transition_keys = None
-        self.parse_ops = None
-
-    def __repr__(self):
-        return "ParseState: %s %s %s" % (self.id, self.name, self.len)
-
 map_state = OrderedDict() # id -> state
 
 def render_parsers(ir, json_dict):
@@ -102,7 +90,8 @@ def render_parsers(ir, json_dict):
         parse_state.transitions = state['transitions']
         parse_state.parse_ops = state['parser_ops']
         parse_state.transition_keys = GetTransitionKey(state)
-
+        if parse_state.parse_ops == []:
+            parse_state.state_type = ParseState.EMPTY
     ir.parsers['parser'] = Parser(map_state)
 
 def render_deparsers(ir, json_dict):

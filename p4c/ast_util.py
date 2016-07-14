@@ -1,4 +1,21 @@
 import astbsv as ast
+from utils import GetHeaderWidthInState
+
+# Generate ParseState Object from parseGraph
+class ParseState(object):
+    REGULAR = "REGULAR"
+    EMPTY = "EMPTY"
+    def __init__(self, id, name):
+        self.id = id
+        self.name = name
+        self.len = GetHeaderWidthInState(name)
+        self.state_type = ParseState.REGULAR
+        self.transitions = None
+        self.transition_keys = None
+        self.parse_ops = None
+
+    def __repr__(self):
+        return "ParseState: %s %s %s" % (self.id, self.name, self.len)
 
 def apply_pdict (tmpls, pdict):
     stmt = []
