@@ -1,0 +1,6 @@
+P4FILE=../../p4c/tests/01-BigMatch.p4
+CONNECTALFLAGS += -D PARSER=BigMatch
+CONNECTALFLAGS += -D DEPARSER=BigMatch
+CONNECTALFLAGS += -D MATCHTABLE=BigMatch
+CONNECTALFLAGS += -D TYPEDEF=BigMatch
+include ../Makefile.common
