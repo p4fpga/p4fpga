@@ -42,7 +42,7 @@ BURST_LEN_SIZE=12
 # P4FPGA
 ###########################################
 
-P4FILE=Caans.p4
+P4FILE=p4src/acceptor.p4
 CONNECTALFLAGS += -D PARSER=Caans
 CONNECTALFLAGS += -D DEPARSER=Deparser
 CONNECTALFLAGS += -D MATCHTABLE=MatchTableSim
@@ -51,7 +51,7 @@ CONNECTALFLAGS += -D TYPEDEF=Caans
 ALL: codegen simgen
 
 codegen: $(P4FILE)
-	python ${P4FPGADIR}/p4c/bsvgen.py -o $(P4FILE:p4=bsv) $(P4FILE)
+	python ${P4FPGADIR}/p4c/bsvgen.py $(P4FILE)
 
 simgen: codegen
 	make build.bluesim
