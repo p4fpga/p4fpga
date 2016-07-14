@@ -268,15 +268,7 @@ interface Parser;
 endinterface
 module mkParser  (Parser);
   FIFO#(ParserState) parse_state_ff <- mkPipelineFIFO();
-  FIFO#(ParserState) parse_state_ethernet_ff <- mkPipelineFIFO();
-  FIFO#(ParserState) parse_state_ipv4_ff <- mkPipelineFIFO();
-  FIFO#(ParserState) parse_state_tcp_ff <- mkPipelineFIFO();
-  FIFO#(ParserState) parse_state_tcp_options_ff <- mkPipelineFIFO();
-  FIFO#(ParserState) parse_state_end_ff <- mkPipelineFIFO();
-  FIFO#(ParserState) parse_state_nop_ff <- mkPipelineFIFO();
-  FIFO#(ParserState) parse_state_mss_ff <- mkPipelineFIFO();
-  FIFO#(ParserState) parse_state_sack_ff <- mkPipelineFIFO();
-  FIFO#(ParserState) parse_state_ts_ff <- mkPipelineFIFO();
+  FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
   PulseWire w_parse_tcp_options_parse_mss <- mkPulseWireOR();
   PulseWire w_parse_mss_parse_tcp_options <- mkPulseWireOR();
   PulseWire w_parse_ipv4_start <- mkPulseWireOR();
@@ -296,11 +288,9 @@ module mkParser  (Parser);
   PulseWire w_parse_tcp_options_parse_ts <- mkPulseWireOR();
   PulseWire w_parse_tcp_options_parse_end <- mkPulseWireOR();
   PulseWire w_parse_ipv4_parse_tcp <- mkPulseWireOR();
-  Reg#(ParserState) rg_parse_state[3] <- mkCReg(3, StateStart);
-  FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
   Reg#(Bool) parse_done[2] <- mkCReg(2, True);
   Reg#(Bit#(8)) my_metadata$parse_tcp_options_counter[2] <- mkCReg(2, 0);
-  Wire#(Bit#(8)) w_parse_tcp_options <- mkDWire(0);
+
   Reg#(int) cr_verbosity[2] <- mkCRegU(2);
   FIFOF#(int) cr_verbosity_ff <- mkFIFOF;
   rule set_verbosity;
@@ -485,7 +475,6 @@ module mkParser  (Parser);
   rule rl_start_state_deq if (parse_done[1] && sop_this_cycle && !w_parse_header_done);
     let v = data_in_ff.first.data;
     data_ff.enq(tagged Valid v);
-    rg_parse_state[2] <= StateParseEthernet;
     rg_buffered[2] <= 128;
     rg_shift_amt[2] <= 0;
     parse_done[1] <= False;
@@ -526,7 +515,6 @@ module mkParser  (Parser);
 
   (* mutually_exclusive="rl_parse_ethernet_parse_ipv4, rl_parse_ethernet_start, rl_parse_ipv4_parse_tcp" *)
   rule rl_parse_ethernet_parse_ipv4 if ((w_parse_ethernet_parse_ipv4));
-    rg_parse_state[0] <= StateParseIpv4;
     parse_state_ff.enq(StateParseIpv4);
     dbg3($format("%s -> %s", "parse_ethernet", "parse_ipv4"));
     fetch_next_header0(160);
