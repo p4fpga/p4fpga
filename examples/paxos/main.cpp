@@ -37,7 +37,7 @@ void device_writePacketData(uint64_t* data, uint8_t* mask, int sop, int eop) {
 class MainIndication : public MainIndicationWrapper
 {
 public:
-    virtual void read_version_resp(uint32_t a) {
+    virtual void read_version_rsp(uint32_t a) {
         fprintf(stderr, "version %x\n", a);
     }
     MainIndication(unsigned int id): MainIndicationWrapper(id) {}
@@ -111,10 +111,9 @@ int main(int argc, char **argv)
     device = new MainRequestProxy(IfcNames_MainRequestS2H);
 
     parse_options(argc, argv, &pcap_file, 0);
-    device->set_verbosity(2);
+    device->set_verbosity(4);
     device->read_version();
 
-    device->routingTable_add_entry(0x0200000a, FORWARD, 1);
     if (pcap_file) {
         fprintf(stderr, "Attempts to read pcap file %s\n", pcap_file);
         load_pcap_file(pcap_file, &pcap_info);
