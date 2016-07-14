@@ -8,6 +8,7 @@ git clone https://github.com/hanw/p4fpga.git
 
 Checkout P4FPGA depedencies
 ```
+cd {P4FPGA-DIR}
 git submodule init
 git submodule update
 ```
@@ -19,6 +20,5 @@ sudo pip install pyaml
 
 Install p4c_bm
 ```
-cd 
-sudo python p4fpga/submodules/p4c_bm/setup.py install
+sudo python {P4FPGA-DIR}/submodules/p4c_bm/setup.py install
 ```
