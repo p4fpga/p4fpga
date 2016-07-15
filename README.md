@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/hanw/p4fpga.svg?token=QcAxzpNcQodXfewmHgNA&branch=master)](https://travis-ci.com/hanw/p4fpga)
+
 # Build P4FPGA from Source
 
 First, checkout this repository
