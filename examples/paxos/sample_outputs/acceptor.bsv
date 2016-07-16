@@ -248,18 +248,19 @@ interface Parser;
   method ParserPerfRec read_perf_info ();
 endinterface
 module mkParser  (Parser);
-  PulseWire w_parse_paxos_start <- mkPulseWireOR();
+  PulseWire w_parse_ipv6_start <- mkPulseWireOR();
   PulseWire w_parse_ipv4_start <- mkPulseWireOR();
   PulseWire w_parse_ethernet_parse_ipv6 <- mkPulseWireOR();
   PulseWire w_parse_ipv4_parse_udp <- mkPulseWireOR();
   PulseWire w_parse_ethernet_parse_ipv4 <- mkPulseWireOR();
   PulseWire w_parse_ethernet_parse_arp <- mkPulseWireOR();
   PulseWire w_parse_udp_parse_paxos <- mkPulseWireOR();
+  PulseWire w_parse_paxos_start <- mkPulseWireOR();
   PulseWire w_parse_ethernet_start <- mkPulseWireOR();
-  PulseWire w_parse_ipv6_start <- mkPulseWireOR();
+  PulseWire w_start_parse_ethernet <- mkPulseWireOR();
   PulseWire w_parse_udp_start <- mkPulseWireOR();
   PulseWire w_parse_arp_start <- mkPulseWireOR();
-  Reg#(ParserState) rg_parse_state[3] <- mkCReg(3, StateStart);
+  Reg#(Bool) parse_done[2] <- mkCReg(2, True);
   Reg#(int) cr_verbosity[2] <- mkCRegU(2);
   FIFOF#(int) cr_verbosity_ff <- mkFIFOF;
   rule set_verbosity;
@@ -268,16 +269,16 @@ module mkParser  (Parser);
     cr_verbosity[1] <= x;
   endrule
 
+  FIFO#(ParserState) parse_state_ff <- mkPipelineFIFO();
+  FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
   FIFOF#(EtherData) data_in_ff <- mkFIFOF;
   FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;
-  PulseWire parse_done <- mkPulseWire();
   PulseWire w_parse_header_done <- mkPulseWireOR();
   PulseWire w_load_header <- mkPulseWireOR();
   Reg#(Bit#(32)) rg_next_header_len[3] <- mkCReg(3, 0);
   Reg#(Bit#(32)) rg_buffered[3] <- mkCReg(3, 0);
   Reg#(Bit#(32)) rg_shift_amt[3] <- mkCReg(3, 0);
   Reg#(Bit#(512)) rg_tmp[2] <- mkCReg(2, 0);
-  Reg#(Bool) rg_dequeue_data[3] <- mkCReg(3, False);
   function Action dbg3(Fmt msg);
     action
       if (cr_verbosity[0] > 3) begin
@@ -394,222 +395,262 @@ module mkParser  (Parser);
       w_parse_paxos_start.send();
     endaction
   endfunction
-  rule rl_data_ff_load if ((rg_buffered[2] < rg_next_header_len[2]) && (rg_parse_state[2] != StateStart) && (w_parse_header_done || w_load_header));
-    rg_buffered[2] <= rg_buffered[2] + 128;
+  rule rl_data_ff_load if ((!parse_done[1] && rg_buffered[2] < rg_next_header_len[2]) && (w_parse_header_done || w_load_header));
+    let v = data_in_ff.first.data;
     data_in_ff.deq;
-    rg_dequeue_data[2] <= True;
+    rg_buffered[2] <= rg_buffered[2] + 128;
+    data_ff.enq(tagged Valid v);
     dbg3($format("dequeue data %d %d", rg_buffered[2], rg_next_header_len[2]));
   endrule
 
-  rule rl_data_ff_idle if ((rg_buffered[2] >= rg_next_header_len[2]) && (rg_parse_state[2] != StateStart) && (w_parse_header_done || w_load_header));
-    rg_dequeue_data[2] <= False;
-  endrule
-
-  rule rl_start_state_deq if (rg_parse_state[2] == StateStart && sop_this_cycle && !w_parse_header_done);
-    let v = data_in_ff.first;
-    rg_parse_state[2] <= StateParseEthernet;
+  rule rl_start_state_deq if (parse_done[1] && sop_this_cycle && !w_parse_header_done);
+    let v = data_in_ff.first.data;
+    data_ff.enq(tagged Valid v);
     rg_buffered[2] <= 128;
     rg_shift_amt[2] <= 0;
-    rg_dequeue_data[2] <= True;
+    parse_done[1] <= False;
+    parse_state_ff.enq(StateStart);
   endrule
 
-  rule rl_start_state_idle if (rg_parse_state[2] == StateStart && (!sop_this_cycle || w_parse_header_done));
+  rule rl_start_state_idle if (parse_done[1] && (!sop_this_cycle || w_parse_header_done));
     data_in_ff.deq;
   endrule
 
-  (* fire_when_enabled *)
-  rule rl_parse_ethernet_load if ((rg_parse_state[0] == StateParseEthernet) && (rg_buffered[0] < 112));
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, rg_tmp[0]);
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
-    move_shift_amt(128);
+  rule rl_start_parse_ethernet if ((w_start_parse_ethernet));
+    parse_state_ff.enq(StateParseEthernet);
+    dbg3($format("%s -> %s", "start", "parse_ethernet"));
+    fetch_next_header1(112);
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_ethernet_extract if ((rg_parse_state[0] == StateParseEthernet) && (rg_buffered[0] >= 112));
+  rule rl_parse_ethernet_load if ((parse_state_ff.first == StateParseEthernet) && (rg_buffered[0] < 112));
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+    if (isValid(data_ff.first)) begin
+      data_ff.deq;
+      let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+      rg_tmp[0] <= zeroExtend(data);
+      move_shift_amt(128);
+    end
+  endrule
+
+  (* fire_when_enabled *)
+  rule rl_parse_ethernet_extract if ((parse_state_ff.first == StateParseEthernet) && (rg_buffered[0] >= 112));
     let data = rg_tmp[0];
-    if (rg_dequeue_data[0] == True) begin
+    if (isValid(data_ff.first)) begin
+      data_ff.deq;
       data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
     end
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, data);
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
     let ethernet_t = extract_ethernet_t(truncate(data));
     compute_next_state_parse_ethernet(ethernet_t.etherType);
     rg_tmp[0] <= zeroExtend(data >> 112);
     succeed_and_next(112);
-    dbg3($format("extract %s %h", "parse_ethernet", rg_dequeue_data[0]));
+    dbg3($format("extract %s", "parse_ethernet"));
+    parse_state_ff.deq;
   endrule
 
   (* mutually_exclusive="rl_parse_ethernet_parse_arp, rl_parse_ethernet_parse_ipv4, rl_parse_ethernet_parse_ipv6, rl_parse_ethernet_start" *)
-  rule rl_parse_ethernet_parse_arp if ((rg_parse_state[0] == StateParseEthernet) && (w_parse_ethernet_parse_arp));
-    rg_parse_state[0] <= StateParseArp;
+  rule rl_parse_ethernet_parse_arp if ((w_parse_ethernet_parse_arp));
+    parse_state_ff.enq(StateParseArp);
     dbg3($format("%s -> %s", "parse_ethernet", "parse_arp"));
     fetch_next_header0(224);
   endrule
 
-  rule rl_parse_ethernet_parse_ipv4 if ((rg_parse_state[0] == StateParseEthernet) && (w_parse_ethernet_parse_ipv4));
-    rg_parse_state[0] <= StateParseIpv4;
+  rule rl_parse_ethernet_parse_ipv4 if ((w_parse_ethernet_parse_ipv4));
+    parse_state_ff.enq(StateParseIpv4);
     dbg3($format("%s -> %s", "parse_ethernet", "parse_ipv4"));
     fetch_next_header0(160);
   endrule
 
-  rule rl_parse_ethernet_parse_ipv6 if ((rg_parse_state[0] == StateParseEthernet) && (w_parse_ethernet_parse_ipv6));
-    rg_parse_state[0] <= StateParseIpv6;
+  rule rl_parse_ethernet_parse_ipv6 if ((w_parse_ethernet_parse_ipv6));
+    parse_state_ff.enq(StateParseIpv6);
     dbg3($format("%s -> %s", "parse_ethernet", "parse_ipv6"));
     fetch_next_header0(320);
   endrule
 
-  rule rl_parse_ethernet_start if ((rg_parse_state[0] == StateParseEthernet) && (w_parse_ethernet_start));
-    w_parse_ethernet_start.send();
+  rule rl_parse_ethernet_start if ((w_parse_ethernet_start));
+    parse_done[0] <= True;
     dbg3($format("%s -> %s", "parse_ethernet", "start"));
+    fetch_next_header0(0);
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_arp_load if ((rg_parse_state[0] == StateParseArp) && (rg_buffered[0] < 224));
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, rg_tmp[0]);
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
-    move_shift_amt(128);
+  rule rl_parse_arp_load if ((parse_state_ff.first == StateParseArp) && (rg_buffered[0] < 224));
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+    if (isValid(data_ff.first)) begin
+      data_ff.deq;
+      let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+      rg_tmp[0] <= zeroExtend(data);
+      move_shift_amt(128);
+    end
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_arp_extract if ((rg_parse_state[0] == StateParseArp) && (rg_buffered[0] >= 224));
+  rule rl_parse_arp_extract if ((parse_state_ff.first == StateParseArp) && (rg_buffered[0] >= 224));
     let data = rg_tmp[0];
-    if (rg_dequeue_data[0] == True) begin
+    if (isValid(data_ff.first)) begin
+      data_ff.deq;
       data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
     end
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, data);
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
     compute_next_state_parse_arp();
     rg_tmp[0] <= zeroExtend(data >> 224);
     succeed_and_next(224);
-    dbg3($format("extract %s %h", "parse_arp", rg_dequeue_data[0]));
+    dbg3($format("extract %s", "parse_arp"));
+    parse_state_ff.deq;
   endrule
 
   (* mutually_exclusive="rl_parse_arp_start" *)
-  rule rl_parse_arp_start if ((rg_parse_state[0] == StateParseArp) && (w_parse_arp_start));
-    w_parse_arp_start.send();
+  rule rl_parse_arp_start if ((w_parse_arp_start));
+    parse_done[0] <= True;
     dbg3($format("%s -> %s", "parse_arp", "start"));
+    fetch_next_header0(0);
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_ipv4_load if ((rg_parse_state[0] == StateParseIpv4) && (rg_buffered[0] < 160));
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, rg_tmp[0]);
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
-    move_shift_amt(128);
+  rule rl_parse_ipv4_load if ((parse_state_ff.first == StateParseIpv4) && (rg_buffered[0] < 160));
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+    if (isValid(data_ff.first)) begin
+      data_ff.deq;
+      let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+      rg_tmp[0] <= zeroExtend(data);
+      move_shift_amt(128);
+    end
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_ipv4_extract if ((rg_parse_state[0] == StateParseIpv4) && (rg_buffered[0] >= 160));
+  rule rl_parse_ipv4_extract if ((parse_state_ff.first == StateParseIpv4) && (rg_buffered[0] >= 160));
     let data = rg_tmp[0];
-    if (rg_dequeue_data[0] == True) begin
+    if (isValid(data_ff.first)) begin
+      data_ff.deq;
       data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
     end
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, data);
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
     let ipv4_t = extract_ipv4_t(truncate(data));
     compute_next_state_parse_ipv4(ipv4_t.protocol);
     rg_tmp[0] <= zeroExtend(data >> 160);
     succeed_and_next(160);
-    dbg3($format("extract %s %h", "parse_ipv4", rg_dequeue_data[0]));
+    dbg3($format("extract %s", "parse_ipv4"));
+    parse_state_ff.deq;
   endrule
 
   (* mutually_exclusive="rl_parse_ipv4_parse_udp, rl_parse_ipv4_start" *)
-  rule rl_parse_ipv4_parse_udp if ((rg_parse_state[0] == StateParseIpv4) && (w_parse_ipv4_parse_udp));
-    rg_parse_state[0] <= StateParseUdp;
+  rule rl_parse_ipv4_parse_udp if ((w_parse_ipv4_parse_udp));
+    parse_state_ff.enq(StateParseUdp);
     dbg3($format("%s -> %s", "parse_ipv4", "parse_udp"));
     fetch_next_header0(64);
   endrule
 
-  rule rl_parse_ipv4_start if ((rg_parse_state[0] == StateParseIpv4) && (w_parse_ipv4_start));
-    w_parse_ipv4_start.send();
+  rule rl_parse_ipv4_start if ((w_parse_ipv4_start));
+    parse_done[0] <= True;
     dbg3($format("%s -> %s", "parse_ipv4", "start"));
+    fetch_next_header0(0);
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_ipv6_load if ((rg_parse_state[0] == StateParseIpv6) && (rg_buffered[0] < 320));
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, rg_tmp[0]);
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
-    move_shift_amt(128);
+  rule rl_parse_ipv6_load if ((parse_state_ff.first == StateParseIpv6) && (rg_buffered[0] < 320));
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+    if (isValid(data_ff.first)) begin
+      data_ff.deq;
+      let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+      rg_tmp[0] <= zeroExtend(data);
+      move_shift_amt(128);
+    end
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_ipv6_extract if ((rg_parse_state[0] == StateParseIpv6) && (rg_buffered[0] >= 320));
+  rule rl_parse_ipv6_extract if ((parse_state_ff.first == StateParseIpv6) && (rg_buffered[0] >= 320));
     let data = rg_tmp[0];
-    if (rg_dequeue_data[0] == True) begin
+    if (isValid(data_ff.first)) begin
+      data_ff.deq;
       data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
     end
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, data);
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
     compute_next_state_parse_ipv6();
     rg_tmp[0] <= zeroExtend(data >> 320);
     succeed_and_next(320);
-    dbg3($format("extract %s %h", "parse_ipv6", rg_dequeue_data[0]));
+    dbg3($format("extract %s", "parse_ipv6"));
+    parse_state_ff.deq;
   endrule
 
   (* mutually_exclusive="rl_parse_ipv6_start" *)
-  rule rl_parse_ipv6_start if ((rg_parse_state[0] == StateParseIpv6) && (w_parse_ipv6_start));
-    w_parse_ipv6_start.send();
+  rule rl_parse_ipv6_start if ((w_parse_ipv6_start));
+    parse_done[0] <= True;
     dbg3($format("%s -> %s", "parse_ipv6", "start"));
+    fetch_next_header0(0);
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_udp_load if ((rg_parse_state[0] == StateParseUdp) && (rg_buffered[0] < 64));
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, rg_tmp[0]);
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
-    move_shift_amt(128);
+  rule rl_parse_udp_load if ((parse_state_ff.first == StateParseUdp) && (rg_buffered[0] < 64));
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+    if (isValid(data_ff.first)) begin
+      data_ff.deq;
+      let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+      rg_tmp[0] <= zeroExtend(data);
+      move_shift_amt(128);
+    end
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_udp_extract if ((rg_parse_state[0] == StateParseUdp) && (rg_buffered[0] >= 64));
+  rule rl_parse_udp_extract if ((parse_state_ff.first == StateParseUdp) && (rg_buffered[0] >= 64));
     let data = rg_tmp[0];
-    if (rg_dequeue_data[0] == True) begin
+    if (isValid(data_ff.first)) begin
+      data_ff.deq;
       data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
     end
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, data);
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
     let udp_t = extract_udp_t(truncate(data));
     compute_next_state_parse_udp(udp_t.dstPort);
     rg_tmp[0] <= zeroExtend(data >> 64);
     succeed_and_next(64);
-    dbg3($format("extract %s %h", "parse_udp", rg_dequeue_data[0]));
+    dbg3($format("extract %s", "parse_udp"));
+    parse_state_ff.deq;
   endrule
 
   (* mutually_exclusive="rl_parse_udp_parse_paxos, rl_parse_udp_parse_paxos, rl_parse_udp_start" *)
-  rule rl_parse_udp_parse_paxos if ((rg_parse_state[0] == StateParseUdp) && (w_parse_udp_parse_paxos));
-    rg_parse_state[0] <= StateParsePaxos;
+  rule rl_parse_udp_parse_paxos if ((w_parse_udp_parse_paxos));
+    parse_state_ff.enq(StateParsePaxos);
     dbg3($format("%s -> %s", "parse_udp", "parse_paxos"));
     fetch_next_header0(352);
   endrule
 
-  rule rl_parse_udp_start if ((rg_parse_state[0] == StateParseUdp) && (w_parse_udp_start));
-    w_parse_udp_start.send();
+  rule rl_parse_udp_start if ((w_parse_udp_start));
+    parse_done[0] <= True;
     dbg3($format("%s -> %s", "parse_udp", "start"));
+    fetch_next_header0(0);
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_paxos_load if ((rg_parse_state[0] == StateParsePaxos) && (rg_buffered[0] < 352));
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, rg_tmp[0]);
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
-    move_shift_amt(128);
+  rule rl_parse_paxos_load if ((parse_state_ff.first == StateParsePaxos) && (rg_buffered[0] < 352));
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+    if (isValid(data_ff.first)) begin
+      data_ff.deq;
+      let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+      rg_tmp[0] <= zeroExtend(data);
+      move_shift_amt(128);
+    end
   endrule
 
   (* fire_when_enabled *)
-  rule rl_parse_paxos_extract if ((rg_parse_state[0] == StateParsePaxos) && (rg_buffered[0] >= 352));
+  rule rl_parse_paxos_extract if ((parse_state_ff.first == StateParsePaxos) && (rg_buffered[0] >= 352));
     let data = rg_tmp[0];
-    if (rg_dequeue_data[0] == True) begin
+    if (isValid(data_ff.first)) begin
+      data_ff.deq;
       data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
     end
-    report_parse_action(rg_parse_state[0], rg_buffered[0], data_this_cycle, data);
+    report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
     compute_next_state_parse_paxos();
     rg_tmp[0] <= zeroExtend(data >> 352);
     succeed_and_next(352);
-    dbg3($format("extract %s %h", "parse_paxos", rg_dequeue_data[0]));
+    dbg3($format("extract %s", "parse_paxos"));
+    parse_state_ff.deq;
   endrule
 
   (* mutually_exclusive="rl_parse_paxos_start" *)
-  rule rl_parse_paxos_start if ((rg_parse_state[0] == StateParsePaxos) && (w_parse_paxos_start));
-    w_parse_paxos_start.send();
+  rule rl_parse_paxos_start if ((w_parse_paxos_start));
+    parse_done[0] <= True;
     dbg3($format("%s -> %s", "parse_paxos", "start"));
+    fetch_next_header0(0);
   endrule
 
   interface frameIn = toPut(data_in_ff);
@@ -622,11 +663,11 @@ endmodule
 typedef enum {
   StateDeparseStart,
   StateEthernet,
-  StateIpv6,
   StateIpv4,
   StateUdp,
+  StateArp,
   StatePaxos,
-  StateArp
+  StateIpv6
 } DeparserState deriving (Bits, Eq);
 interface Deparser;
   interface PipeIn#(MetadataT) metadata;
@@ -890,10 +931,10 @@ endmodule
 // ====== HANDLE_1A ======
 
 interface Handle1A;
-  interface Client#(RegRequest#(32, 16), RegResponse#(16)) vrounds_register;
-  interface Client#(RegRequest#(32, 256), RegResponse#(256)) values_register;
+  interface Client#(RegRequest#(16, 16), RegResponse#(16)) vrounds_register;
+  interface Client#(RegRequest#(16, 256), RegResponse#(256)) values_register;
   interface Client#(RegRequest#(1, 16), RegResponse#(16)) datapath_id;
-  interface Client#(RegRequest#(32, 16), RegResponse#(16)) rounds_register;
+  interface Client#(RegRequest#(16, 16), RegResponse#(16)) rounds_register;
   interface Server#(BBRequest, BBResponse) prev_control_state;
 endinterface
 module mkHandle1A  (Handle1A);
@@ -902,11 +943,11 @@ module mkHandle1A  (Handle1A);
   let rx_info_prev_control_state = rx_prev_control_state.u;
   let tx_info_prev_control_state = tx_prev_control_state.u;
   FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;
-  TX #(RegRequest#(32, 16)) tx_vrounds_register <- mkTX;
+  TX #(RegRequest#(16, 16)) tx_vrounds_register <- mkTX;
   RX #(RegResponse#(16)) rx_vrounds_register <- mkRX;
   let tx_info_vrounds_register = tx_vrounds_register.u;
   let rx_info_vrounds_register = rx_vrounds_register.u;
-  TX #(RegRequest#(32, 256)) tx_values_register <- mkTX;
+  TX #(RegRequest#(16, 256)) tx_values_register <- mkTX;
   RX #(RegResponse#(256)) rx_values_register <- mkRX;
   let tx_info_values_register = tx_values_register.u;
   let rx_info_values_register = rx_values_register.u;
@@ -914,7 +955,7 @@ module mkHandle1A  (Handle1A);
   RX #(RegResponse#(16)) rx_datapath_id <- mkRX;
   let tx_info_datapath_id = tx_datapath_id.u;
   let rx_info_datapath_id = rx_datapath_id.u;
-  TX #(RegRequest#(32, 16)) tx_rounds_register <- mkTX;
+  TX #(RegRequest#(16, 16)) tx_rounds_register <- mkTX;
   RX #(RegResponse#(16)) rx_rounds_register <- mkRX;
   let tx_info_rounds_register = tx_rounds_register.u;
   let rx_info_rounds_register = rx_rounds_register.u;
@@ -969,9 +1010,9 @@ endmodule
 // ====== HANDLE_2A ======
 
 interface Handle2A;
-  interface Client#(RegRequest#(32, 16), RegResponse#(16)) rounds_register;
-  interface Client#(RegRequest#(32, 16), RegResponse#(16)) vrounds_register;
-  interface Client#(RegRequest#(32, 256), RegResponse#(256)) values_register;
+  interface Client#(RegRequest#(16, 16), RegResponse#(16)) rounds_register;
+  interface Client#(RegRequest#(16, 16), RegResponse#(16)) vrounds_register;
+  interface Client#(RegRequest#(16, 256), RegResponse#(256)) values_register;
   interface Client#(RegRequest#(1, 16), RegResponse#(16)) datapath_id;
   interface Server#(BBRequest, BBResponse) prev_control_state;
 endinterface
@@ -981,15 +1022,15 @@ module mkHandle2A  (Handle2A);
   let rx_info_prev_control_state = rx_prev_control_state.u;
   let tx_info_prev_control_state = tx_prev_control_state.u;
   FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;
-  TX #(RegRequest#(32, 16)) tx_rounds_register <- mkTX;
+  TX #(RegRequest#(16, 16)) tx_rounds_register <- mkTX;
   RX #(RegResponse#(16)) rx_rounds_register <- mkRX;
   let tx_info_rounds_register = tx_rounds_register.u;
   let rx_info_rounds_register = rx_rounds_register.u;
-  TX #(RegRequest#(32, 16)) tx_vrounds_register <- mkTX;
+  TX #(RegRequest#(16, 16)) tx_vrounds_register <- mkTX;
   RX #(RegResponse#(16)) rx_vrounds_register <- mkRX;
   let tx_info_vrounds_register = tx_vrounds_register.u;
   let rx_info_vrounds_register = rx_vrounds_register.u;
-  TX #(RegRequest#(32, 256)) tx_values_register <- mkTX;
+  TX #(RegRequest#(16, 256)) tx_values_register <- mkTX;
   RX #(RegResponse#(256)) rx_values_register <- mkRX;
   let tx_info_values_register = tx_values_register.u;
   let rx_info_values_register = rx_values_register.u;
@@ -1013,7 +1054,6 @@ module mkHandle2A  (Handle2A);
         rg_paxos$rnd <= paxos$rnd;
         let vrounds_register_req = RegRequest { addr: truncate(paxos$inst), data: paxos$rnd, write: True };
         tx_info_vrounds_register.enq(vrounds_register_req);
-        rg_paxos$rnd <= paxos$rnd;
         let values_register_req = RegRequest { addr: truncate(paxos$inst), data: paxos$paxosval, write: True };
         tx_info_values_register.enq(values_register_req);
         rg_paxos$paxosval <= paxos$paxosval;
@@ -1045,7 +1085,7 @@ endmodule
 // ====== READ_ROUND ======
 
 interface ReadRound;
-  interface Client#(RegRequest#(32, 16), RegResponse#(16)) rounds_register;
+  interface Client#(RegRequest#(16, 16), RegResponse#(16)) rounds_register;
   interface Server#(BBRequest, BBResponse) prev_control_state;
 endinterface
 module mkReadRound  (ReadRound);
@@ -1054,7 +1094,7 @@ module mkReadRound  (ReadRound);
   let rx_info_prev_control_state = rx_prev_control_state.u;
   let tx_info_prev_control_state = tx_prev_control_state.u;
   FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;
-  TX #(RegRequest#(32, 16)) tx_rounds_register <- mkTX;
+  TX #(RegRequest#(16, 16)) tx_rounds_register <- mkTX;
   RX #(RegResponse#(16)) rx_rounds_register <- mkRX;
   let tx_info_rounds_register = tx_rounds_register.u;
   let rx_info_rounds_register = rx_rounds_register.u;
@@ -1434,10 +1474,10 @@ module mkIngress #(Vector#(numClients, Client#(MetadataRequest, MetadataResponse
   Forward forward_0 <- mkForward();
   Drop _drop_1 <- mkDrop();
   ReadRound read_round_0 <- mkReadRound();
-  RegisterIfc#(1, 16) datapath_id <- mkP4Register(nil);
-  RegisterIfc#(32, 16) rounds_register <- mkP4Register(nil);
-  RegisterIfc#(32, 16) vrounds_register <- mkP4Register(nil);
-  RegisterIfc#(32, 256) values_register <- mkP4Register(nil);
+  RegisterIfc#(1, 16) datapath_id <- mkP4Register(vec(handle_1a_0.datapath_id));
+  RegisterIfc#(16, 16) rounds_register <- mkP4Register(vec(handle_1a_0.rounds_register));
+  RegisterIfc#(16, 16) vrounds_register <- mkP4Register(vec(handle_1a_0.vrounds_register));
+  RegisterIfc#(16, 256) values_register <- mkP4Register(vec(handle_1a_0.values_register));
   mkChan(mkFIFOF, mkFIFOF, acceptor_tbl.next_control_state_0, handle_1a_0.prev_control_state);
   mkChan(mkFIFOF, mkFIFOF, acceptor_tbl.next_control_state_1, handle_2a_0.prev_control_state);
   mkChan(mkFIFOF, mkFIFOF, acceptor_tbl.next_control_state_2, _drop_0.prev_control_state);
@@ -1584,9 +1624,6 @@ module mkDropTbl  (DropTbl);
     let rsp <- matchTable.lookupPort.response.get;
     let pkt <- toGet(packet_ff).get;
     let meta <- toGet(metadata_ff[0]).get;
-    let paxos$rnd = fromMaybe(?, meta.paxos$rnd);
-    let paxos$inst = fromMaybe(?, meta.paxos$inst);
-    let paxos$paxosval = fromMaybe(?, meta.paxos$paxosval);
     if (rsp matches tagged Valid .data) begin
       DropTblRspT resp = unpack(data);
       case (resp._action) matches
@@ -1643,10 +1680,6 @@ module mkEgress #(Vector#(numClients, Client#(MetadataRequest, MetadataResponse)
   // Basic Blocks
   Drop _drop_0 <- mkDrop();
   Nop _nop_0 <- mkNop();
-  RegisterIfc#(1, 16) datapath_id <- mkP4Register(nil);
-  RegisterIfc#(32, 16) rounds_register <- mkP4Register(nil);
-  RegisterIfc#(32, 16) vrounds_register <- mkP4Register(nil);
-  RegisterIfc#(32, 256) values_register <- mkP4Register(nil);
   mkChan(mkFIFOF, mkFIFOF, drop_tbl.next_control_state_0, _drop_0.prev_control_state);
   mkChan(mkFIFOF, mkFIFOF, drop_tbl.next_control_state_1, _nop_0.prev_control_state);
   rule default_next_state if (default_req_ff.notEmpty);
