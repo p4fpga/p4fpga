@@ -15,8 +15,6 @@ limitations under the License.
 */
 
 #include "codeGen.h"
-//#include "ebpfObject.h"
-//#include "ebpfType.h"
 
 namespace FPGA {
 

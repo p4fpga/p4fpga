@@ -4,12 +4,21 @@ p4fpga_LDADD = libfrontend.a libp4ctoolkit.a
 
 p4fpga_SOURCES = \
 	extensions/fpga/p4-fpga.cpp \
-	extensions/fpga/fbackend.h \
-	extensions/fpga/fbackend.cpp \
+	extensions/fpga/backend.h \
+	extensions/fpga/backend.cpp \
+	extensions/fpga/codegen.h \
+	extensions/fpga/codegen.cpp \
+	extensions/fpga/ftype.h \
+	extensions/fpga/ftype.cpp \
+	extensions/fpga/fparser.h \
 	extensions/fpga/fparser.cpp \
 	extensions/fpga/fdeparser.cpp \
 	extensions/fpga/fcontrol.cpp \
 	extensions/fpga/fprogram.cpp \
+	extensions/fpga/translator.h \
+	extensions/fpga/translator.cpp \
+	extensions/fpga/ftest.h \
+	extensions/fpga/ftest.cpp \
 	extensions/fpga/midend.h \
 	extensions/fpga/midend.cpp
 

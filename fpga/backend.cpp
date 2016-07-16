@@ -3,13 +3,13 @@
 #include "lib/nullstream.h"
 #include "frontends/p4/evaluator/evaluator.h"
 
-#include "fbackend.h"
+#include "backend.h"
 #include "fprogram.h"
-//#include "target.h"
-//#include "fpgaType.h"
+#include "ftest.h"
+#include "ftype.h"
+#include "codeGen.h"
 
 namespace FPGA {
-
 void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
                       P4::ReferenceMap* refMap, const P4::TypeMap* typeMap) {
     if (toplevel == nullptr)
@@ -21,19 +21,11 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
         return;
     }
 
-/*
     FPGATypeFactory::createFactory(typeMap);
 
-    Target* target;
-    if (options.target.isNullOrEmpty() || options.target == "bcc") {
-        target = new BccTarget();
-    } else if (options.target == "kernel") {
-        target = new KernelSamplesTarget();
-    } else {
-        ::error("Unknown target %s; legal choices are 'bcc' and 'kernel'", options.target);
-        return;
-    }
-*/
+    auto test = new Test(toplevel->getProgram(), refMap, typeMap, toplevel);
+    test->build();
+
     auto fpgaprog = new FPGAProgram(toplevel->getProgram(), refMap, typeMap, toplevel);
     if (!fpgaprog->build())
         return;
@@ -43,10 +35,10 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
     if (stream == nullptr)
         return;
 
-//    CodeBuilder builder(target);
-//    fpgaprog->emit(&builder);
-//    *stream << builder.toString();
-//    stream->flush();
+    CodeBuilder builder();
+    fpgaprog->emit(&builder);
+    *stream << builder.toString();
+    stream->flush();
 }
 
 }  // namespace FPGA

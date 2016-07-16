@@ -10,7 +10,7 @@
 
 #include "midend.h"
 #include "options.h"
-#include "fbackend.h"
+#include "backend.h"
 #include "frontends/common/parseInput.h"
 #include "frontends/p4/frontend.h"
 

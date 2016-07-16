@@ -19,18 +19,15 @@ limitations under the License.
 
 #include "ir/ir.h"
 #include "lib/sourceCodeBuilder.h"
-//#include "target.h"
 #include "frontends/p4/typeMap.h"
 
 namespace FPGA {
 
 class CodeBuilder : public Util::SourceCodeBuilder {
  public:
-    //const Target* target;
-    //explicit CodeBuilder(const Target* target) : target(target) {}
+    explicit CodeBuilder() {}
 };
 
-// Visitor for generating C for FPGA
 // This visitor is invoked on various subtrees
 class CodeGenInspector : public Inspector {
  protected:
