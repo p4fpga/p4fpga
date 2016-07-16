@@ -416,6 +416,18 @@ module mkParser  (Parser);
     data_in_ff.deq;
   endrule
 
+  (* mutually_exclusive="rl_parse_ethernet_parse_arp, \
+                         rl_parse_ethernet_parse_ipv4, \
+                         rl_parse_ethernet_parse_ipv6, \
+                         rl_parse_ethernet_start, \
+                         rl_parse_arp_start, \
+                         rl_parse_paxos_start, \
+                         rl_parse_ipv4_parse_udp, \
+                         rl_parse_ipv4_start, \
+                         rl_parse_ipv6_start, \
+                         rl_parse_udp_parse_paxos, \
+                         rl_parse_udp_parse_paxos, \
+                         rl_parse_udp_start" *)
   rule rl_start_parse_ethernet if ((w_start_parse_ethernet));
     parse_state_ff.enq(StateParseEthernet);
     dbg3($format("%s -> %s", "start", "parse_ethernet"));
@@ -449,7 +461,6 @@ module mkParser  (Parser);
     parse_state_ff.deq;
   endrule
 
-  (* mutually_exclusive="rl_parse_ethernet_parse_arp, rl_parse_ethernet_parse_ipv4, rl_parse_ethernet_parse_ipv6, rl_parse_ethernet_start" *)
   rule rl_parse_ethernet_parse_arp if ((w_parse_ethernet_parse_arp));
     parse_state_ff.enq(StateParseArp);
     dbg3($format("%s -> %s", "parse_ethernet", "parse_arp"));
@@ -500,7 +511,6 @@ module mkParser  (Parser);
     parse_state_ff.deq;
   endrule
 
-  (* mutually_exclusive="rl_parse_arp_start" *)
   rule rl_parse_arp_start if ((w_parse_arp_start));
     parse_done[0] <= True;
     dbg3($format("%s -> %s", "parse_arp", "start"));
@@ -534,7 +544,6 @@ module mkParser  (Parser);
     parse_state_ff.deq;
   endrule
 
-  (* mutually_exclusive="rl_parse_ipv4_parse_udp, rl_parse_ipv4_start" *)
   rule rl_parse_ipv4_parse_udp if ((w_parse_ipv4_parse_udp));
     parse_state_ff.enq(StateParseUdp);
     dbg3($format("%s -> %s", "parse_ipv4", "parse_udp"));
@@ -573,7 +582,6 @@ module mkParser  (Parser);
     parse_state_ff.deq;
   endrule
 
-  (* mutually_exclusive="rl_parse_ipv6_start" *)
   rule rl_parse_ipv6_start if ((w_parse_ipv6_start));
     parse_done[0] <= True;
     dbg3($format("%s -> %s", "parse_ipv6", "start"));
@@ -607,7 +615,6 @@ module mkParser  (Parser);
     parse_state_ff.deq;
   endrule
 
-  (* mutually_exclusive="rl_parse_udp_parse_paxos, rl_parse_udp_parse_paxos, rl_parse_udp_start" *)
   rule rl_parse_udp_parse_paxos if ((w_parse_udp_parse_paxos));
     parse_state_ff.enq(StateParsePaxos);
     dbg3($format("%s -> %s", "parse_udp", "parse_paxos"));
@@ -646,7 +653,6 @@ module mkParser  (Parser);
     parse_state_ff.deq;
   endrule
 
-  (* mutually_exclusive="rl_parse_paxos_start" *)
   rule rl_parse_paxos_start if ((w_parse_paxos_start));
     parse_done[0] <= True;
     dbg3($format("%s -> %s", "parse_paxos", "start"));
