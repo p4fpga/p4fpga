@@ -25,6 +25,7 @@ namespace FPGA {
 
 class CodeBuilder : public Util::SourceCodeBuilder {
  public:
+    // target ?
     explicit CodeBuilder() {}
 };
 

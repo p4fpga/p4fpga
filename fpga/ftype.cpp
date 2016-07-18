@@ -24,6 +24,7 @@ FPGAType* FPGATypeFactory::create(const IR::Type* type) {
         result = create(canon);
         result = new FPGATypeName(type->to<IR::Type_Name>(), result);
     } else {
+        //TODO: need to support header stack
         ::error("Type %1% unsupported by FPGA", type);
     }
 

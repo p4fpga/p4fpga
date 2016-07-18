@@ -7,7 +7,7 @@
 #include "fprogram.h"
 #include "ftest.h"
 #include "ftype.h"
-#include "codeGen.h"
+//#include "codegen.h"
 
 namespace FPGA {
 void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
@@ -35,10 +35,10 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
     if (stream == nullptr)
         return;
 
-    CodeBuilder builder();
+    CodeBuilder builder;
     fpgaprog->emit(&builder);
+    LOG1("emit fpgaprog");
     *stream << builder.toString();
     stream->flush();
 }
-
 }  // namespace FPGA

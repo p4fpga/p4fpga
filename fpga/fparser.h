@@ -34,6 +34,19 @@ class FPGAParserState : public FPGAObject {
 };
 
 class FPGAParser : public FPGAObject {
+ protected:
+    void emitTypes(CodeBuilder* builder);
+    void emitParseState(CodeBuilder* builder);
+    void emitInterface(CodeBuilder* builder);
+    void emitFunctVerbosity(CodeBuilder* builder);
+    void emitRegisters(CodeBuilder* builder);
+    void emitModule(CodeBuilder* builder);
+
+    //IR::Vector<IR::PMIReg*>    reg;
+    //IR::Vector<IR::PMICReg*>   creg;
+    std::vector<IR::PMIReg*>      reg;
+    std::vector<IR::PMICReg*>     creg;
+
  public:
     const FPGAProgram*            program;
     const P4::TypeMap*            typeMap;
@@ -41,10 +54,13 @@ class FPGAParser : public FPGAObject {
     std::vector<FPGAParserState*> states;
     const IR::Parameter*          packet;
     const IR::Parameter*          headers;
+    const IR::Parameter*          userMetadata;
+    const IR::Parameter*          stdMetadata;
     FPGAType*                     headerType;
 
     explicit FPGAParser(const FPGAProgram* program, const IR::ParserBlock* block,
                         const P4::TypeMap* typeMap);
+
     void emit(CodeBuilder* builder) override;
     bool build();
 };

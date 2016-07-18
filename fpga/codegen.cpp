@@ -14,7 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "codeGen.h"
+#include "codegen.h"
+#include "ftype.h"
 
 namespace FPGA {
 
@@ -252,6 +253,7 @@ void CodeGenInspector::widthCheck(const IR::Node* node) const {
 bool CodeGenInspector::preorder(const IR::IndexedVector<IR::StatOrDecl> *v) {
     if (v == nullptr) return false;
     bool first = true;
+    return false; //FIXME: what does this do?
     VecPrint sep = getSep();
     for (auto a : *v) {
         if (!first) {
