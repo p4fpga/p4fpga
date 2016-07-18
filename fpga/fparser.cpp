@@ -43,15 +43,23 @@ class StateTranslationVisitor : public CodeGenInspector {
 //    bool preorder(const IR::MethodCallStatement* stat) override
 //    { visit(stat->methodCall); return false; }
 };
-}
 
-namespace {
 class ParserTranslationVisitor : public CodeGenInspector {
  public:
     ParserTranslationVisitor(const FPGAParser* parser, CodeBuilder* builder) :
             CodeGenInspector(builder, parser->program->typeMap) {}
     bool preorder(const IR::Type_Header* header) override;
 };
+
+class BSVTranslationVisitor : public CodeGenInspector {
+ public:
+    BSVTranslationVisitor(const FPGAParser* parser, CodeBuilder* builder) :
+        CodeGenInspector(builder, parser->program->typeMap) {}
+    bool preorder(const IR::BSV::CReg* reg) override;
+    bool preorder(const IR::BSV::Reg* reg) override;
+    bool preorder(const IR::BSV::PulseWireOR* wire) override;
+};
+
 }  // namespace
 
 bool StateTranslationVisitor::preorder(const IR::ParserState* parserState) {
@@ -110,9 +118,29 @@ bool ParserTranslationVisitor::preorder(const IR::Type_Header* type) {
     return false;
 }
 
-// RuleTranslationVisitor
+bool BSVTranslationVisitor::preorder(const IR::BSV::CReg* reg) {
+    auto r = reg->to<IR::BSV::CReg>();
+    builder->emitIndent();
+    builder->appendFormat("CReg#(%s) %s <- mkCReg(%d, 0);", r->type, r->name, r->size);
+    builder->newline();
+    return false;
+}
 
-// MethodTranslationVisitor
+bool BSVTranslationVisitor::preorder(const IR::BSV::Reg* reg) {
+    auto r = reg->to<IR::BSV::Reg>();
+    builder->emitIndent();
+    builder->appendFormat("Reg#(%s) %s <- mkReg(%d, 0);", r->type, r->name, r->size);
+    builder->newline();
+    return false;
+}
+
+bool BSVTranslationVisitor::preorder(const IR::BSV::PulseWireOR* wire) {
+    auto r = wire->to<IR::BSV::PulseWireOR>();
+    builder->emitIndent();
+    builder->appendFormat("PulseWire %s <- mkPulseWireOR();", r->name);
+    builder->newline();
+    return false;
+}
 
 //////////////////////////////////////////////////////////////////
 
@@ -124,7 +152,8 @@ void FPGAParserState::emit(CodeBuilder* builder) {
 FPGAParser::FPGAParser(const FPGAProgram* program,
                        const IR::ParserBlock* block, const P4::TypeMap* typeMap) :
         program(program), typeMap(typeMap), parserBlock(block), packet(nullptr),
-        headers(nullptr), headerType(nullptr) {}
+        headers(nullptr), headerType(nullptr) {
+}
 
 void FPGAParser::emitTypes(CodeBuilder* builder) {
     // assume all headers are parsed_out
@@ -132,6 +161,7 @@ void FPGAParser::emitTypes(CodeBuilder* builder) {
     auto htype = typeMap->getType(headers);
     if (htype == nullptr)
         return;
+
     for (auto f : *htype->to<IR::Type_Struct>()->fields) {
         auto ftype = typeMap->getType(f);
         if (ftype->is<IR::Type_Header>()) {
@@ -190,46 +220,29 @@ void FPGAParser::emitFunctVerbosity(CodeBuilder* builder) {
     builder->appendLine("endrule");
 }
 
-void FPGAParser::emitRegisters(CodeBuilder* builder) {
-    // alternative impl:
-    // vars.push_back(IR::BSVCReg("rg_next_header_len", 32, 3, 0));
-    // vars.push_back(IR::BSVCReg("rg_buffered", 32, 3, 0));
-    // vars.push_back(IR::BSVCReg("rg_shift_amt", 32, 3, 0));
-    // vars.push_back(IR::BSVCReg("rg_tmp", 32, 2, 0));
-    // for (auto v: vars) {
-    //   BSVTranslationVisitor visitor(this, builder);
-    //   v.apply(visitor);
-    // }
+void FPGAParser::emitRules(CodeBuilder* builder) {
     builder->emitIndent();
-    builder->appendLine("Reg#(Bit#(32)) rg_next_header_len[3] <- mkCReg(3, 0);");
-    builder->emitIndent();
-    builder->appendLine("Reg#(Bit#(32)) rg_buffered[3] <- mkCReg(3, 0);");
-    builder->emitIndent();
-    builder->appendLine("Reg#(Bit#(32)) rg_shift_amt[3] <- mkCReg(3, 0);");
-    builder->emitIndent();
-    builder->appendLine("Reg#(Bit#(32)) rg_tmp[2] <- mkCReg(2, 0);");
+    builder->appendLine("");
 }
 
+#define VECTOR_VISIT(V)                               \
+    for (auto r: V) {                                 \
+        BSVTranslationVisitor visitor(this, builder); \
+        r->apply(visitor);                            \
+    }
 void FPGAParser::emitModule(CodeBuilder* builder) {
     builder->appendLine("module mkParser (Parser);");
     builder->increaseIndent();
+    VECTOR_VISIT(creg);
+    VECTOR_VISIT(reg);
+
     emitFunctVerbosity(builder);
-    emitRegisters(builder);
+
+    VECTOR_VISIT(rules);
     builder->decreaseIndent();
     builder->append("}");
-    for (auto f : creg) {
-        //BSVTranslationVisitor visitor(this, builder);
-        //f->apply(visitor);
-        LOG1(f->toString());
-    }
-    for (auto r : reg) {
-        LOG1(r->toString());
-    }
-    builder->newline();
-    /* reg */
-    /* rules */
-    /* method */
 }
+#undef VECTOR_VISIT
 
 // emit BSV_IR with BSV-specific CodeGenInspector
 void FPGAParser::emit(CodeBuilder *builder) {
@@ -263,14 +276,17 @@ bool FPGAParser::build() {
         states.push_back(ps);
     }
 
-    LOG1(parserBlock->instanceType);
-    for (auto s : parserBlock->constantValue) {
-        auto b = s.second;
-        LOG1("s " << s.second);
-    }
-
     //headerType = FPGATypeFactory::instance->create(headersType);
-    creg.push_back(new IR::PMICReg("parse_done", "Bool", 2));
+    creg.push_back(new IR::BSV::CReg("parse_done", "Bool", 2));
+    creg.push_back(new IR::BSV::CReg("rg_next_header_len", "Bit#(32)", 3));
+    creg.push_back(new IR::BSV::CReg("rg_buffered", "Bit#(32)", 3));
+    creg.push_back(new IR::BSV::CReg("rg_shift_amt", "Bit#(32)", 3));
+    creg.push_back(new IR::BSV::CReg("rg_tmp", "Bit#(512)", 3));
+
+    wires.push_back(new IR::BSV::PulseWireOR("w_parse_header_done"));
+    wires.push_back(new IR::BSV::PulseWireOR("w_load_header"));
+
+    // build rules
 
     return true;
 }

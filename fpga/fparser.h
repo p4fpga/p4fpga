@@ -39,13 +39,13 @@ class FPGAParser : public FPGAObject {
     void emitParseState(CodeBuilder* builder);
     void emitInterface(CodeBuilder* builder);
     void emitFunctVerbosity(CodeBuilder* builder);
-    void emitRegisters(CodeBuilder* builder);
     void emitModule(CodeBuilder* builder);
+    void emitRules(CodeBuilder* builder);
 
-    //IR::Vector<IR::PMIReg*>    reg;
-    //IR::Vector<IR::PMICReg*>   creg;
-    std::vector<IR::PMIReg*>      reg;
-    std::vector<IR::PMICReg*>     creg;
+    std::vector<IR::BSV::Reg*>          reg;
+    std::vector<IR::BSV::CReg*>         creg;
+    std::vector<IR::BSV::PulseWireOR*>  wires;
+    std::vector<IR::BSV::Rule*>         rules;
 
  public:
     const FPGAProgram*            program;

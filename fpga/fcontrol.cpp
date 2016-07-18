@@ -29,7 +29,7 @@ bool FPGAControl::build() {
 }
 
 void FPGAControl::emit(CodeBuilder* builder) {
-
+    //
 }
 
 } // namespace FPGA
