@@ -13,6 +13,7 @@
 # limitations under the License.
 #
 
+import math
 import astbsv as ast
 from utils import CamelCase, GetFieldWidth
 import primitives as prm
@@ -22,7 +23,7 @@ def get_reg_array_size(name, json_dict):
         if array['name'] == name:
             bitwidth = array['bitwidth']
             size = array['size']
-            return bitwidth, size
+            return bitwidth, int(math.log(size+1, 2))
 
 class Primitive(object):
     """
