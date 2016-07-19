@@ -149,7 +149,7 @@ class Parser(object):
                 for idx, t in enumerate(transition):
                     _value, _mask, _stmt = build_transition(name, t)
                     expr = "(v & %s) == %s" % (_mask, _value) if _mask != None else "v == %s" % (_value)
-                    if _value == 'start':
+                    if _value == 'start' or _value == 'default':
                         ab_stmt.append(ast.Else(_stmt))
                     else:
                         if idx == 0:
@@ -530,5 +530,4 @@ class Parser(object):
             return all_states
         else:
             return [ curr_state ]
-
 
