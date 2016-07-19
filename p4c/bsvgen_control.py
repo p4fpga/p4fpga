@@ -16,6 +16,7 @@
 import logging
 import astbsv as ast
 import exceptions
+import math
 from utils import CamelCase, camelCase
 from collections import OrderedDict
 
@@ -56,7 +57,7 @@ class Control (object):
         stmt = []
         for r in self.registers:
             dsz = r['bitwidth']
-            asz = r['size']
+            asz = int(math.log(r['size']+1, 2))
             name = r['name']
             stmt.append(ast.Template(TMP1, {"asz": asz, "dsz": dsz, "name": name, "client": "nil"}))
         return stmt
