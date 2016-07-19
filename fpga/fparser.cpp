@@ -286,7 +286,8 @@ bool FPGAParser::build() {
     wires.push_back(new IR::BSV::PulseWireOR("w_parse_header_done"));
     wires.push_back(new IR::BSV::PulseWireOR("w_load_header"));
 
-    // build rules
+    auto rl_load = new IR::BSV::ParseLoadRule();
+    auto rl_extract = new IR::BSV::ParseExtractRule();
 
     return true;
 }
