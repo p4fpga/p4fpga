@@ -77,6 +77,7 @@ parse_options(int argc, char *argv[], char **pcap_file, struct arg_info* info) {
     static struct option long_options [] = {
         {"help",                no_argument, 0, 'h'},
         {"pcap",                required_argument, 0, 'p'},
+        {"verbosity",           required_argument, 0, 'T'},
         {0, 0, 0, 0}
     };
 
@@ -95,6 +96,9 @@ parse_options(int argc, char *argv[], char **pcap_file, struct arg_info* info) {
                 break;
             case 'p':
                 *pcap_file = optarg;
+                break;
+            case 'T':
+                fprintf(stderr, "%s", optarg);
                 break;
             default:
                 break;

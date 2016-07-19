@@ -200,6 +200,442 @@ typedef struct {
 instance DefaultValue#(MetadataT);
   defaultValue = unpack(0);
 endinstance
+// ====== PARSER ======
+
+typedef enum {
+  StateStart,
+  StateParseEthernet,
+  StateParseFabricHeader,
+  StateParseFabricHeaderUnicast,
+  StateParseFabricHeaderMulticast,
+  StateParseFabricHeaderMirror,
+  StateParseFabricHeaderCpu,
+  StateParseFabricPayloadHeader,
+  StateParseIpv4
+} ParserState deriving (Bits, Eq);
+interface Parser;
+  interface Put#(EtherData) frameIn;
+  interface Get#(MetadataT) meta;
+  interface Put#(int) verbosity;
+  method ParserPerfRec read_perf_info ();
+endinterface
+module mkParser  (Parser);
+  PulseWire w_parse_fabric_header_start <- mkPulseWireOR();
+  PulseWire w_parse_ipv4_start <- mkPulseWireOR();
+  PulseWire w_parse_fabric_header_mirror_parse_fabric_payload_header <- mkPulseWireOR();
+  PulseWire w_parse_fabric_header_unicast_parse_fabric_payload_header <- mkPulseWireOR();
+  PulseWire w_parse_ethernet_parse_ipv4 <- mkPulseWireOR();
+  PulseWire w_parse_fabric_header_parse_fabric_header_cpu <- mkPulseWireOR();
+  PulseWire w_parse_fabric_header_cpu_parse_fabric_payload_header <- mkPulseWireOR();
+  PulseWire w_parse_fabric_header_parse_fabric_header_mirror <- mkPulseWireOR();
+  PulseWire w_parse_fabric_header_parse_fabric_header_unicast <- mkPulseWireOR();
+  PulseWire w_parse_fabric_payload_header_parse_ipv4 <- mkPulseWireOR();
+  PulseWire w_parse_ethernet_parse_fabric_header <- mkPulseWireOR();
+  PulseWire w_parse_fabric_header_parse_fabric_header_multicast <- mkPulseWireOR();
+  PulseWire w_parse_fabric_header_multicast_parse_fabric_payload_header <- mkPulseWireOR();
+  Reg#(ParserState) rg_parse_state <- mkReg(StateStart);
+  Reg#(int) cr_verbosity[2] <- mkCRegU(2);
+  FIFOF#(int) cr_verbosity_ff <- mkFIFOF;
+  rule set_verbosity;
+    let x = cr_verbosity_ff.first;
+    cr_verbosity_ff.deq;
+    cr_verbosity[1] <= x;
+  endrule
+
+  FIFOF#(EtherData) data_in_ff <- mkFIFOF;
+  FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;
+  PulseWire parse_done <- mkPulseWire();
+  Reg#(Bit#(32)) rg_next_header_len[3] <- mkCReg(3, 0);
+  Reg#(Bit#(32)) rg_buffered[3] <- mkCReg(3, 0);
+  Reg#(Bit#(32)) rg_shift_amt[3] <- mkCReg(3, 0);
+  Reg#(Bit#(512)) rg_tmp <- mkReg(0);
+  Reg#(Bool) rg_dequeue_data[3] <- mkCReg(3, False);
+  function Action dbg3(Fmt msg);
+    action
+      if (cr_verbosity[0] > 3) begin
+        $display("(%0d) ", $time, msg);
+      end
+    endaction
+  endfunction
+  function Action succeed_and_next(Bit#(32) offset);
+    action
+      rg_buffered[0] <= rg_buffered[0] - offset;
+      rg_shift_amt[0] <= rg_buffered[0] - offset;
+      dbg3($format("succeed_and_next subtract offset = %d shift_amt/buffered = %d", offset, rg_buffered[0] - offset));
+    endaction
+  endfunction
+  function Action fetch_next_header(Bit#(32) len);
+    action
+      rg_next_header_len[0] <= len;
+    endaction
+  endfunction
+  function Action failed_and_trap(Bit#(32) offset);
+    action
+      rg_buffered[0] <= 0;
+    endaction
+  endfunction
+  function Action report_parse_action(ParserState state, Bit#(32) offset, Bit#(128) data, Bit#(512) buff);
+    action
+      if (cr_verbosity[0] > 3) begin
+        $display("(%0d) Parser State %h buffered %d, %h, %h", $time, state, offset, data, buff);
+      end
+    endaction
+  endfunction
+  function Action compute_next_state_parse_ethernet(Bit#(16) etherType);
+    action
+      let v = {etherType};
+      case (v) matches
+        'h9000: begin
+          dbg3($format("transit to parse_fabric_header"));
+          w_parse_ethernet_parse_fabric_header.send();
+        end
+        'h0800: begin
+          dbg3($format("transit to parse_ipv4"));
+          w_parse_ethernet_parse_ipv4.send();
+        end
+      endcase
+    endaction
+  endfunction
+  function Action compute_next_state_parse_fabric_header(Bit#(3) packetType);
+    action
+      let v = {packetType};
+      case (v) matches
+        'h01: begin
+          dbg3($format("transit to parse_fabric_header_unicast"));
+          w_parse_fabric_header_parse_fabric_header_unicast.send();
+        end
+        'h02: begin
+          dbg3($format("transit to parse_fabric_header_multicast"));
+          w_parse_fabric_header_parse_fabric_header_multicast.send();
+        end
+        'h03: begin
+          dbg3($format("transit to parse_fabric_header_mirror"));
+          w_parse_fabric_header_parse_fabric_header_mirror.send();
+        end
+        'h05: begin
+          dbg3($format("transit to parse_fabric_header_cpu"));
+          w_parse_fabric_header_parse_fabric_header_cpu.send();
+        end
+        default: begin
+          dbg3($format("transit to start"));
+          w_parse_fabric_header_start.send();
+        end
+      endcase
+    endaction
+  endfunction
+  function Action compute_next_state_parse_fabric_header_unicast();
+    action
+      dbg3($format("transit to parse_fabric_payload_header"));
+      w_parse_fabric_header_unicast_parse_fabric_payload_header.send();
+    endaction
+  endfunction
+  function Action compute_next_state_parse_fabric_header_multicast();
+    action
+      dbg3($format("transit to parse_fabric_payload_header"));
+      w_parse_fabric_header_multicast_parse_fabric_payload_header.send();
+    endaction
+  endfunction
+  function Action compute_next_state_parse_fabric_header_mirror();
+    action
+      dbg3($format("transit to parse_fabric_payload_header"));
+      w_parse_fabric_header_mirror_parse_fabric_payload_header.send();
+    endaction
+  endfunction
+  function Action compute_next_state_parse_fabric_header_cpu();
+    action
+      dbg3($format("transit to parse_fabric_payload_header"));
+      w_parse_fabric_header_cpu_parse_fabric_payload_header.send();
+    endaction
+  endfunction
+  function Action compute_next_state_parse_fabric_payload_header(Bit#(16) etherType);
+    action
+      let v = {etherType};
+      case (v) matches
+        'h0800: begin
+          dbg3($format("transit to parse_ipv4"));
+          w_parse_fabric_payload_header_parse_ipv4.send();
+        end
+      endcase
+    endaction
+  endfunction
+  function Action compute_next_state_parse_ipv4(Bit#(13) fragOffset, Bit#(4) ihl, Bit#(8) protocol);
+    action
+      let v = {fragOffset, ihl, protocol};
+      case (v) matches
+        default: begin
+          dbg3($format("transit to start"));
+          w_parse_ipv4_start.send();
+        end
+      endcase
+    endaction
+  endfunction
+
+  let sop_this_cycle = data_in_ff.first.sop;
+  let eop_this_cycle = data_in_ff.first.eop;
+  let data_this_cycle = data_in_ff.first.data;
+
+  rule rl_data_ff_load if (rg_buffered[1] < rg_next_header_len[1]);
+    rg_buffered[1] <= rg_buffered[1] + 128;
+    data_in_ff.deq;
+    rg_dequeue_data[1] <= True;
+    dbg3($format("dequeue data %d %d", rg_buffered[1], rg_next_header_len[1]));
+  endrule
+
+  rule rl_data_ff_idle if (rg_buffered[1] >= rg_next_header_len[1]);
+    rg_dequeue_data[1] <= False;
+  endrule
+
+  rule rl_start_state if ((rg_parse_state == StateStart) && sop_this_cycle);
+    rg_parse_state <= StateParseEthernet;
+    rg_buffered[0] <= 128;
+    rg_shift_amt[0] <= 0;
+    rg_dequeue_data[2] <= True;
+    dbg3($format("start state -> ethernet"));
+  endrule
+
+  rule rl_start_state_wait if ((rg_parse_state == StateStart) && !sop_this_cycle);
+    data_in_ff.deq;
+  endrule
+
+  (* fire_when_enabled *)
+  rule rl_parse_ethernet_load if ((rg_parse_state == StateParseEthernet) && (rg_buffered[0] < 112));
+    report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle, rg_tmp);
+  endrule
+
+  (* fire_when_enabled *)
+  rule rl_parse_ethernet_extract if ((rg_parse_state == StateParseEthernet) && (rg_buffered[0] >= 112));
+    let data = rg_tmp;
+    if (rg_dequeue_data[0] == True) begin
+      data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp;
+    end
+    report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle, data);
+    let ethernet_t = extract_ethernet_t(truncate(data));
+    compute_next_state_parse_ethernet(ethernet_t.etherType);
+    rg_tmp <= zeroExtend(data >> 112);
+    succeed_and_next(112);
+    dbg3($format("extract %s %h", "parse_ethernet", rg_dequeue_data[0]));
+  endrule
+
+  (* mutually_exclusive="rl_parse_ethernet_parse_fabric_header, rl_parse_ethernet_parse_ipv4" *)
+  rule rl_parse_ethernet_parse_fabric_header if ((rg_parse_state == StateParseEthernet) && (w_parse_ethernet_parse_fabric_header));
+    rg_parse_state <= StateParseFabricHeader;
+    dbg3($format("%s -> %s", "parse_ethernet", "parse_fabric_header"));
+    fetch_next_header(40);
+  endrule
+
+  rule rl_parse_ethernet_parse_ipv4 if ((rg_parse_state == StateParseEthernet) && (w_parse_ethernet_parse_ipv4));
+    rg_parse_state <= StateParseIpv4;
+    dbg3($format("%s -> %s", "parse_ethernet", "parse_ipv4"));
+    fetch_next_header(160);
+  endrule
+
+  (* fire_when_enabled *)
+  rule rl_parse_fabric_header_load if ((rg_parse_state == StateParseFabricHeader) && (rg_buffered[0] < 40));
+    report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle, rg_tmp);
+  endrule
+
+  (* fire_when_enabled *)
+  rule rl_parse_fabric_header_extract if ((rg_parse_state == StateParseFabricHeader) && (rg_buffered[0] >= 40));
+    let data = rg_tmp;
+    if (rg_dequeue_data[0] == True) begin
+      data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp;
+    end
+    report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle, data);
+    let fabric_header_t = extract_fabric_header_t(truncate(data));
+    compute_next_state_parse_fabric_header(fabric_header_t.packetType);
+    rg_tmp <= zeroExtend(data >> 40);
+    succeed_and_next(40);
+    dbg3($format("extract %s %h", "parse_fabric_header", rg_dequeue_data[0]));
+  endrule
+
+  (* mutually_exclusive="rl_parse_fabric_header_parse_fabric_header_unicast, rl_parse_fabric_header_parse_fabric_header_multicast, rl_parse_fabric_header_parse_fabric_header_mirror, rl_parse_fabric_header_parse_fabric_header_cpu, rl_parse_fabric_header_start" *)
+  rule rl_parse_fabric_header_parse_fabric_header_unicast if ((rg_parse_state == StateParseFabricHeader) && (w_parse_fabric_header_parse_fabric_header_unicast));
+    rg_parse_state <= StateParseFabricHeaderUnicast;
+    dbg3($format("%s -> %s", "parse_fabric_header", "parse_fabric_header_unicast"));
+    fetch_next_header(24);
+  endrule
+
+  rule rl_parse_fabric_header_parse_fabric_header_multicast if ((rg_parse_state == StateParseFabricHeader) && (w_parse_fabric_header_parse_fabric_header_multicast));
+    rg_parse_state <= StateParseFabricHeaderMulticast;
+    dbg3($format("%s -> %s", "parse_fabric_header", "parse_fabric_header_multicast"));
+    fetch_next_header(56);
+  endrule
+
+  rule rl_parse_fabric_header_parse_fabric_header_mirror if ((rg_parse_state == StateParseFabricHeader) && (w_parse_fabric_header_parse_fabric_header_mirror));
+    rg_parse_state <= StateParseFabricHeaderMirror;
+    dbg3($format("%s -> %s", "parse_fabric_header", "parse_fabric_header_mirror"));
+    fetch_next_header(32);
+  endrule
+
+  rule rl_parse_fabric_header_parse_fabric_header_cpu if ((rg_parse_state == StateParseFabricHeader) && (w_parse_fabric_header_parse_fabric_header_cpu));
+    rg_parse_state <= StateParseFabricHeaderCpu;
+    dbg3($format("%s -> %s", "parse_fabric_header", "parse_fabric_header_cpu"));
+    fetch_next_header(72);
+  endrule
+
+  rule rl_parse_fabric_header_start if ((rg_parse_state == StateParseFabricHeader) && (w_parse_fabric_header_start));
+    rg_parse_state <= StateStart;
+    dbg3($format("%s -> %s", "parse_fabric_header", "start"));
+    fetch_next_header(0);
+  endrule
+
+  (* fire_when_enabled *)
+  rule rl_parse_fabric_header_unicast_load if ((rg_parse_state == StateParseFabricHeaderUnicast) && (rg_buffered[0] < 24));
+    report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle, rg_tmp);
+  endrule
+
+  (* fire_when_enabled *)
+  rule rl_parse_fabric_header_unicast_extract if ((rg_parse_state == StateParseFabricHeaderUnicast) && (rg_buffered[0] >= 24));
+    let data = rg_tmp;
+    if (rg_dequeue_data[0] == True) begin
+      data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp;
+    end
+    report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle, data);
+    compute_next_state_parse_fabric_header_unicast();
+    rg_tmp <= zeroExtend(data >> 24);
+    succeed_and_next(24);
+    dbg3($format("extract %s %h", "parse_fabric_header_unicast", rg_dequeue_data[0]));
+  endrule
+
+  (* mutually_exclusive="rl_parse_fabric_header_unicast_parse_fabric_payload_header" *)
+  rule rl_parse_fabric_header_unicast_parse_fabric_payload_header if ((rg_parse_state == StateParseFabricHeaderUnicast) && (w_parse_fabric_header_unicast_parse_fabric_payload_header));
+    rg_parse_state <= StateParseFabricPayloadHeader;
+    dbg3($format("%s -> %s", "parse_fabric_header_unicast", "parse_fabric_payload_header"));
+    fetch_next_header(16);
+  endrule
+
+  (* fire_when_enabled *)
+  rule rl_parse_fabric_header_multicast_load if ((rg_parse_state == StateParseFabricHeaderMulticast) && (rg_buffered[0] < 56));
+    report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle, rg_tmp);
+  endrule
+
+  (* fire_when_enabled *)
+  rule rl_parse_fabric_header_multicast_extract if ((rg_parse_state == StateParseFabricHeaderMulticast) && (rg_buffered[0] >= 56));
+    let data = rg_tmp;
+    if (rg_dequeue_data[0] == True) begin
+      data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp;
+    end
+    report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle, data);
+    compute_next_state_parse_fabric_header_multicast();
+    rg_tmp <= zeroExtend(data >> 56);
+    succeed_and_next(56);
+    dbg3($format("extract %s %h", "parse_fabric_header_multicast", rg_dequeue_data[0]));
+  endrule
+
+  (* mutually_exclusive="rl_parse_fabric_header_multicast_parse_fabric_payload_header" *)
+  rule rl_parse_fabric_header_multicast_parse_fabric_payload_header if ((rg_parse_state == StateParseFabricHeaderMulticast) && (w_parse_fabric_header_multicast_parse_fabric_payload_header));
+    rg_parse_state <= StateParseFabricPayloadHeader;
+    dbg3($format("%s -> %s", "parse_fabric_header_multicast", "parse_fabric_payload_header"));
+    fetch_next_header(16);
+  endrule
+
+  (* fire_when_enabled *)
+  rule rl_parse_fabric_header_mirror_load if ((rg_parse_state == StateParseFabricHeaderMirror) && (rg_buffered[0] < 32));
+    report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle, rg_tmp);
+  endrule
+
+  (* fire_when_enabled *)
+  rule rl_parse_fabric_header_mirror_extract if ((rg_parse_state == StateParseFabricHeaderMirror) && (rg_buffered[0] >= 32));
+    let data = rg_tmp;
+    if (rg_dequeue_data[0] == True) begin
+      data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp;
+    end
+    report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle, data);
+    compute_next_state_parse_fabric_header_mirror();
+    rg_tmp <= zeroExtend(data >> 32);
+    succeed_and_next(32);
+    dbg3($format("extract %s %h", "parse_fabric_header_mirror", rg_dequeue_data[0]));
+  endrule
+
+  (* mutually_exclusive="rl_parse_fabric_header_mirror_parse_fabric_payload_header" *)
+  rule rl_parse_fabric_header_mirror_parse_fabric_payload_header if ((rg_parse_state == StateParseFabricHeaderMirror) && (w_parse_fabric_header_mirror_parse_fabric_payload_header));
+    rg_parse_state <= StateParseFabricPayloadHeader;
+    dbg3($format("%s -> %s", "parse_fabric_header_mirror", "parse_fabric_payload_header"));
+    fetch_next_header(16);
+  endrule
+
+  (* fire_when_enabled *)
+  rule rl_parse_fabric_header_cpu_load if ((rg_parse_state == StateParseFabricHeaderCpu) && (rg_buffered[0] < 72));
+    report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle, rg_tmp);
+  endrule
+
+  (* fire_when_enabled *)
+  rule rl_parse_fabric_header_cpu_extract if ((rg_parse_state == StateParseFabricHeaderCpu) && (rg_buffered[0] >= 72));
+    let data = rg_tmp;
+    if (rg_dequeue_data[0] == True) begin
+      data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp;
+    end
+    report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle, data);
+    compute_next_state_parse_fabric_header_cpu();
+    rg_tmp <= zeroExtend(data >> 72);
+    succeed_and_next(72);
+    dbg3($format("extract %s %h", "parse_fabric_header_cpu", rg_dequeue_data[0]));
+  endrule
+
+  (* mutually_exclusive="rl_parse_fabric_header_cpu_parse_fabric_payload_header" *)
+  rule rl_parse_fabric_header_cpu_parse_fabric_payload_header if ((rg_parse_state == StateParseFabricHeaderCpu) && (w_parse_fabric_header_cpu_parse_fabric_payload_header));
+    rg_parse_state <= StateParseFabricPayloadHeader;
+    dbg3($format("%s -> %s", "parse_fabric_header_cpu", "parse_fabric_payload_header"));
+    fetch_next_header(16);
+  endrule
+
+  (* fire_when_enabled *)
+  rule rl_parse_fabric_payload_header_load if ((rg_parse_state == StateParseFabricPayloadHeader) && (rg_buffered[0] < 16));
+    report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle, rg_tmp);
+  endrule
+
+  (* fire_when_enabled *)
+  rule rl_parse_fabric_payload_header_extract if ((rg_parse_state == StateParseFabricPayloadHeader) && (rg_buffered[0] >= 16));
+    let data = rg_tmp;
+    if (rg_dequeue_data[0] == True) begin
+      data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp;
+    end
+    report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle, data);
+    let fabric_payload_header_t = extract_fabric_payload_header_t(truncate(data));
+    compute_next_state_parse_fabric_payload_header(fabric_payload_header_t.etherType);
+    rg_tmp <= zeroExtend(data >> 16);
+    succeed_and_next(16);
+    dbg3($format("extract %s %h", "parse_fabric_payload_header", rg_dequeue_data[0]));
+  endrule
+
+  (* mutually_exclusive="rl_parse_fabric_payload_header_parse_ipv4" *)
+  rule rl_parse_fabric_payload_header_parse_ipv4 if ((rg_parse_state == StateParseFabricPayloadHeader) && (w_parse_fabric_payload_header_parse_ipv4));
+    rg_parse_state <= StateParseIpv4;
+    dbg3($format("%s -> %s", "parse_fabric_payload_header", "parse_ipv4"));
+    fetch_next_header(160);
+  endrule
+
+  (* fire_when_enabled *)
+  rule rl_parse_ipv4_load if ((rg_parse_state == StateParseIpv4) && (rg_buffered[0] < 160));
+    report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle, rg_tmp);
+  endrule
+
+  (* fire_when_enabled *)
+  rule rl_parse_ipv4_extract if ((rg_parse_state == StateParseIpv4) && (rg_buffered[0] >= 160));
+    let data = rg_tmp;
+    if (rg_dequeue_data[0] == True) begin
+      data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp;
+    end
+    report_parse_action(rg_parse_state, rg_buffered[0], data_this_cycle, data);
+    let ipv4_t = extract_ipv4_t(truncate(data));
+    compute_next_state_parse_ipv4(ipv4_t.fragOffset,ipv4_t.ihl,ipv4_t.protocol);
+    rg_tmp <= zeroExtend(data >> 160);
+    succeed_and_next(160);
+    dbg3($format("extract %s %h", "parse_ipv4", rg_dequeue_data[0]));
+  endrule
+
+  (* mutually_exclusive="rl_parse_ipv4_start" *)
+  rule rl_parse_ipv4_start if ((rg_parse_state == StateParseIpv4) && (w_parse_ipv4_start));
+    rg_parse_state <= StateStart;
+    dbg3($format("%s -> %s", "parse_ipv4", "start"));
+    fetch_next_header(0);
+  endrule
+
+  interface frameIn = toPut(data_in_ff);
+  interface meta = toGet(meta_in_ff);
+  interface verbosity = toPut(cr_verbosity_ff);
+endmodule
+
 // ====== DEPARSER ======
 
 typedef enum {
@@ -207,9 +643,9 @@ typedef enum {
   StateEthernet,
   StateFabricHeader,
   StateFabricHeaderMulticast,
+  StateFabricHeaderUnicast,
   StateFabricHeaderCpu,
   StateFabricHeaderMirror,
-  StateFabricHeaderUnicast,
   StateFabricPayloadHeader,
   StateIpv4
 } DeparserState deriving (Bits, Eq);

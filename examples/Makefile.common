@@ -37,7 +37,7 @@ BURST_LEN_SIZE=12
 ALL: codegen simgen
 
 codegen: $(P4FILE)
-	python ${P4FPGADIR}/p4c/bsvgen.py $(P4FILE)
+	$(foreach file, $(P4FILE), python ${P4FPGADIR}/p4c/bsvgen.py $(file);)
 
 simgen: codegen
 	make build.bluesim

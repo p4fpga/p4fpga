@@ -492,7 +492,7 @@ parser parse_ff {
 	return ingress;
 }
 
-action _decode_1e () {
+action do_decode_1e () {
 	remove_header(type_1e);
 	modify_field(xgmii.ctrl0, 1);
 	modify_field(xgmii.data0, 0x7F);
@@ -515,11 +515,11 @@ action _decode_1e () {
 
 table decode_1e {
 	actions {
-		_decode_1e;
+		do_decode_1e;
 	}
 }
 
-action _decode_2d () {
+action do_decode_2d () {
 	remove_header(type_2d);
 	modify_field(xgmii.ctrl0, 1);
 	modify_field(xgmii.data0, 0x7F);
@@ -542,11 +542,11 @@ action _decode_2d () {
 
 table decode_2d {
 	actions {
-		_decode_2d;
+		do_decode_2d;
 	}
 }
 
-action _decode_33 () {
+action do_decode_33 () {
 	remove_header(type_33);
 	modify_field(xgmii.ctrl0, 1);
 	modify_field(xgmii.data0, 0x7F);
@@ -569,11 +569,11 @@ action _decode_33 () {
 
 table decode_33 {
 	actions {
-		_decode_33;
+		do_decode_33;
 	}
 }
 
-action _decode_66 () {
+action do_decode_66 () {
 	remove_header(type_66);
 	modify_field(xgmii.ctrl0, 1);
 	modify_field(xgmii.data0, 0x9C);
@@ -596,11 +596,11 @@ action _decode_66 () {
 
 table decode_66 {
 	actions {
-		_decode_66;
+		do_decode_66;
 	}
 }
 
-action _decode_55 () {
+action do_decode_55 () {
 	remove_header(type_55);
 	modify_field(xgmii.ctrl0, 1);
 	modify_field(xgmii.data0, 0x9C);
@@ -623,11 +623,11 @@ action _decode_55 () {
 
 table decode_55 {
 	actions {
-		_decode_55;
+		do_decode_55;
 	}
 }
 
-action _decode_78 () {
+action do_decode_78 () {
 	remove_header(type_78);
 	modify_field(xgmii.ctrl0, 1);
 	modify_field(xgmii.data0, 0xFB);
@@ -650,11 +650,11 @@ action _decode_78 () {
 
 table decode_78 {
 	actions {
-		_decode_78;
+		do_decode_78;
 	}
 }
 
-action _decode_4b () {
+action do_decode_4b () {
 	remove_header(type_4b);
 	modify_field(xgmii.ctrl0, 1);
 	modify_field(xgmii.data0, 0x9C);
@@ -677,11 +677,11 @@ action _decode_4b () {
 
 table decode_4b {
 	actions {
-		_decode_4b;
+		do_decode_4b;
 	}
 }
 
-action _decode_87 () {
+action do_decode_87 () {
 	remove_header(type_87);
 	modify_field(xgmii.ctrl0, 1);
 	modify_field(xgmii.data0, 0xfd);
@@ -704,11 +704,11 @@ action _decode_87 () {
 
 table decode_87 {
 	actions {
-		_decode_87;
+		do_decode_87;
 	}
 }
 
-action _decode_99 () {
+action do_decode_99 () {
 	remove_header(type_99);
 	modify_field(xgmii.ctrl0, 1);
 	modify_field(xgmii.data0, pcs_md.d0);
@@ -731,11 +731,11 @@ action _decode_99 () {
 
 table decode_99 {
 	actions {
-		_decode_99;
+		do_decode_99;
 	}
 }
 
-action _decode_aa () {
+action do_decode_aa () {
 	remove_header(type_aa);
 	modify_field(xgmii.ctrl0, 1);
 	modify_field(xgmii.data0, pcs_md.d0);
@@ -758,11 +758,11 @@ action _decode_aa () {
 
 table decode_aa {
 	actions {
-		_decode_aa;
+		do_decode_aa;
 	}
 }
 
-action _decode_b4 () {
+action do_decode_b4 () {
 	remove_header(type_b4);
 	modify_field(xgmii.ctrl0, 1);
 	modify_field(xgmii.data0, pcs_md.d0);
@@ -785,11 +785,11 @@ action _decode_b4 () {
 
 table decode_b4 {
 	actions {
-		_decode_b4;
+		do_decode_b4;
 	}
 }
 
-action _decode_cc () {
+action do_decode_cc () {
 	remove_header(type_cc);
 	modify_field(xgmii.ctrl0, 1);
 	modify_field(xgmii.data0, pcs_md.d0);
@@ -812,11 +812,11 @@ action _decode_cc () {
 
 table decode_cc {
 	actions {
-		_decode_cc;
+		do_decode_cc;
 	}
 }
 
-action _decode_d2 () {
+action do_decode_d2 () {
 	remove_header(type_d2);
 	modify_field(xgmii.ctrl0, 1);
 	modify_field(xgmii.data0, pcs_md.d0);
@@ -839,11 +839,11 @@ action _decode_d2 () {
 
 table decode_d2 {
 	actions {
-		_decode_d2;
+		do_decode_d2;
 	}
 }
 
-action _decode_e1 () {
+action do_decode_e1 () {
 	remove_header(type_e1);
 	modify_field(xgmii.ctrl0, 1);
 	modify_field(xgmii.data0, pcs_md.d0);
@@ -866,11 +866,11 @@ action _decode_e1 () {
 
 table decode_e1 {
 	actions {
-		_decode_e1;
+		do_decode_e1;
 	}
 }
 
-action _decode_ff () {
+action do_decode_ff () {
 	remove_header(type_ff);
 	modify_field(xgmii.ctrl0, 1);
 	modify_field(xgmii.data0, pcs_md.d0);
@@ -893,7 +893,7 @@ action _decode_ff () {
 
 table decode_ff {
 	actions {
-		_decode_ff;
+		do_decode_ff;
 	}
 }
 

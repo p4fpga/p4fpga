@@ -44,17 +44,27 @@ class FabricMirror(Packet):
         BitField('egressQueue', 0, 5),
         BitField('pad', 0, 1)]
 
+class FabricPayload(Packet):
+    name = "Fabric Payload "
+    fields_desc = [ ShortField('etherType', 0x800) ]
+
 def generate(args):
-    p0 = Ether(src="00:00:00:00:00:01", dst="00:00:00:00:00:02", type=0x900) / \
+    p0 = Ether(src="00:00:00:00:00:01", dst="00:00:00:00:00:02", type=0x9000) / \
         Fabric(packetType=1, headerVersion=2, packetVersion=3, fabricColor=3,
                fabricQos=4, dstDevice = 5, dstPortOrGroup=6) / \
-        FabricUnicast(routed=1, outerRouted=1, tunnelTerminate=1, ingressTunnelType=5)
-    p1 = Ether(src="00:00:00:00:00:01", dst="00:00:00:00:00:02", type=0x900) / \
-        Fabric(packetType=1, headerVersion=2, packetVersion=3, fabricColor=3,
+        FabricUnicast(routed=1, outerRouted=1, tunnelTerminate=1, ingressTunnelType=5) / \
+        FabricPayload(etherType=0x800) / \
+        IP(src="192.168.4.95", dst="224.3.29.73") / \
+        UDP()
+    p1 = Ether(src="00:00:00:00:00:01", dst="00:00:00:00:00:02", type=0x9000) / \
+        Fabric(packetType=2, headerVersion=2, packetVersion=3, fabricColor=3,
                fabricQos=4, dstDevice = 5, dstPortOrGroup=6) / \
         FabricMulticast(routed=1, outerRouted=1, tunnelTerminate=1, ingressTunnelType=5,
-                      ingressIfIndex=0, ingressBd=2)
-    wrpcap('fabric.pcap', [p0, p1])
+                      ingressIfIndex=0, ingressBd=2) / \
+        FabricPayload(etherType=0x800) / \
+        IP(src="192.168.4.95", dst="224.3.29.73") / \
+        UDP()
+    wrpcap('fabric.pcap', [p1, p0])
 
 def main():
     parser = argparse.ArgumentParser(description='MPLS label generator')
