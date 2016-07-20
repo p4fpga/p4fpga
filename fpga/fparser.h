@@ -40,7 +40,6 @@ class FPGAParser : public FPGAObject {
     void emitInterface(CodeBuilder* builder);
     void emitFunctVerbosity(CodeBuilder* builder);
     void emitModule(CodeBuilder* builder);
-    void emitRules(CodeBuilder* builder);
 
     std::vector<IR::BSV::Reg*>          reg;
     std::vector<IR::BSV::CReg*>         creg;

@@ -65,15 +65,22 @@ class Function : Type {
 #nodbprint
 }
 
-class ParseLoadRule : Rule {
+class RuleParserShift : Rule {
+    IR::ParserState state;
+    int len;
 #nodbprint
 }
 
-class ParseExtractRule : Rule {
+class RuleParserExtract : Rule {
+    IR::ParserState state;
+    int len;
 #nodbprint
 }
 
-class ParseTransitionRule : Rule {
+class RuleParserTransition : Rule {
+    IR::ParserState this_state;
+    IR::Path next_state;
+    int next_len;
 #nodbprint
 }
 

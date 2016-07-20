@@ -58,6 +58,9 @@ class BSVTranslationVisitor : public CodeGenInspector {
     bool preorder(const IR::BSV::CReg* reg) override;
     bool preorder(const IR::BSV::Reg* reg) override;
     bool preorder(const IR::BSV::PulseWireOR* wire) override;
+    bool preorder(const IR::BSV::RuleParserShift* rule) override;
+    bool preorder(const IR::BSV::RuleParserExtract* rule) override;
+    bool preorder(const IR::BSV::RuleParserTransition* rule) override;
 };
 
 }  // namespace
@@ -118,27 +121,86 @@ bool ParserTranslationVisitor::preorder(const IR::Type_Header* type) {
     return false;
 }
 
+#define APPEND_FORMAT(fmt, ...) \
+    builder->emitIndent(); \
+    builder->appendFormat(fmt, ##__VA_ARGS__); \
+    builder->newline();
+
+#define APPEND_LINE(fmt, ...) \
+    builder->emitIndent(); \
+    builder->appendLine(fmt, ##__VA_ARGS__); \
+
+#define INCR_INDENT \
+    builder->increaseIndent();
+
+#define DECR_INDENT \
+    builder->decreaseIndent();
+
 bool BSVTranslationVisitor::preorder(const IR::BSV::CReg* reg) {
     auto r = reg->to<IR::BSV::CReg>();
-    builder->emitIndent();
-    builder->appendFormat("CReg#(%s) %s <- mkCReg(%d, 0);", r->type, r->name, r->size);
-    builder->newline();
+    APPEND_FORMAT("CReg#(%s) %s <- mkCReg(%d, 0);", r->type, r->name, r->size);
     return false;
 }
 
 bool BSVTranslationVisitor::preorder(const IR::BSV::Reg* reg) {
     auto r = reg->to<IR::BSV::Reg>();
-    builder->emitIndent();
-    builder->appendFormat("Reg#(%s) %s <- mkReg(%d, 0);", r->type, r->name, r->size);
-    builder->newline();
+    APPEND_FORMAT("Reg#(%s) %s <- mkReg(%d, 0);", r->type, r->name, r->size);
     return false;
 }
 
 bool BSVTranslationVisitor::preorder(const IR::BSV::PulseWireOR* wire) {
     auto r = wire->to<IR::BSV::PulseWireOR>();
-    builder->emitIndent();
-    builder->appendFormat("PulseWire %s <- mkPulseWireOR();", r->name);
-    builder->newline();
+    APPEND_FORMAT("PulseWire %s <- mkPulseWireOR();", r->name);
+    return false;
+}
+
+bool BSVTranslationVisitor::preorder(const IR::BSV::RuleParserShift* rule) {
+    auto r = rule->to<IR::BSV::RuleParserShift>();
+    auto name = r->state->name;
+    APPEND_LINE("(* fire_when_enabled *)");
+    APPEND_FORMAT("rule rl_%s_shift if ((parse_state_ff.first == %s) && rg_buffered[0]< %d);", name.toString(), CamelCase(name.toString()), r->len);
+    APPEND_LINE("endrule");
+    return false;
+}
+
+bool BSVTranslationVisitor::preorder(const IR::BSV::RuleParserExtract* rule) {
+    auto r = rule->to<IR::BSV::RuleParserExtract>();
+    auto name = r->state->name.toString();
+    auto len = r->len;
+    APPEND_LINE("(* fire_when_enabled *)");
+    APPEND_FORMAT("rule rl_%s_extract if ((parse_state_ff.first == %s) && rg_buffered[0] > %d);", name, CamelCase(name), len);
+    INCR_INDENT;
+    APPEND_LINE("let data = rg_tmp[0];");
+    APPEND_LINE("if (isValid(data_ff.first)) begin");
+    APPEND_LINE("  data_ff.deq;");
+    APPEND_LINE("  data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];");
+    APPEND_LINE("end");
+    APPEND_LINE("report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);");
+    for (auto c : *r->state->components) {
+        APPEND_FORMAT("let %s = extract_%s(truncate(data));", name, name);
+        APPEND_FORMAT("compute_next_state_%s(%s.%s);", name, "header", "field");
+    }
+    APPEND_FORMAT("rg_tmp[0] <= zeroExtend(data >> %d);", len);
+    APPEND_FORMAT("succeed_and_next(%d);", len);
+    APPEND_LINE("parse_state_ff.deq;");
+    DECR_INDENT;
+    APPEND_LINE("endrule");
+    return false;
+}
+
+bool BSVTranslationVisitor::preorder(const IR::BSV::RuleParserTransition* rule) {
+    auto r = rule->to<IR::BSV::RuleParserTransition>();
+    auto this_state_name = r->this_state->name.toString();
+    auto next_state_name = r->next_state->name.toString();
+    APPEND_FORMAT("rule rl_%s_%s if (w_%s_%s);", this_state_name,
+            next_state_name, this_state_name, next_state_name);
+    INCR_INDENT;
+    APPEND_FORMAT("parse_state_ff.enq(State%s);", CamelCase(this_state_name));
+    APPEND_FORMAT("dbg3($format(\"%%s -> %%s\", \"%s\", \"%s\"));",
+            this_state_name, next_state_name);
+    APPEND_FORMAT("fetch_next_headers(%d);", r->next_len);
+    DECR_INDENT;
+    APPEND_LINE("endrule");
     return false;
 }
 
@@ -177,52 +239,35 @@ void FPGAParser::emitTypes(CodeBuilder* builder) {
 }
 
 void FPGAParser::emitParseState(CodeBuilder* builder) {
-    builder->appendLine("typedef struct {");
-    builder->increaseIndent();
+    APPEND_LINE("typedef struct {");
+    INCR_INDENT;
     for (auto s : states) {
-        builder->emitIndent();
-        builder->appendFormat("State%s;", CamelCase(s->state->name.toString()));
-        builder->newline();
+        APPEND_FORMAT("State%s;", CamelCase(s->state->name.toString()));
     }
-    builder->decreaseIndent();
-    builder->appendLine("} ParserState deriving (Bits, Eq);");
+    DECR_INDENT;
+    APPEND_LINE("} ParserState deriving (Bits, Eq);");
 }
 
 void FPGAParser::emitInterface(CodeBuilder* builder) {
-    builder->appendLine("interface Parser;");
-    builder->increaseIndent();
-    builder->emitIndent();
-    builder->appendLine("interface Put#(EtherData) frameIn;");
-    builder->emitIndent();
-    builder->appendLine("interface Get#(MetadataT) metadata;");
-    builder->emitIndent();
-    builder->appendLine("interface Put#(int) verbosity;");
-    builder->decreaseIndent();
-    builder->appendLine("endinterface");
+    APPEND_LINE("interface Parser;");
+    INCR_INDENT;
+    APPEND_LINE("interface Put#(EtherData) frameIn;");
+    APPEND_LINE("interface Get#(MetadataT) metadata;");
+    APPEND_LINE("interface Put#(int) verbosity;");
+    DECR_INDENT;
+    APPEND_LINE("endinterface");
 }
 
 void FPGAParser::emitFunctVerbosity(CodeBuilder* builder) {
-    builder->emitIndent();
-    builder->appendLine("Reg#(int) cr_verbosity[2] <- mkCRegU(2);");
-    builder->emitIndent();
-    builder->appendLine("FIFOF#(int) cr_verbosity_ff <- mkFIFOF;");
-    builder->emitIndent();
-    builder->appendLine("rule set_verbosity;");
-    builder->increaseIndent();
-    builder->emitIndent();
-    builder->appendLine("let x = cr_verbosity_ff.first;");
-    builder->emitIndent();
-    builder->appendLine("cr_verbosity_ff.deq;");
-    builder->emitIndent();
-    builder->appendLine("cr_verbosity[1] <= x;");
-    builder->decreaseIndent();
-    builder->emitIndent();
-    builder->appendLine("endrule");
-}
-
-void FPGAParser::emitRules(CodeBuilder* builder) {
-    builder->emitIndent();
-    builder->appendLine("");
+    APPEND_LINE("Reg#(int) cr_verbosity[2] <- mkCRegU(2);");
+    APPEND_LINE("FIFOF#(int) cr_verbosity_ff <- mkFIFOF;");
+    APPEND_LINE("rule set_verbosity;");
+    INCR_INDENT;
+    APPEND_LINE("let x = cr_verbosity_ff.first;");
+    APPEND_LINE("cr_verbosity_ff.deq;");
+    APPEND_LINE("cr_verbosity[1] <= x;");
+    DECR_INDENT;
+    APPEND_LINE("endrule");
 }
 
 #define VECTOR_VISIT(V)                               \
@@ -271,9 +316,20 @@ bool FPGAParser::build() {
     stdMetadata = pl->getParameter(model.parser.standardMetadataParam.index);
 
     for (auto state : *parserBlock->container->states) {
-        LOG1("id " << state->id);
         auto ps = new FPGAParserState(state, this);
         states.push_back(ps);
+        rules.push_back(new IR::BSV::RuleParserShift(state, 0));
+        rules.push_back(new IR::BSV::RuleParserExtract(state, 0));
+        if (state->selectExpression != nullptr) {
+            if (state->selectExpression->is<IR::SelectExpression>()) {
+                auto se = state->selectExpression->to<IR::SelectExpression>();
+                for (auto sc: se->selectCases) {
+                    LOG1(sc->state->path);
+                    LOG1(sc->state);
+                    rules.push_back(new IR::BSV::RuleParserTransition(state, sc->state->path, 0));
+                }
+            }
+        }
     }
 
     //headerType = FPGATypeFactory::instance->create(headersType);
@@ -286,8 +342,6 @@ bool FPGAParser::build() {
     wires.push_back(new IR::BSV::PulseWireOR("w_parse_header_done"));
     wires.push_back(new IR::BSV::PulseWireOR("w_load_header"));
 
-    auto rl_load = new IR::BSV::ParseLoadRule();
-    auto rl_extract = new IR::BSV::ParseExtractRule();
 
     return true;
 }
