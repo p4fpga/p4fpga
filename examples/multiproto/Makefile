@@ -3,4 +3,5 @@ CONNECTALFLAGS += -D PARSER=MultiProtocol
 CONNECTALFLAGS += -D DEPARSER=MultiProtocol
 CONNECTALFLAGS += -D MATCHTABLE=MultiProtocol
 CONNECTALFLAGS += -D TYPEDEF=MultiProtocol
+CONNECTALFLAGS += --bscflags="-fdir $(P4FPGADIR)/examples/multiproto/generatedbsv"
 include ../Makefile.common

@@ -4,6 +4,7 @@ import BuildVector::*;
 import CBus::*;
 import ClientServer::*;
 import Connectable::*;
+import ConfigReg::*;
 import DbgDefs::*;
 import DefaultValue::*;
 import Ethernet::*;
@@ -297,7 +298,7 @@ module mkParser  (Parser);
   endrule
 
   FIFO#(ParserState) parse_state_ff <- mkPipelineFIFO();
-  FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
+  FIFOF#(Maybe#(Bit#(128))) data_ff <- printTimedTraceM("data_ff", mkDFIFOF(tagged Invalid));
   FIFOF#(Maybe#(EthernetT)) ethernet_out_ff <- mkDFIFOF(tagged Invalid);
   FIFOF#(Maybe#(IcmpT)) icmp_out_ff <- mkDFIFOF(tagged Invalid);
   FIFOF#(Maybe#(Ipv4T)) ipv4_out_ff <- mkDFIFOF(tagged Invalid);
@@ -307,13 +308,13 @@ module mkParser  (Parser);
   FIFOF#(Maybe#(UdpT)) udp_out_ff <- mkDFIFOF(tagged Invalid);
 
   FIFOF#(EtherData) data_in_ff <- mkFIFOF;
-  FIFOF#(MetadataT) meta_in_ff <- printTraceT("metadata_ff", mkFIFOF);
+  FIFOF#(MetadataT) meta_in_ff <- printTimedTraceM("metadata_ff", mkFIFOF);
   PulseWire w_parse_header_done <- mkPulseWireOR();
   PulseWire w_load_header <- mkPulseWireOR();
-  Reg#(Bit#(32)) rg_next_header_len[3] <- mkCReg(3, 0);
-  Reg#(Bit#(32)) rg_buffered[3] <- mkCReg(3, 0);
-  Reg#(Bit#(32)) rg_shift_amt[3] <- mkCReg(3, 0);
-  Reg#(Bit#(512)) rg_tmp[2] <- mkCReg(2, 0);
+  Array#(Reg#(Bit#(32))) rg_next_header_len <- mkCReg(3, 0);
+  Array#(Reg#(Bit#(32))) rg_buffered <- mkCReg(3, 0);
+  Array#(Reg#(Bit#(32))) rg_shift_amt <- mkCReg(3, 0);
+  Array#(Reg#(Bit#(512))) rg_tmp <- mkCReg(2, 0);
   function Action dbg3(Fmt msg);
     action
       if (cr_verbosity[0] > 3) begin
@@ -825,109 +826,210 @@ endmodule
 
 typedef enum {
   StateDeparseStart,
-  StateEthernet,
-  StateVlanTag,
-  StateIpv4,
-  StateIpv6,
-  StateTcp,
-  StateUdp,
-  StateIcmp
+  StateDeparseEthernet,
+  StateDeparseVlanTag,
+  StateDeparseIpv4,
+  StateDeparseIpv6,
+  StateDeparseTcp,
+  StateDeparseUdp,
+  StateDeparseIcmp
 } DeparserState deriving (Bits, Eq);
+
+typedef union tagged {
+   Tuple2#(Bit#(112), Bit#(112)) UEthernetT;
+   Tuple2#(Bit#(32), Bit#(32)) UVlanTagT;
+   Tuple2#(Bit#(160), Bit#(160)) UIpv4T;
+   Tuple2#(Bit#(320), Bit#(320)) UIpv6T;
+   Tuple2#(Bit#(160), Bit#(160)) UTcpT;
+   Tuple2#(Bit#(64), Bit#(64)) UUdpT;
+} MetaT;
+
+typeclass ToTuple#(type t, type d);
+   function Tuple2#(t, t) toTuple(d arg);
+endtypeclass
+
+instance ToTuple#(EthernetT, MetadataT);
+   function Tuple2#(EthernetT, EthernetT) toTuple (MetadataT t);
+      EthernetT data = defaultValue;
+      EthernetT mask = defaultMask;
+      data.etherType = fromMaybe(?, t.ethernet$etherType);
+      mask.etherType = 0;
+      return tuple2(data, mask);
+   endfunction
+endinstance
+
 interface Deparser;
   interface PipeIn#(MetadataT) metadata;
   interface PktWriteServer writeServer;
   interface PktWriteClient writeClient;
-  interface Put#(int) verbosity;
   method DeparserPerfRec read_perf_info ();
+  method Action set_verbosity (int verbosity);
 endinterface
 module mkDeparser  (Deparser);
-  Reg#(int) cr_verbosity[2] <- mkCRegU(2);
-  FIFOF#(int) cr_verbosity_ff <- mkFIFOF;
-  rule set_verbosity;
-    let x = cr_verbosity_ff.first;
-    cr_verbosity_ff.deq;
-    cr_verbosity[1] <= x;
-  endrule
-
-  FIFOF#(EtherData) data_in_ff <- mkFIFOF;
-  FIFOF#(EtherData) data_out_ff <- mkFIFOF;
-  FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;
-  Reg#(Bit#(32)) rg_offset <- mkReg(0);
-  Reg#(Bit#(128)) rg_buff <- mkReg(0);
-  Reg#(DeparserState) rg_deparse_state <- mkReg(StateDeparseStart);
-  let din = data_in_ff.first;
-  let meta = meta_in_ff.first;
-  function Action report_deparse_action(DeparserState state, Bit#(32) offset);
+  Reg#(int) cf_verbosity <- mkConfigRegU;
+  function Action dbg3(Fmt msg);
     action
-      if (cr_verbosity[0] > 0) begin
-        $display("(%d) Deparse State %h offset %h", $time, state, offset);
+      if (cf_verbosity > 3) begin
+        $display("(%0d) ", $time, msg);
       end
     endaction
   endfunction
-  function Action succeed_and_next(Bit#(32) offset);
+
+  PulseWire w_deparse_ipv4 <- mkPulseWire();
+  PulseWire w_deparse_tcp <- mkPulseWire();
+  PulseWire w_deparse_tcp_start <- mkPulseWire();
+  FIFOF#(EtherData) data_in_ff <- mkFIFOF;
+  FIFOF#(EtherData) data_out_ff <- printTraceM("depaser out", mkFIFOF);
+  FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;
+  FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
+  FIFO#(DeparserState) deparse_state_ff <- mkPipelineFIFO();
+  Array#(Reg#(Bit#(32))) rg_next_header_len <- mkCReg(3, 0);
+  Array#(Reg#(Bit#(32))) rg_buffered <- mkCReg(3, 0);
+  Array#(Reg#(Bit#(32))) rg_processed <- mkCReg(3, 0);
+  Array#(Reg#(Bit#(32))) rg_shift_amt <- mkCReg(3, 0);
+  Array#(Reg#(Bit#(512))) rg_tmp <- mkCReg(2, 0);
+  Array#(Reg#(Bool)) deparse_done <- mkCReg(2, True);
+  Array#(Reg#(Bool)) header_done <- mkCReg(2, True);
+  PulseWire w_deparse_header_done <- mkPulseWire();
+  let mask_this_cycle = data_in_ff.first.mask;
+  let sop_this_cycle = data_in_ff.first.sop;
+  let eop_this_cycle = data_in_ff.first.eop;
+  let data_this_cycle = data_in_ff.first.data;
+  let meta = meta_in_ff.first;
+  function Action report_deparse_action(String msg, Bit#(32) buffered, Bit#(32) processed, Bit#(32) shift, Bit#(512) data);
     action
-      data_in_ff.deq;
-      rg_offset <= offset;
+      if (cf_verbosity > 0) begin
+        $display("(%0d) Deparse %s buffered %d %d %d data %h", $time, msg, buffered, processed, shift, data);
+      end
     endaction
   endfunction
-  function Action failed_and_trap(Bit#(32) offset);
+  function Action fetch_next_header(Bit#(32) len);
     action
-      data_in_ff.deq;
-      rg_offset <= 0;
+      rg_next_header_len[0] <= len;
+    endaction
+  endfunction
+  function Action move_buffered_amt(Bit#(32) len);
+    action
+      rg_buffered[0] <= rg_buffered[0] + len;
+      rg_shift_amt[0] <= rg_shift_amt[0] + len;
+    endaction
+  endfunction
+  function Action succeed_and_next(Bit#(32) len);
+    action
+      rg_processed[0] <= rg_processed[0] + len;
+      rg_buffered[0] <= rg_buffered[0] - len;
+      rg_shift_amt[0] <= rg_buffered[0] - len;
+      dbg3($format("succeed_and_next shift_amt = %d", rg_buffered[0] - len));
     endaction
   endfunction
   function DeparserState compute_next_state(DeparserState state);
     DeparserState nextState = StateDeparseStart;
     return nextState;
   endfunction
-  function Bit#(l) read_data(UInt#(8) lhs, UInt#(8) rhs)
-   provisos (Add#(a__, l, 128));
-    Bit#(l) ldata = truncate(din.data) << (fromInteger(valueOf(l))-lhs);
-    Bit#(l) rdata = truncate(rg_buff) >> (fromInteger(valueOf(l))-rhs);
-    Bit#(l) cdata = ldata | rdata;
-    return cdata;
-  endfunction
-  function Bit#(max) create_mask(UInt#(max) count);
-    Bit#(max) v = 1 << count - 1;
-    return v;
-  endfunction
-  rule rl_start_state if (rg_deparse_state == StateDeparseStart);
-    let v = data_in_ff.first;
-    if (v.sop) begin
-      rg_deparse_state <= StateEthernet;
-    end
-    else begin
-      data_in_ff.deq;
-      data_out_ff.enq(v);
-    end
+
+  rule rl_start_state if (deparse_done[1] && (sop_this_cycle));
+    rg_buffered[2] <= 0;
+    rg_shift_amt[2] <= 0;
+    rg_processed[2] <= 0;
+    deparse_done[1] <= False;
+    header_done[1] <= False;
+    deparse_state_ff.enq(StateDeparseEthernet);
+    fetch_next_header(112);
+    dbg3($format("start deparse"));
   endrule
 
-  function Rules build_deparse_rule_no_opt(DeparserState state, int offset, Tuple2#(Bit#(n), Bit#(n)) m, UInt#(8) clen, UInt#(8) plen)
-   provisos (Mul#(TDiv#(n, 8), 8, n), Add#(a__, n, 128));
-    Rules d = 
-    rules
-      rule rl_deparse if ((rg_deparse_state == state) && (rg_offset == unpack(pack(offset))));
-        report_deparse_action(rg_deparse_state, rg_offset);
-        match {.meta, .mask} = m;
-        Vector#(n, Bit#(1)) curr_meta = takeAt(0, unpack(byteSwap(meta)));
-        Vector#(n, Bit#(1)) curr_mask = takeAt(0, unpack(byteSwap(mask)));
-        Bit#(n) curr_data = read_data (clen, plen);
-        $display ("read_data %h", curr_data);
-        let data = apply_changes (curr_data, pack(curr_meta), pack(curr_mask));
-        let data_this_cycle = EtherData { sop: din.sop, eop: din.eop, data: zeroExtend(data), mask: create_mask(cExtend(fromInteger(valueOf(n)))) };
-        data_out_ff.enq (data_this_cycle);
-        DeparserState next_state = compute_next_state(state);
-        $display ("next_state %h", next_state);
-        rg_deparse_state <= next_state;
-        rg_buff <= din.data;
-        // apply header removal by marking mask zero
-        // apply added header by setting field at offset.
-        succeed_and_next (rg_offset + cExtend(clen) + cExtend(plen));
-      endrule
+  rule rl_deparse_payload if (deparse_done[1] && (!sop_this_cycle));
+    let data = data_in_ff.first;
+    data_in_ff.deq;
+    data_out_ff.enq(data);
+  endrule
 
-    endrules;
-    return d;
-  endfunction
+  // phase 3
+  rule rl_data_ff_load if ((!deparse_done[1] && rg_buffered[2] < rg_next_header_len[2]));
+    dbg3($format("dequeue data_in_ff"));
+    data_in_ff.deq;
+  endrule
+
+  // phase 2
+  rule rl_deparse_send if (!deparse_done[1] && rg_processed[1] > 0);
+    let data = EtherData { sop: sop_this_cycle,
+                           eop: eop_this_cycle,
+                           data: truncate(rg_tmp[1]),
+                           mask: mask_this_cycle };
+    data_out_ff.enq(data);
+    dbg3($format("send rg_tmp %h", rg_tmp[1]));
+    let amt = 128;
+    if (rg_processed[1] < 128) begin
+       amt = rg_processed[1];
+    end
+    rg_tmp[1] <= rg_tmp[1] >> amt;
+    rg_processed[1] <= rg_processed[1] - amt;
+    dbg3($format("send data ", fshow(data), amt));
+  endrule
+
+  // wait till all processed bits are sent, cont. to send payload.
+  rule rl_wait_till_processed_done if (header_done[1] && rg_processed[1] == 0);
+    deparse_done[1] <= True;
+  endrule
+
+  // phase 1
+  rule rl_deparse_ethernet_load if ((deparse_state_ff.first == StateDeparseEthernet) && (rg_buffered[0] < 112));
+    dbg3($format("ether load"));
+    rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+    move_buffered_amt(128);
+  endrule
+
+  rule rl_deparse_ethernet_send if ((deparse_state_ff.first == StateDeparseEthernet) && (rg_buffered[0] >= 112));
+    dbg3($format("ethernet send tmp %h", rg_tmp[0]));
+    succeed_and_next(112);
+    w_deparse_ipv4.send();
+    deparse_state_ff.deq;
+  endrule
+
+  rule rl_deparse_ethernet_deparse_ipv4 if (w_deparse_ipv4);
+    dbg3($format("ethernet -> ipv4"));
+    deparse_state_ff.enq(StateDeparseIpv4);
+    fetch_next_header(160);
+  endrule
+
+  rule rl_deparse_ipv4_load if ((deparse_state_ff.first == StateDeparseIpv4) && (rg_buffered[0] < 160));
+    dbg3($format("ipv4 load %h", rg_tmp[0]));
+    rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+    move_buffered_amt(128);
+  endrule
+
+  rule rl_deparse_ipv4_send if ((deparse_state_ff.first == StateDeparseIpv4) && (rg_buffered[0] >= 160));
+    dbg3($format("ipv4 send %h", rg_tmp[0]));
+    succeed_and_next(160);
+    w_deparse_tcp.send();
+    deparse_state_ff.deq;
+  endrule
+
+  rule rl_deparse_ipv4_deparse_tcp if (w_deparse_tcp);
+    dbg3($format("ipv4 -> tcp"));
+    deparse_state_ff.enq(StateDeparseTcp);
+    fetch_next_header(160);
+  endrule
+
+  rule rl_deparse_tcp_load if ((deparse_state_ff.first == StateDeparseTcp) && (rg_buffered[0] < 160));
+    dbg3($format("tcp load %h", rg_tmp[0]));
+    rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+    move_buffered_amt(128);
+  endrule
+
+  rule rl_deparse_tcp_send if ((deparse_state_ff.first == StateDeparseTcp) && (rg_buffered[0] >= 160));
+    dbg3($format("tcp send %h", rg_tmp[0]));
+    succeed_and_next(160);
+    deparse_state_ff.deq;
+    w_deparse_tcp_start.send();
+  endrule
+
+  rule rl_deparse_tcp_start if (w_deparse_tcp_start);
+    dbg3($format("deparse_tcp -> start"));
+    fetch_next_header(0);
+    header_done[0] <= True;
+  endrule
+
   interface metadata = toPipeIn(meta_in_ff);
   interface PktWriteServer writeServer;
     interface writeData = toPut(data_in_ff);
@@ -935,7 +1037,9 @@ module mkDeparser  (Deparser);
   interface PktWriteClient writeClient;
     interface writeData = toGet(data_out_ff);
   endinterface
-  interface verbosity = toPut(cr_verbosity_ff);
+  method Action set_verbosity (int verbosity);
+    cf_verbosity <= verbosity;
+  endmethod
 endmodule
 typedef union tagged {
   struct {
