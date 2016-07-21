@@ -17,8 +17,8 @@ SRCDIR  = $(THISDIR)/src
 INCDIR  = $(THISDIR)/include
 
 ## Implicit Section: change the following only when necessary.
-CXX      = clang++ 
-CXXFLAGS = -g -O2 -fPIC -Wall -std=c++11 -stdlib=libc++  
+CXX      = g++ 
+CXXFLAGS = -g -O2 -fPIC -Wall -std=c++11 
 SRCDIRS  = $(shell find $(SRCDIR) -type d)
 INCDIRS  = $(shell find $(INCDIR) -type d)
 INCFLAGS = $(addprefix -I ,$(SRCDIRS)) $(addprefix -I ,$(INCDIRS)) $(INCLUDES)
@@ -30,7 +30,7 @@ OBJS    = $(patsubst $(SRCDIR)/%,$(OBJDIR)/%,$(SOURCES:.cpp=.o))
 DEPS    = $(OBJS:.o=.d)
 
 ## Define some useful variables.
-CDP = clang++
+CDP = g++
 DEP_OPT = -MM -MP
 DEPEND  = $(CDP) $(CPPFLAGS) $(CXXFLAGS) $(INCFLAGS) $(DEP_OPT)
 COMPILE = $(CXX) $(CPPFLAGS) $(CXXFLAGS) $(INCFLAGS) 

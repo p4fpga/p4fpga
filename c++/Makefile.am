@@ -1,31 +1,32 @@
 
-bin_PROGRAMS += p4fpga
-p4fpga_LDADD = libfrontend.a libp4ctoolkit.a
+bin_PROGRAMS += p4fpga/c++/libp4fpga/bin
 
-p4fpga_SOURCES = \
-	extensions/fpga/p4-fpga.cpp \
-	extensions/fpga/backend.h \
-	extensions/fpga/backend.cpp \
-	extensions/fpga/codegen.h \
-	extensions/fpga/codegen.cpp \
-	extensions/fpga/string_utils.h \
-	extensions/fpga/string_utils.cpp \
-	extensions/fpga/ftype.h \
-	extensions/fpga/ftype.cpp \
-	extensions/fpga/fparser.h \
-	extensions/fpga/fparser.cpp \
-	extensions/fpga/fdeparser.cpp \
-	extensions/fpga/fcontrol.h \
-	extensions/fpga/fcontrol.cpp \
-	extensions/fpga/fprogram.cpp \
-	extensions/fpga/translator.h \
-	extensions/fpga/translator.cpp \
-	extensions/fpga/ftest.h \
-	extensions/fpga/ftest.cpp \
-	extensions/fpga/midend.h \
-	extensions/fpga/midend.cpp
+p4fpga/libp4fpga/src_LDADD = libfrontend.a libp4ctoolkit.a
 
-cpplint_FILES += $(p4fpga_SOURCES)
+p4fpga/libp4fpga/src_SOURCES = \
+	extensions/c++/libp4fpga/src/p4-c++/libp4fpga/src.cpp \
+	extensions/c++/libp4fpga/include/backend.h \
+	extensions/c++/libp4fpga/src/backend.cpp \
+	extensions/c++/libp4fpga/include/codegen.h \
+	extensions/c++/libp4fpga/src/codegen.cpp \
+	extensions/c++/libp4fpgaincludesrc/string_utils.h \
+	extensions/c++/libp4fpga/src/string_utils.cpp \
+	extensions/c++/libp4fpga/include/ftype.h \
+	extensions/c++/libp4fpga/src/ftype.cpp \
+	extensions/c++/libp4fpga/include/fparser.h \
+	extensions/c++/libp4fpga/src/fparser.cpp \
+	extensions/c++/libp4fpga/src/fdeparser.cpp \
+	extensions/c++/libp4fpga/include/fcontrol.h \
+	extensions/c++/libp4fpga/src/fcontrol.cpp \
+	extensions/c++/libp4fpga/src/fprogram.cpp \
+	extensions/c++/libp4fpga/include/translator.h \
+	extensions/c++/libp4fpga/src/translator.cpp \
+	extensions/c++/libp4fpga/include/ftest.h \
+	extensions/c++/libp4fpga/src/ftest.cpp \
+	extensions/c++/libp4fpga/include/midend.h \
+	extensions/c++/libp4fpga/src/midend.cpp
 
-ir_DEF_FILES += $(srcdir)/extensions/fpga/bluespec.def
-#ir_SOURCES += extensions/fpga/bluespec.cpp
+cpplint_FILES += $(p4c++/libp4fpga/src_SOURCES)
+
+ir_DEF_FILES += $(srcdir)/extensions/c++/bluespec.def
+#ir_SOURCES += extensions/c++/libp4fpga/src/bluespec.cpp
