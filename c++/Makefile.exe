@@ -1,0 +1,8 @@
+include ../Makefile.common
+
+all: $(BINDIR)/$(EXECUTABLE)
+
+$(BINDIR)/$(EXECUTABLE): $(OBJS)
+	@echo "Building $@"
+	@mkdir -p $(dir $@)
+	@$(LINK) $(OBJS) -o "$@"
