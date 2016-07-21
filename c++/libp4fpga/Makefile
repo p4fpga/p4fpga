@@ -8,6 +8,7 @@ CPPFLAGS =
 
 INCLUDES = \
  -isystem /opt/local/libcpp-software/include \
+ -I /usr/local/include \
  -I $(P4C_HOME)
 
 
