@@ -922,6 +922,10 @@ module mkDeparser  (Deparser);
       dbg3($format("succeed_and_next shift_amt = %d", rg_buffered[0] - len));
     endaction
   endfunction
+  function Bit#(max) create_mask (LUInt#(max) count);
+     Bit#(max) v = (1 << count) - 1;
+     return v;
+  endfunction
   function DeparserState compute_next_state(DeparserState state);
     DeparserState nextState = StateDeparseStart;
     return nextState;
@@ -939,9 +943,22 @@ module mkDeparser  (Deparser);
   endrule
 
   rule rl_deparse_payload if (deparse_done[1] && (!sop_this_cycle));
-    let data = data_in_ff.first;
+    let v = data_in_ff.first;
     data_in_ff.deq;
-    data_out_ff.enq(data);
+    dbg3($format("shift amt %h", rg_shift_amt[1]));
+    dbg3($format(fshow(v)));
+    if (rg_shift_amt[1] != 0) begin
+       let nbytes = rg_shift_amt[1] >> 3;
+       let dat = EtherData { sop: v.sop,
+                             eop: v.eop,
+                             data: v.data >> rg_shift_amt[1],
+                             mask: v.mask >> nbytes };
+       data_out_ff.enq(dat);
+       rg_shift_amt[1] <= 0;
+    end
+    else begin
+       data_out_ff.enq(v);
+    end
   endrule
 
   // phase 3
@@ -952,19 +969,21 @@ module mkDeparser  (Deparser);
 
   // phase 2
   rule rl_deparse_send if (!deparse_done[1] && rg_processed[1] > 0);
-    let data = EtherData { sop: sop_this_cycle,
-                           eop: eop_this_cycle,
-                           data: truncate(rg_tmp[1]),
-                           mask: mask_this_cycle };
-    data_out_ff.enq(data);
     dbg3($format("send rg_tmp %h", rg_tmp[1]));
     let amt = 128;
     if (rg_processed[1] < 128) begin
        amt = rg_processed[1];
     end
     rg_tmp[1] <= rg_tmp[1] >> amt;
+    let nbytes = amt >> 3; // compute number of bytes
+    Bit#(16) mask = create_mask(cExtend(nbytes));
     rg_processed[1] <= rg_processed[1] - amt;
-    dbg3($format("send data ", fshow(data), amt));
+    dbg3($format("send data %h %h %h", amt, nbytes, mask));
+    let data = EtherData { sop: sop_this_cycle,
+                           eop: eop_this_cycle,
+                           data: truncate(rg_tmp[1]),
+                           mask: mask };
+    data_out_ff.enq(data);
   endrule
 
   // wait till all processed bits are sent, cont. to send payload.
