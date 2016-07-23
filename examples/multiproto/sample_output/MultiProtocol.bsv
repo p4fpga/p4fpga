@@ -879,7 +879,7 @@ module mkDeparser  (Deparser);
   PulseWire w_deparse_tcp <- mkPulseWire();
   PulseWire w_deparse_tcp_start <- mkPulseWire();
   FIFOF#(EtherData) data_in_ff <- mkFIFOF;
-  FIFOF#(EtherData) data_out_ff <- printTraceM("depaser out", mkFIFOF);
+  FIFOF#(EtherData) data_out_ff <- mkFIFOF;
   FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;
   FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
   FIFO#(DeparserState) deparse_state_ff <- mkPipelineFIFO();
@@ -918,8 +918,8 @@ module mkDeparser  (Deparser);
     action
       rg_processed[0] <= rg_processed[0] + len;
       rg_buffered[0] <= rg_buffered[0] - len;
-      rg_shift_amt[0] <= rg_buffered[0] - len;
-      dbg3($format("succeed_and_next shift_amt = %d", rg_buffered[0] - len));
+      //rg_shift_amt[0] <= rg_buffered[0] - len;
+      dbg3($format("succeed_and_next rg_processed %d shift_amt = %d", rg_processed[0] + len, rg_buffered[0] - len));
     endaction
   endfunction
   function Bit#(max) create_mask (LUInt#(max) count);
@@ -945,15 +945,17 @@ module mkDeparser  (Deparser);
   rule rl_deparse_payload if (deparse_done[1] && (!sop_this_cycle));
     let v = data_in_ff.first;
     data_in_ff.deq;
-    dbg3($format("shift amt %h", rg_shift_amt[1]));
+    dbg3($format("shift amt %d", rg_shift_amt[1]));
     dbg3($format(fshow(v)));
     if (rg_shift_amt[1] != 0) begin
-       let nbytes = rg_shift_amt[1] >> 3;
-       let dat = EtherData { sop: v.sop,
+       Bit#(128) data_mask = create_mask(cExtend(rg_shift_amt[1]));
+       Bit#(16) mask_out = create_mask(cExtend(rg_shift_amt[1] >> 3));
+       let data = EtherData { sop: v.sop,
                              eop: v.eop,
-                             data: v.data >> rg_shift_amt[1],
-                             mask: v.mask >> nbytes };
-       data_out_ff.enq(dat);
+                             data: truncate(rg_tmp[1]) & data_mask,
+                             mask: mask_out};
+       dbg3($format("Deparser ", fshow(data)));
+       data_out_ff.enq(data);
        rg_shift_amt[1] <= 0;
     end
     else begin
@@ -969,24 +971,25 @@ module mkDeparser  (Deparser);
 
   // phase 2
   rule rl_deparse_send if (!deparse_done[1] && rg_processed[1] > 0);
-    dbg3($format("send rg_tmp %h", rg_tmp[1]));
     let amt = 128;
     if (rg_processed[1] < 128) begin
        amt = rg_processed[1];
     end
-    rg_tmp[1] <= rg_tmp[1] >> amt;
-    let nbytes = amt >> 3; // compute number of bytes
-    Bit#(16) mask = create_mask(cExtend(nbytes));
-    rg_processed[1] <= rg_processed[1] - amt;
-    dbg3($format("send data %h %h %h", amt, nbytes, mask));
+    Bit#(128) data_out = truncate(rg_tmp[1] & create_mask(cExtend(amt)));
+    Bit#(16) mask_out = create_mask(cExtend(amt >> 3));
     let data = EtherData { sop: sop_this_cycle,
                            eop: eop_this_cycle,
-                           data: truncate(rg_tmp[1]),
-                           mask: mask };
+                           data: data_out,
+                           mask: mask_out };
+    rg_tmp[1] <= rg_tmp[1] >> amt;
+    rg_processed[1] <= rg_processed[1] - amt;
+    rg_shift_amt[1] <= rg_shift_amt[1] - amt;
     data_out_ff.enq(data);
+    dbg3($format("Deparser ", fshow(data), rg_shift_amt[1] - amt));
   endrule
 
   // wait till all processed bits are sent, cont. to send payload.
+  // some data are buffered not processed.
   rule rl_wait_till_processed_done if (header_done[1] && rg_processed[1] == 0);
     deparse_done[1] <= True;
   endrule
@@ -1012,15 +1015,16 @@ module mkDeparser  (Deparser);
   endrule
 
   rule rl_deparse_ipv4_load if ((deparse_state_ff.first == StateDeparseIpv4) && (rg_buffered[0] < 160));
-    dbg3($format("ipv4 load %h", rg_tmp[0]));
+    dbg3($format("ipv4 load %d", rg_shift_amt[0]));
+    prettyPrint("ipv4load ", rg_tmp[0]);
     rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
     move_buffered_amt(128);
   endrule
 
   rule rl_deparse_ipv4_send if ((deparse_state_ff.first == StateDeparseIpv4) && (rg_buffered[0] >= 160));
-    dbg3($format("ipv4 send %h", rg_tmp[0]));
     succeed_and_next(160);
     w_deparse_tcp.send();
+    prettyPrint("ipv4send ", rg_tmp[0]);
     deparse_state_ff.deq;
   endrule
 
@@ -1031,15 +1035,17 @@ module mkDeparser  (Deparser);
   endrule
 
   rule rl_deparse_tcp_load if ((deparse_state_ff.first == StateDeparseTcp) && (rg_buffered[0] < 160));
-    dbg3($format("tcp load %h", rg_tmp[0]));
-    rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+    dbg3($format("tcp load %d", rg_shift_amt[0]));
+    Bit#(512) data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+    rg_tmp[0] <= data;
+    prettyPrint("tcp load ", data);
     move_buffered_amt(128);
   endrule
 
   rule rl_deparse_tcp_send if ((deparse_state_ff.first == StateDeparseTcp) && (rg_buffered[0] >= 160));
-    dbg3($format("tcp send %h", rg_tmp[0]));
     succeed_and_next(160);
     deparse_state_ff.deq;
+    prettyPrint("tcp send ", rg_tmp[0]);
     w_deparse_tcp_start.send();
   endrule
 
@@ -1376,8 +1382,8 @@ module mkL2Match  (L2Match);
   let rx_info_metadata = rx_metadata.u;
   TX #(MetadataResponse) tx_metadata <- mkTX;
   let tx_info_metadata = tx_metadata.u;
-  Vector#(2, FIFOF#(BBRequest)) bbReqFifo <- replicateM(printTraceM("bbreq", mkFIFOF));
-  Vector#(2, FIFOF#(BBResponse)) bbRspFifo <- replicateM(printTraceM("bbrsp", mkFIFOF));
+  Vector#(2, FIFOF#(BBRequest)) bbReqFifo <- replicateM(printTimedTraceM("bbreq", mkFIFOF));
+  Vector#(2, FIFOF#(BBResponse)) bbRspFifo <- replicateM(printTimedTraceM("bbrsp", mkFIFOF));
   FIFOF#(PacketInstance) packet_ff <- mkFIFOF;
   MatchTable#(3, 256, SizeOf#(L2MatchReqT), SizeOf#(L2MatchRspT)) matchTable <- mkMatchTable("l2match.dat");
   Vector#(2, Bool) readyBits = map(fifoNotEmpty, bbRspFifo);
