@@ -390,7 +390,7 @@ class Enum:
         for p in [self.elements[-1]]:
             p.emit(builder, True)
         builder.decreaseIndent()
-        builder.append("} %(name)s deriving (Bits, Eq);" % {"name": self.name})
+        builder.append("} %(name)s deriving (Bits, Eq, FShow);" % {"name": self.name})
         builder.newline()
 
 class StructMember:

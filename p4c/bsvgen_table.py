@@ -23,7 +23,7 @@ import astbsv as ast
 import math
 import logging
 import cppgen
-import sys
+import sys, os
 from sourceCodeBuilder import SourceCodeBuilder
 from utils import CamelCase
 from bsvgen_struct import StructT, StructTableReqT, StructTableRspT
@@ -62,6 +62,12 @@ class MatchTableSim:
         stmt.append(ast.Template(TMP2 % (self.name, ksz, vsz)))
         return stmt
 
+    def generate_table_init(self):
+        global generated_table_sim
+        init_file = os.path.join('generatedbsv', self.name+'.dat')
+        if not os.path.isfile(init_file):
+            open(init_file, 'w')
+
     def build_read_function(self, tid, ksz, vsz):
         TMP1 = "let v <- matchtable_read_%s(key);" % (self.name)
         TMP2 = "return v;"
@@ -97,6 +103,7 @@ class MatchTableSim:
         inst = ast.Instance(TMP1%(self.tid, self.ksz, self.vsz), stmt)
         inst.emit(builder)
         generated_table_sim.append({'name': self.name, 'ksz': self.ksz, 'vsz': self.vsz})
+        self.generate_table_init()
 
 class Table(object):
     required_attributes = ["name", "match_type", "max_size", "key", "actions"]
@@ -315,7 +322,7 @@ class Table(object):
     def buildModuleStmt(self):
         TMP1 = "Vector#(%(num)s, FIFOF#(BBRequest)) bbReqFifo <- replicateM(mkFIFOF);"
         TMP2 = "Vector#(%(num)s, FIFOF#(BBResponse)) bbRspFifo <- replicateM(mkFIFOF);"
-        TMP3 = "MatchTable#(%(tid)s, %(sz)s, SizeOf#(%(reqT)s), SizeOf#(%(rspT)s)) matchTable <- mkMatchTable();"
+        TMP3 = "MatchTable#(%(tid)s, %(sz)s, SizeOf#(%(reqT)s), SizeOf#(%(rspT)s)) matchTable <- mkMatchTable(\"%(name)s\");"
         TMP4 = "interface next_control_state_%(id)s = toClient(bbReqFifo[%(id)s], bbRspFifo[%(id)s]);"
         TMP5 = "interface prev_control_state_%(id)s = toServer(rx_%(name)s.e, tx_%(name)s.e);"
         TMP6 = "Vector#(2, FIFOF#(MetadataT)) metadata_ff <- replicateM(mkFIFOF);"
@@ -336,7 +343,7 @@ class Table(object):
             # size must be 256 or multiple of 256
             size = int(256 * math.ceil(float(self.depth)/256))
             tid = self.tid;
-            pdict = {"sz": size, "reqT": reqT, "rspT": rspT, "tid": tid}
+            pdict = {"sz": size, "reqT": reqT, "rspT": rspT, "tid": tid, "name": self.name+'.dat'}
             stmt.append(ast.Template(TMP3, pdict))
 
         pdict = {"sz": num, "szminus1": num-1, "fifo": "bbRspFifo"}

@@ -67,7 +67,7 @@ class Top(object):
         TMP.append("   if (verbose) $display(\"(%%0d) tx data \", $time, fshow(v));")
         TMP.append("endrule")
         TMP.append("`endif")
-        TMP.append("MainAPI api <- mkMainAPI(indication, hostchan, ingress);")
+        TMP.append("MainAPI api <- mkMainAPI(indication, hostchan, ingress, txchan);")
         TMP.append("interface request = api.request;")
         stmt = []
         for t in TMP:
@@ -111,6 +111,7 @@ class API():
                    "GetPut",
                    "HostChannel",
                    "PacketBuffer",
+                   "TxChannel",
                    "Vector",
                    "MainDefs",
                    self.p4name
@@ -153,7 +154,7 @@ class API():
     def build_verbosity(self):
         TMP = []
         TMP.append("hostchan.set_verbosity(unpack(verbosity));")
-        #TMP.append("ingress.set_verbosity(unpack(verbosity));")
+        TMP.append("txchan.set_verbosity(unpack(verbosity));")
         stmt = []
         for t in TMP:
             stmt.append(ast.Template(t))
@@ -195,6 +196,7 @@ class API():
         decls.append("MainIndication indication")
         decls.append("HostChannel hostchan")
         decls.append("Ingress ingress")
+        decls.append("TxChannel txchan")
         iname = "MainAPI"
         params = []
         provisos = []
