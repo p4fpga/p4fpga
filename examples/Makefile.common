@@ -33,6 +33,9 @@ CONNECTALFLAGS += -m generatedcpp/jni/matchtable_model.cpp
 CONNECTALFLAGS += --bscflags="-fdir $(CURDIR)/generatedbsv"
 CONNECTALFLAGS += --nocache
 CONNECTALFLAGS += --cxxflags=-std=c++11
+
+# add path to questasim LIBRARY_PATH to link xsimtop.so with libstdc++ provided by questasim
+CONNECTALFLAGS += --cxxflags="-L\"/home/hwang/questasim/questa_sim/gcc-4.3.3-linux_x86_64/lib64\""
 BURST_LEN_SIZE=12
 
 ALL: codegen simgen
