@@ -1,10 +1,12 @@
 
-bin_PROGRAMS += p4fpga/c++/libp4fpga/bin
+bin_PROGRAMS += p4fpga
 
-p4fpga/libp4fpga/src_LDADD = libfrontend.a libp4ctoolkit.a
+p4fpga_LDADD = libfrontend.a libp4ctoolkit.a
 
-p4fpga/libp4fpga/src_SOURCES = \
-	extensions/c++/libp4fpga/src/p4-c++/libp4fpga/src.cpp \
+p4fpga_CPPFLAGS = -I$(srcdir)/extensions/c++/libp4fpga/include
+
+p4fpga_SOURCES = \
+	extensions/c++/libp4fpga/src/p4-fpga.cpp \
 	extensions/c++/libp4fpga/include/backend.h \
 	extensions/c++/libp4fpga/src/backend.cpp \
 	extensions/c++/libp4fpga/include/codegen.h \
@@ -26,7 +28,7 @@ p4fpga/libp4fpga/src_SOURCES = \
 	extensions/c++/libp4fpga/include/midend.h \
 	extensions/c++/libp4fpga/src/midend.cpp
 
-cpplint_FILES += $(p4c++/libp4fpga/src_SOURCES)
+cpplint_FILES += $(p4fpga_SOURCES)
 
 ir_DEF_FILES += $(srcdir)/extensions/c++/bluespec.def
 #ir_SOURCES += extensions/c++/libp4fpga/src/bluespec.cpp
