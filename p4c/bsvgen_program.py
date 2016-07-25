@@ -76,11 +76,6 @@ class Program(MetaIRInstance):
         else:
             raise BIRError("unknown processor: {}".format(name))
 
-    def build(self):
-        """
-        Build IR objects in P4 program
-        """
-
     # struct
     def emit_structs(self, builder):
         # emit structs for regular packet header
@@ -132,8 +127,6 @@ class Program(MetaIRInstance):
         Emit Mid-end IR to BSV
         """
         emit_import(builder)
-        self.emit_structs(builder)
-        #self.emit_parsers(builder)
         self.emit_basic_blocks(builder)
         self.emit_controls(builder)
         emit_license(builder)

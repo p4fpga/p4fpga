@@ -18,6 +18,7 @@ from sourceCodeBuilder import SourceCodeBuilder
 from collections import OrderedDict
 from p4c_bm import gen_json
 from pkg_resources import resource_string
+from bsvgen_common import emit_license, emit_import
 
 # to be used for a destination file
 def _validate_path(path):
@@ -54,6 +55,24 @@ def generate_file(obj, filename):
     obj.emit(builder)
     with open(filename, 'w') as bsv:
         bsv.write(builder.toString())
+
+def generate_struct(ir):
+    builder = SourceCodeBuilder()
+    builder.appendLine("import DefaultValue::*;")
+    builder.appendLine("import Utils::*;")
+    builder.appendLine("import Ethernet::*;")
+    for idx, p in enumerate(ir.structs.values()):
+        p.emit(builder)
+    with open(os.path.join('generatedbsv', 'StructGenerated.bsv'), 'w') as bsv:
+        bsv.write(builder.toString())
+
+def generate_parser(ir):
+    for idx, p in enumerate(ir.parsers.values()):
+        generate_file(p, os.path.join('generatedbsv', "ParserGenerated.bsv"))
+
+def generate_deparser(ir):
+    for idx, p in enumerate(ir.deparsers.values()):
+        generate_file(p, os.path.join('generatedbsv', 'DeparserGenerated.bsv'))
 
 def main():
     argparser = argparse.ArgumentParser(
@@ -112,12 +131,9 @@ def main():
     p4name = os.path.splitext(os.path.basename(options.source))[0]
     p4name = re.sub(r'\d+[-]+','', p4name)
 
-    for idx, p in enumerate(ir.parsers.values()):
-        generate_file(p, os.path.join('generatedbsv', "ParserGenerated.bsv"))
-
-    for idx, p in enumerate(ir.deparsers.values()):
-        generate_file(p, os.path.join('generatedbsv', 'DeparserGenerated.bsv'))
-
+    generate_struct(ir)
+    generate_parser(ir)
+    generate_deparser(ir)
     generate_file(ir, os.path.join('generatedbsv', p4name+".bsv"))
     generate_file(top.Top(p4name), os.path.join('generatedbsv', "Main.bsv"))
     generate_file(top.API(p4name), os.path.join('generatedbsv', "MainAPI.bsv"))

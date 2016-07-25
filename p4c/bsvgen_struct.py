@@ -19,6 +19,7 @@
 # DEALINGS IN THE SOFTWARE.
 #
 
+import math
 import astbsv as ast
 import logging
 from sourceCodeBuilder import SourceCodeBuilder
@@ -245,7 +246,7 @@ class StructTableRspT(object):
                 fields.append(ast.StructMember("Bit#(%s)" %(data_width), data_name))
                 dwidth += data_width
         self.struct = ast.Struct("%sRspT"%(CamelCase(self.name)), fields)
-        self.width = len(actions) + dwidth
+        self.width = int(math.ceil(math.log(len(actions) + 1, 2))) + dwidth
 
     def emit(self, builder):
         self.enum.emit(builder)

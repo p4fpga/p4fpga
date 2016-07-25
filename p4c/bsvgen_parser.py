@@ -73,7 +73,7 @@ class Parser(object):
             next_state = transition['next_state']
             next_name = "%s" % (next_state) if next_state != None else self.initial_state
             stmt = []
-            stmt.append(ast.Template("dbg3($format(\"transit to %s\"));", next_name))
+            stmt.append(ast.Template("dbprint(3, $format(\"transit to %s\"));", next_name))
             stmt.append(ast.Template(TMP1 % {'curr_state': name, 'next_state': next_name}))
             return key, mask, stmt
 
@@ -157,7 +157,7 @@ class Parser(object):
         tmpl2.append("compute_next_state_%(name)s(%(field)s);")
         tmpl2.append("rg_tmp[0] <= zeroExtend(data >> %(len)s);")
         tmpl2.append("succeed_and_next(%(len)s);")
-        tmpl2.append("dbg3($format(\"extract %%s\", \"%(name)s\"));")
+        tmpl2.append("dbprint(3, $format(\"extract %%s\", \"%(name)s\"));")
         tmpl2.append("parse_state_ff.deq;")
 
         pdict = {}
@@ -211,24 +211,24 @@ class Parser(object):
             # forward transition
             tmpl_forward_flow = []
             tmpl_forward_flow.append("parse_state_ff.enq(%(NextState)s);")
-            tmpl_forward_flow.append("dbg3($format(\"%%s -> %%s\", \"%(name)s\", \"%(next_state)s\"));")
+            tmpl_forward_flow.append("dbprint(3, $format(\"%%s -> %%s\", \"%(name)s\", \"%(next_state)s\"));")
             tmpl_forward_flow.append("fetch_next_header%(cregIdx)s(%(length)s);")
 
             # back to start
             tmpl_to_start = []
             tmpl_to_start.append("parse_done[0] <= True;")
             tmpl_to_start.append("w_parse_done.send();")
-            tmpl_to_start.append("dbg3($format(\"%%s -> %%s\", \"%(name)s\", \"%(next_state)s\"));")
+            tmpl_to_start.append("dbprint(3, $format(\"%%s -> %%s\", \"%(name)s\", \"%(next_state)s\"));")
             tmpl_to_start.append("fetch_next_header%(cregIdx)s(0);")
 
             # transition with lookahead
             tmpl_lookahead = []
             tmpl_lookahead.append("Vector#(512, Bit#(1)) buffer = unpack(rg_tmp[1]);")
             tmpl_lookahead.append("Bit#(%(lookahead)s) lookahead = pack(takeAt(0, buffer));")
-            tmpl_lookahead.append("dbg3($format(\"look ahead %%h, %%h\", lookahead, rg_tmp[1]));")
+            tmpl_lookahead.append("dbprint(3, $format(\"look ahead %%h, %%h\", lookahead, rg_tmp[1]));")
             tmpl_lookahead.append("compute_next_state_%(next_state)s(%(field)s);")
-            tmpl_lookahead.append("dbg3($format(\"counter\", %(field)s ));")
-            tmpl_lookahead.append("dbg3($format(\"%%s -> %%s\", \"%(name)s\", \"%(next_state)s\"));")
+            tmpl_lookahead.append("dbprint(3, $format(\"counter\", %(field)s ));")
+            tmpl_lookahead.append("dbprint(3, $format(\"%%s -> %%s\", \"%(name)s\", \"%(next_state)s\"));")
             tmpl_lookahead.append('fetch_next_header%(cregIdx)s(0);')
 
             pdict = {}
@@ -336,16 +336,18 @@ class Parser(object):
 
     def build_states(self):
         stmt = []
+        stmt.append(ast.Template("\n"))
+        stmt.append(ast.Template("`ifdef PARSER_STATE\n"))
         # fill in missing registers
         for reg in self.regs:
-            stmt.insert(0, ast.Template("Reg#(%s) %s <- mkReg(%s);\n"% (reg[0], reg[1], reg[2])))
+            stmt.append(ast.Template("Reg#(%s) %s <- mkReg(%s);\n"% (reg[0], reg[1], reg[2])))
         for reg in self.cregs:
-            stmt.insert(0, ast.Template("Reg#(%s) %s[%d] <- mkCReg(%d, %s);\n" % (reg[0], reg[1], reg[2], reg[2], reg[3])))
+            stmt.append(ast.Template("Reg#(%s) %s[%d] <- mkCReg(%d, %s);\n" % (reg[0], reg[1], reg[2], reg[2], reg[3])))
         for wire in self.pulse_wires:
-            stmt.insert(0, ast.Template("PulseWire %(name)s <- mkPulseWireOR();\n", {'name': wire}))
+            stmt.append(ast.Template("PulseWire %(name)s <- mkPulseWireOR();\n", {'name': wire}))
         for wire in self.dwires:
-            stmt.insert(0, ast.Template("Wire#(Bit#(%(width)s)) %(name)s <- mkDWire(0);\n", {'name': wire[0], 'width': wire[1]}))
-
+            stmt.append(ast.Template("Wire#(Bit#(%(width)s)) %(name)s <- mkDWire(0);\n", {'name': wire[0], 'width': wire[1]}))
+        stmt.append(ast.Template("`endif"))
         return stmt
 
     def decide_default_state(self):
@@ -377,8 +379,7 @@ class Parser(object):
             s.emit(builder)
         for s in self.build_funct_transition():
             s.emit(builder)
-        for s in self.build_states():
-            s.emit(builder)
         for s in self.build_rules():
             s.emit(builder)
-
+        for s in self.build_states():
+            s.emit(builder)

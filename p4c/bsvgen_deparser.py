@@ -77,17 +77,17 @@ class Deparser(object):
         rule = ast.Rule(rname, rcond, stmt)
         return rule
 
-    def buildModuleStmt(self):
+    def build_rules(self):
         stmt = []
         stmt.append(ast.Template('`ifdef DEPARSER_RULES\n'))
         for idx, s in enumerate(self.deparse_states):
             stmt.append(self.rule_state_next(s, GetHeaderWidth(s)))
             stmt.append(self.rule_state_load(s, GetHeaderWidth(s)))
             stmt.append(self.rule_state_send(s, GetHeaderWidth(s)))
-        stmt.append(ast.Template('`endif\n'))
+        stmt.append(ast.Template('`endif // DEPARSER_RULES\n'))
         return stmt
 
-    def buildTypes(self):
+    def build_struct(self):
         stmt = []
         stmt.append(ast.Template('`ifdef DEPARSER_STRUCT\n'))
         elem = []
@@ -96,11 +96,21 @@ class Deparser(object):
             elem.append(ast.EnumElement("StateDeparse%s" % (CamelCase(state)), None, None))
         state = ast.Enum("DeparserState", elem)
         stmt.append(state)
-        stmt.append(ast.Template('`endif\n'))
+        stmt.append(ast.Template('`endif // DEPARSER_STRUCT\n'))
+        return stmt
+
+    def build_state(self):
+        stmt = []
+        stmt.append(ast.Template("`ifdef DEPARSER_STATE\n"))
+        for idx, s in enumerate(self.deparse_states):
+            stmt.append(ast.Template("PulseWire w_deparse_%(name)s <- mkPulseWire();\n", {'name': s}))
+        stmt.append(ast.Template("`endif // DEPARSER_STATE\n"))
         return stmt
 
     def emit(self, builder):
-        for s in self.buildTypes():
+        for s in self.build_struct():
             s.emit(builder)
-        for s in self.buildModuleStmt():
+        for s in self.build_rules():
+            s.emit(builder)
+        for s in self.build_state():
             s.emit(builder)

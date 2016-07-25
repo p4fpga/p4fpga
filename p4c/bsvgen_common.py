@@ -63,7 +63,7 @@ def emit_import(builder):
                       "Ethernet", "ClientServer", "DbgDefs", "PacketBuffer", 
                       "Pipe", "MatchTable", "Utils", "TxRx",
                       "Register", "BuildVector", "CBus", "MIMO", "BUtils",
-                      "ConfigReg", "PrintTrace"]
+                      "ConfigReg", "PrintTrace", "StructGenerated"]
     pmap['imports'] = "\n".join(["import {}::*;".format(x) for x in sorted(import_modules)])
     builder.append(IMPORT_TEMPLATE % (pmap))
 
