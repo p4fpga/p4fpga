@@ -121,7 +121,7 @@ def GetHeaderInState(state_name):
 
 def GetState(state_name):
     for s in config.jsondata['parsers'][0]['parse_states']:
-        print s['name'], state_name
+        #print s['name'], state_name
         if s['name'] == state_name:
             return s
     return None

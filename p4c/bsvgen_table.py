@@ -55,11 +55,15 @@ class MatchTableSim:
 
     def build_bdpi(self, tid, ksz, vsz):
         global generated_table_sim
-        TMP1 = "import \"BDPI\" function ActionValue#(Bit#(%s)) matchtable_read_%s(Bit#(%s) msgtype);"
-        TMP2 = "import \"BDPI\" function Action matchtable_write_%s(Bit#(%s) msgtype, Bit#(%s) data);"
+        TMP1 = "`ifndef SVDPI"
+        TMP2 = "import \"BDPI\" function ActionValue#(Bit#(%s)) matchtable_read_%s(Bit#(%s) msgtype);"
+        TMP3 = "import \"BDPI\" function Action matchtable_write_%s(Bit#(%s) msgtype, Bit#(%s) data);"
+        TMP4 = "`endif"
         stmt = []
-        stmt.append(ast.Template(TMP1 % (vsz, self.name, ksz)))
-        stmt.append(ast.Template(TMP2 % (self.name, ksz, vsz)))
+        stmt.append(ast.Template(TMP1))
+        stmt.append(ast.Template(TMP2 % (vsz, self.name, ksz)))
+        stmt.append(ast.Template(TMP3 % (self.name, ksz, vsz)))
+        stmt.append(ast.Template(TMP4))
         return stmt
 
     def generate_table_init(self):

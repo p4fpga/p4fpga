@@ -35,16 +35,8 @@ from ast_util import apply_pdict, apply_action_block, apply_if_verbosity
 logger = logging.getLogger(__name__)
 
 class Parser(object):
-    # proper use of parser class constant?
     def __init__(self, states):
-        # tmp var for code generation
-        self.mutex_rules = {}
-        self.transition_rules = {}
-        self.pulse_wires = set()
-        self.dwires = set()
-        self.regs = set()
-        self.cregs = set()
-
+        self.state_transitions = set()
         self.states = states
         self.initial_state = "start"
 
@@ -62,7 +54,7 @@ class Parser(object):
         funct = ast.Function("push_phv", 'Action', params, ablock)
         return funct
 
-    def build_funct_transition(self):
+    def build_functions(self):
         def build_transition(name, transition):
             TMP1 = "w_%(curr_state)s_%(next_state)s.send();"
             key = transition['value'].replace("0x", "'h")
@@ -193,18 +185,27 @@ class Parser(object):
         rule = ast.Rule(rname, rcond, stmt, attr)
         return [rule]
 
-    def build_mutually_exclusive_attribute(self, state):
+    def build_mutually_exclusive_attribute(self):
         attribute = []
         stmt = []
-        for s in state.transitions:
-            next_state_name = s['next_state']
-            if next_state_name is None:
-                next_state_name = self.initial_state
-            rname = 'rl_%s_%s' % (state.name, next_state_name)
+        for s in self.state_transitions:
+            rname = 'rl_%s' % s
             attribute.append(rname)
-        TMP="(* mutually_exclusive=\"{}\" *)".format(", ".join(attribute))
+        TMP="(* mutually_exclusive=\"{}\" *)\n".format(", ".join(attribute))
         stmt.append(ast.Template(TMP))
         return stmt
+
+    def populate_state_transition(self):
+        for state in self.states.values():
+            for s in state.transitions:
+                next_state_name = s['next_state']
+                if next_state_name is None:
+                    next_state_name = self.initial_state
+                state_dict = GetState(next_state_name)
+                state_id = state_dict['id']
+                next_state = self.states[state_id]
+                transition_name = "%s_%s" % (state.name, next_state.name)
+                self.state_transitions.add(transition_name)
 
     def build_rule_state_transitions(self, cregIdx, state):
         def build_rule_state_transition(cregIdx, state, next_state):
@@ -259,9 +260,6 @@ class Parser(object):
             rname = 'rl_%(name)s_%(next_state)s' % pdict
             rcond = "(w_%(name)s_%(next_state)s)" % pdict
             rule = ast.Rule(rname, rcond, stmt)
-            # 
-            wname = "w_%s_%s" % (state.name, next_state.name)
-            self.pulse_wires.add(wname)
             return rule
         rules = []
 
@@ -270,27 +268,12 @@ class Parser(object):
             next_state_name = s['next_state']
             if next_state_name is None:
                 next_state_name = self.initial_state
-            print next_state_name
+            #print next_state_name
             state_dict = GetState(next_state_name)
             state_id = state_dict['id']
             next_state = self.states[state_id]
             rules.append(build_rule_state_transition(cregIdx, state, next_state))
         return rules
-
-    def build_reg(self, phv):
-        TMP1 = "Reg#(Bit#(%(sz)s)) rg_tmp_%(name)s <- mkReg(0);"
-        stmt = []
-        for state, parse_steps in self.rules.items():
-            for rule in parse_steps:
-                rcvdlen = rule.rcvdlen
-                last = rule.lastBeat
-                if last:
-                    stmt.append(ast.Template(TMP1, {'sz': rcvdlen, 'name': state}))
-
-        for sz, name in phv:
-            stmt.append(ast.Template(TMP1, {'sz': sz, 'name': name}))
-
-        return stmt
 
     def build_phv(self):
         metadata = set()
@@ -319,17 +302,17 @@ class Parser(object):
 
     def build_rules(self):
         self.decide_default_state()
+        self.populate_state_transition()
         stmt = []
         stmt.append(ast.Template("\n"))
         stmt.append(ast.Template("`ifdef PARSER_RULES\n"))
+        stmt += self.build_mutually_exclusive_attribute()
         for idx, s in enumerate(self.states.values()):
             if s.state_type == ParseState.REGULAR:
                 stmt += self.build_rule_state_load(s)
                 stmt += self.build_rule_state_extract(s)
-                stmt += self.build_mutually_exclusive_attribute(s)
                 stmt += self.build_rule_state_transitions(0, s)
             else:
-                print s.state_type
                 stmt += self.build_rule_state_transitions(1, s)
         stmt.append(ast.Template("`endif // PARSER_RULES\n"))
         return stmt
@@ -338,15 +321,8 @@ class Parser(object):
         stmt = []
         stmt.append(ast.Template("\n"))
         stmt.append(ast.Template("`ifdef PARSER_STATE\n"))
-        # fill in missing registers
-        for reg in self.regs:
-            stmt.append(ast.Template("Reg#(%s) %s <- mkReg(%s);\n"% (reg[0], reg[1], reg[2])))
-        for reg in self.cregs:
-            stmt.append(ast.Template("Reg#(%s) %s[%d] <- mkCReg(%d, %s);\n" % (reg[0], reg[1], reg[2], reg[2], reg[3])))
-        for wire in self.pulse_wires:
-            stmt.append(ast.Template("PulseWire %(name)s <- mkPulseWireOR();\n", {'name': wire}))
-        for wire in self.dwires:
-            stmt.append(ast.Template("Wire#(Bit#(%(width)s)) %(name)s <- mkDWire(0);\n", {'name': wire[0], 'width': wire[1]}))
+        for transition in self.state_transitions:
+            stmt.append(ast.Template("PulseWire w_%(name)s <- mkPulseWireOR();\n", {'name': transition}))
         stmt.append(ast.Template("`endif"))
         return stmt
 
@@ -359,7 +335,7 @@ class Parser(object):
             else:
                 self.initial_state = "start"
 
-    def buildTypes(self):
+    def build_types(self):
         stmt = []
         stmt.append(ast.Template("\n"))
         stmt.append(ast.Template("`ifdef PARSER_STRUCT\n"))
@@ -375,9 +351,9 @@ class Parser(object):
 
     def emit(self, builder):
         self.decide_default_state()
-        for s in self.buildTypes():
+        for s in self.build_types():
             s.emit(builder)
-        for s in self.build_funct_transition():
+        for s in self.build_functions():
             s.emit(builder)
         for s in self.build_rules():
             s.emit(builder)
