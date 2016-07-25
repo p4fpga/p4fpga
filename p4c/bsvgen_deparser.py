@@ -25,6 +25,8 @@ import logging
 import sourceCodeBuilder
 from utils import CamelCase
 import config
+from utils import GetHeaderWidth
+from ast_util import apply_pdict, apply_action_block, apply_if_verbosity
 
 logger = logging.getLogger(__name__)
 
@@ -33,90 +35,7 @@ class Deparser(object):
         self.deparse_states = deparse_states
         self.intf = None
 
-    def emitInterface(self, builder):
-        logger.info("emitInterface: Deparser")
-        TMP1 = "PipeIn#(MetadataT)"
-        TMP2 = "PktWriteServer"
-        TMP3 = "PktWriteClient"
-        TMP4 = "Put#(int)"
-        TMP5 = "DeparserPerfRec"
-        self.intf = ast.Interface(typedef="Deparser")
-        self.intf.subinterfaces.append(ast.Interface("metadata", TMP1))
-        self.intf.subinterfaces.append(ast.Interface("writeServer", TMP2, ["interface writeData = toPut(data_in_ff);"]))
-        self.intf.subinterfaces.append(ast.Interface("writeClient", TMP3, ["interface writeData = toGet(data_out_ff)"]))
-        self.intf.subinterfaces.append(ast.Interface("verbosity", TMP4))
-        self.intf.subinterfaces.append(ast.Method("read_perf_info", TMP5, []))
-        self.intf.emitInterfaceDecl(builder)
-
-    def buildFFs(self):
-        TMP = []
-        TMP.append("FIFOF#(EtherData) data_in_ff <- mkFIFOF;")
-        TMP.append("FIFOF#(EtherData) data_out_ff <- mkFIFOF;")
-        TMP.append("FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;")
-        stmt = []
-        for t in TMP:
-            stmt.append(ast.Template(t))
-        return stmt
-
-    def buildRegs(self):
-        TMP = []
-        TMP.append("Reg#(Bit#(32)) rg_offset <- mkReg(0);")
-        TMP.append("Reg#(Bit#(128)) rg_buff <- mkReg(0);")
-        TMP.append("Reg#(DeparserState) rg_deparse_state <- mkReg(StateDeparseStart);")
-        stmt = []
-        for t in TMP:
-            stmt.append(ast.Template(t))
-        return stmt
-
-    def buildInputs(self):
-        TMP = []
-        TMP.append("let din = data_in_ff.first;")
-        TMP.append("let meta = meta_in_ff.first;")
-        stmt = []
-        for t in TMP:
-            stmt.append(ast.Template(t))
-        return stmt
-
-    def funct_report_deparse_action(self):
-        TMP1 = "$display(\"(%%d) Deparse State %%h offset %%h\", $time, state, offset);"
-        fname = "report_deparse_action"
-        rtype = "Action"
-        params = "DeparserState state, Bit#(32) offset"
-        if_stmt = ast.If("cr_verbosity[0] > 0", [])
-        if_stmt.stmt.append(ast.Template(TMP1))
-        stmt = []
-        stmt.append(if_stmt)
-        ablock = [ast.ActionBlock(stmt)]
-        funct = ast.Function(fname, rtype, params, ablock)
-        return funct
-
-    def funct_succeed(self):
-        TMP1 = "data_in_ff.deq;"
-        TMP2 = "rg_offset <= offset;"
-        fname = "succeed_and_next"
-        rtype = "Action"
-        params = "Bit#(32) offset"
-        stmt = []
-        stmt.append(ast.Template(TMP1))
-        stmt.append(ast.Template(TMP2))
-        ablock = [ast.ActionBlock(stmt)]
-        funct = ast.Function(fname, rtype, params, ablock)
-        return funct
-
-    def funct_failed(self):
-        TMP1 = "data_in_ff.deq;"
-        TMP2 = "rg_offset <= 0;"
-        fname = "failed_and_trap"
-        rtype = "Action"
-        params = "Bit#(32) offset"
-        stmt = []
-        stmt.append(ast.Template(TMP1))
-        stmt.append(ast.Template(TMP2))
-        ablock = [ast.ActionBlock(stmt)]
-        funct = ast.Function(fname, rtype, params, ablock)
-        return funct
-
-    def funct_compute_next_state(self):
+    def funct_compute_next_state(self, state):
         TMP1 = "DeparserState nextState = StateDeparseStart;"
         TMP2 = "return nextState;"
         stmt = []
@@ -128,157 +47,60 @@ class Deparser(object):
         funct = ast.Function(fname, rtype, params, stmt)
         return funct
 
-    def funct_read_data(self):
-        TMP1 = "Bit#(l) ldata = truncate(din.data) << (fromInteger(valueOf(l))-lhs);"
-        TMP2 = "Bit#(l) rdata = truncate(rg_buff) >> (fromInteger(valueOf(l))-rhs);"
-        TMP3 = "Bit#(l) cdata = ldata | rdata;"
-        TMP4 = "return cdata;"
-        stmt = []
-        stmt.append(ast.Template(TMP1))
-        stmt.append(ast.Template(TMP2))
-        stmt.append(ast.Template(TMP3))
-        stmt.append(ast.Template(TMP4))
-        fname = "read_data"
-        rtype = "Bit#(l)"
-        params = "UInt#(8) lhs, UInt#(8) rhs"
-        provisos = "Add#(a__, l, 128)"
-        funct = ast.Function(fname, rtype, params, stmt, provisos=provisos)
-        return funct
-
-    def funct_create_mask(self):
-        TMP1 = "Bit#(max) v = 1 << count - 1;"
-        TMP2 = "return v;"
-        stmt = []
-        stmt.append(ast.Template(TMP1))
-        stmt.append(ast.Template(TMP2))
-        fname = "create_mask"
-        rtype = "Bit#(max)"
-        params = "UInt#(max) count"
-        funct = ast.Function(fname, rtype, params, stmt)
-        return funct
-
-    def funct_deparse_rule_no_opt(self):
-        TMP = []
-        TMP.append("report_deparse_action(rg_deparse_state, rg_offset);")
-        TMP.append("match {.meta, .mask} = m;")
-        TMP.append("Vector#(n, Bit#(1)) curr_meta = takeAt(0, unpack(byteSwap(meta)));")
-        TMP.append("Vector#(n, Bit#(1)) curr_mask = takeAt(0, unpack(byteSwap(mask)));")
-        TMP.append("Bit#(n) curr_data = read_data (clen, plen);")
-        TMP.append("$display (\"read_data %%h\", curr_data);")
-        TMP.append("let data = apply_changes (curr_data, pack(curr_meta), pack(curr_mask));")
-        TMP.append("let data_this_cycle = EtherData { sop: din.sop, eop: din.eop, data: zeroExtend(data), mask: create_mask(cExtend(fromInteger(valueOf(n)))) };")
-        TMP.append("data_out_ff.enq (data_this_cycle);")
-        TMP.append("DeparserState next_state = compute_next_state(state);")
-        TMP.append("$display (\"next_state %%h\", next_state);")
-        TMP.append("rg_deparse_state <= next_state;")
-        TMP.append("rg_buff <= din.data;")
-        TMP.append("// apply header removal by marking mask zero")
-        TMP.append("// apply added header by setting field at offset.")
-        TMP.append("succeed_and_next (rg_offset + cExtend(clen) + cExtend(plen));")
-        rcond = "(rg_deparse_state == state) && (rg_offset == unpack(pack(offset)))"
-        rstmt = []
-        for n in TMP: rstmt.append(ast.Template(n))
-        rule = ast.Rule("rl_deparse", rcond, rstmt)
-        rules = ast.Rules([rule])
-        rules_stmt = [rules]
-        fname = "build_deparse_rule_no_opt"
-        rtype = "Rules"
-        params = "DeparserState state, int offset, Tuple2#(Bit#(n), Bit#(n)) m, UInt#(8) clen, UInt#(8) plen"
-        provisos = "Mul#(TDiv#(n, 8), 8, n), Add#(a__, n, 128)"
-        funct = ast.Function(fname, rtype, params, rules_stmt, provisos)
-        stmt = []
-        stmt.append(funct)
-        return stmt
-
-    def rule_start(self, first_state):
-        TMP1 = "let v = data_in_ff.first;"
-        TMP2 = "rg_deparse_state <= %(state)s;"
-        TMP3 = "data_in_ff.deq;"
-        TMP4 = "data_out_ff.enq(v);"
-        stmt = []
-        stmt.append(ast.Template(TMP1))
-        if_stmt = []
-        if_stmt.append(ast.Template(TMP2, {"state": "State{}".format(CamelCase(first_state))}))
-        stmt.append(ast.If("v.sop", if_stmt))
-        else_stmt = []
-        else_stmt.append(ast.Template(TMP3))
-        else_stmt.append(ast.Template(TMP4))
-        stmt.append(ast.Else(else_stmt))
-        rname = "rl_start_state"
-        rcond = "rg_deparse_state == StateDeparseStart"
+    def rule_state_load(self, state, width):
+        tmpl = []
+        tmpl.append("rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];")
+        tmpl.append("move_buffered_amt(128);")
+        rname = "rl_deparse_%s_load" % state
+        rcond = "(deparse_state_ff.first == StateDeparse%s) && (rg_buffered[0] < %d)" % (CamelCase(state), width)
+        stmt = apply_pdict(tmpl, {})
         rule = ast.Rule(rname, rcond, stmt)
         return rule
 
-    def rule_deparse(self):
-        TMP1 = "Tuple2#(%(type)s, %(type)s) %(name)s = toTuple(meta);"
-        TMP2 = "Bit#(%(width)s) %(name)s_meta = pack(tpl_1(%(name)s));"
-        TMP3 = "Bit#(%(width)s) %(name)s_mask = pack(tpl_2(%(name)s));"
-        TMP4 = "addRules(build_deparse_rule_no_opt(%(state)s, %(offset)s, %(tuple)s, %(clen)s, %(plen)s));"
-        stmt = []
-        pdict = {"type": "FIXME",
-                "name": "FIXME",
-                "width": 0,
-                "state": "FIXME",
-                "offset": "FIXME",
-                "tuple": "FIXME",
-                "clen": 0,
-                "plen": 0}
-        stmt.append(ast.Template(TMP1 % pdict))
-        stmt.append(ast.Template(TMP2 % pdict))
-        stmt.append(ast.Template(TMP3 % pdict))
-        stmt.append(ast.Template(TMP4 % pdict))
-        return stmt
+    def rule_state_send(self, state, width):
+        tmpl = []
+        tmpl.append("succeed_and_next(%d);" % width)
+        tmpl.append("deparse_state_ff.deq;")
+        rname = "rl_deparse_%s_send" % state
+        rcond = "(deparse_state_ff.first == StateDeparse%s) && (rg_buffered[0] >= %d)" % (CamelCase(state), width)
+        stmt = apply_pdict(tmpl, {})
+        rule = ast.Rule(rname, rcond, stmt)
+        return rule
+
+    def rule_state_next(self, state, width):
+        tmpl = []
+        tmpl.append("deparse_state_ff.enq(StateDeparse%s);" % CamelCase(state))
+        tmpl.append("fetch_next_header(%d);" % width)
+        rname = "rl_deparse_%s_next" % state
+        rcond = "w_deparse_%s" % state
+        stmt = apply_pdict(tmpl, {})
+        rule = ast.Rule(rname, rcond, stmt)
+        return rule
 
     def buildModuleStmt(self):
         stmt = []
-        stmt += bsvgen_common.buildVerbosity()
-        stmt += self.buildFFs()
-        stmt += self.buildRegs()
-        stmt += self.buildInputs()
-        stmt.append(self.funct_report_deparse_action())
-        stmt.append(self.funct_succeed())
-        stmt.append(self.funct_failed())
-        stmt.append(self.funct_compute_next_state())
-        stmt.append(self.funct_read_data())
-        stmt.append(self.funct_create_mask())
-        first_state = self.deparse_states[0]
-        stmt.append(self.rule_start(first_state))
-        stmt += self.funct_deparse_rule_no_opt()
-        stmt.append(ast.Template("interface metadata = toPipeIn(meta_in_ff);"))
-        stmt.append(ast.Template("interface PktWriteServer writeServer;"))
-        stmt.append(ast.Template("  interface writeData = toPut(data_in_ff);"))
-        stmt.append(ast.Template("endinterface"))
-        stmt.append(ast.Template("interface PktWriteClient writeClient;"))
-        stmt.append(ast.Template("  interface writeData = toGet(data_out_ff);"))
-        stmt.append(ast.Template("endinterface"))
-        stmt.append(ast.Template("interface verbosity = toPut(cr_verbosity_ff);"))
+        stmt.append(ast.Template('`ifdef DEPARSER_RULES\n'))
+        for idx, s in enumerate(self.deparse_states):
+            stmt.append(self.rule_state_next(s, GetHeaderWidth(s)))
+            stmt.append(self.rule_state_load(s, GetHeaderWidth(s)))
+            stmt.append(self.rule_state_send(s, GetHeaderWidth(s)))
+        stmt.append(ast.Template('`endif\n'))
         return stmt
 
-    def emitTypes(self, builder):
+    def buildTypes(self):
+        stmt = []
+        stmt.append(ast.Template('`ifdef DEPARSER_STRUCT\n'))
         elem = []
         elem.append(ast.EnumElement("StateDeparseStart", None, None))
         for state in self.deparse_states:
-            elem.append(ast.EnumElement("State%s" % (CamelCase(state)), None, None))
+            elem.append(ast.EnumElement("StateDeparse%s" % (CamelCase(state)), None, None))
         state = ast.Enum("DeparserState", elem)
-        state.emit(builder)
-
-    def emitModule(self, builder):
-        logger.info("emitModule: Deparser")
-        stmt = []
-        mname = "mkDeparser"
-        iname = "Deparser"
-        params = []
-        provisos = []
-        decls = []
-        stmt = self.buildModuleStmt()
-        module = ast.Module(mname, params, iname, provisos, decls, stmt)
-        module.emit(builder)
+        stmt.append(state)
+        stmt.append(ast.Template('`endif\n'))
+        return stmt
 
     def emit(self, builder):
-        builder.newline()
-        builder.append("// ====== DEPARSER ======")
-        builder.newline()
-        builder.newline()
-        self.emitTypes(builder)
-        self.emitInterface(builder)
-        self.emitModule(builder)
+        for s in self.buildTypes():
+            s.emit(builder)
+        for s in self.buildModuleStmt():
+            s.emit(builder)
