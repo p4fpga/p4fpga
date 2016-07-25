@@ -48,6 +48,8 @@ import TxRx::*;
 import Utils::*;
 import Vector::*;
 
+import StructGenerated::*;
+
 // app-specific structs
 `define DEPARSER_STRUCT
 `include "DeparserGenerated.bsv"
@@ -77,10 +79,18 @@ module mkDeparser (Deparser);
    Array#(Reg#(Bool)) header_done <- mkCReg(2, True);
    PulseWire w_deparse_header_done <- mkPulseWire();
 
+   function Action dbprint(Integer level, Fmt msg);
+      action
+      if (cf_verbosity > fromInteger(level)) begin
+         $display("(%0d) ", $time, msg);
+      end
+      endaction
+   endfunction
+
    // app-specific states
-   `define DEPARSER_STATES
+   `define DEPARSER_STATE
    `include "DeparserGenerated.bsv"
-   `undef DEPARSER_STATES
+   `undef DEPARSER_STATE
 
    let mask_this_cycle = data_in_ff.first.mask;
    let sop_this_cycle = data_in_ff.first.sop;
@@ -124,13 +134,13 @@ module mkDeparser (Deparser);
     header_done[1] <= False;
     deparse_state_ff.enq(StateDeparseEthernet);
     fetch_next_header(112);
-    dbg3($format("start deparse %d", valueOf(SizeOf#(DeparserState))));
+    dbprint(3, $format("start deparse %d", valueOf(SizeOf#(DeparserState))));
   endrule
 
   rule rl_deparse_payload if (deparse_done[1] && !sop_this_cycle);
     let v = data_in_ff.first;
     data_in_ff.deq;
-    dbg3($format("shift amt %d", rg_shift_amt[1]));
+    dbprint(3, $format("shift amt %d", rg_shift_amt[1]));
     if (rg_shift_amt[1] != 0) begin
       Bit#(128) data_mask = create_mask(cExtend(rg_shift_amt[1]));
       Bit#(16) mask_out = create_mask(cExtend(rg_shift_amt[1] >> 3));
@@ -144,7 +154,7 @@ module mkDeparser (Deparser);
   endrule
 
   rule rl_data_ff_load if (!deparse_done[1] && (rg_buffered[2] < rg_next_header_len[2]));
-    dbg3($format("dequeue data_in_ff"));
+    dbprint(3, $format("dequeue data_in_ff"));
     data_in_ff.deq;
   endrule
 
@@ -160,7 +170,7 @@ module mkDeparser (Deparser);
     rg_processed[1] <= rg_processed[1] - amt;
     rg_shift_amt[1] <= rg_shift_amt[1] - amt;
     data_out_ff.enq(data);
-    dbg3($format("Deparser ", fshow(data), rg_shift_amt[1] - amt));
+    dbprint(3, $format("Deparser ", fshow(data), rg_shift_amt[1] - amt));
   endrule
 
   // wait till all processed bits are sent, cont. to send payload.

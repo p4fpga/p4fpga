@@ -48,6 +48,8 @@ import TxRx::*;
 import Utils::*;
 import Vector::*;
 
+import StructGenerated::*;
+
 `define PARSER_STRUCT
 `include "ParserGenerated.bsv"
 `undef PARSER_STRUCT
@@ -55,7 +57,7 @@ import Vector::*;
 interface Parser;
    interface Put#(EtherData) frameIn;
    interface Get#(MetadataT) meta;
-   interface Put#(int) verbosity;
+   method Action set_verbosity (int verbosity);
    method ParserPerfRec read_perf_info ();
 endinterface
 module mkParser  (Parser);
@@ -73,6 +75,14 @@ module mkParser  (Parser);
    Array#(Reg#(Bit#(32))) rg_shift_amt <- mkCReg(3, 0);
    Array#(Reg#(Bit#(512))) rg_tmp <- mkCReg(2, 0);
 
+   function Action dbprint(Integer level, Fmt msg);
+      action
+      if (cf_verbosity > fromInteger(level)) begin
+         $display("(%0d) ", $time, msg);
+      end
+      endaction
+   endfunction
+
    `define PARSER_STATE
    `include "ParserGenerated.bsv"
    `undef PARSER_STATE
@@ -81,7 +91,7 @@ module mkParser  (Parser);
      action
        rg_buffered[0] <= rg_buffered[0] - offset;
        rg_shift_amt[0] <= rg_buffered[0] - offset;
-       dbg3($format("succeed_and_next subtract offset = %d shift_amt/buffered = %d", offset, rg_buffered[0] - offset));
+       dbprint(3,$format("succeed_and_next subtract offset = %d shift_amt/buffered = %d", offset, rg_buffered[0] - offset));
      endaction
    endfunction
    function Action fetch_next_header0(Bit#(32) len);
@@ -109,7 +119,7 @@ module mkParser  (Parser);
    endfunction
    function Action report_parse_action(ParserState state, Bit#(32) offset, Bit#(128) data, Bit#(512) buff);
      action
-       if (cr_verbosity[0] > 3) begin
+       if (cf_verbosity > 3) begin
          $display("(%0d) Parser State %h buffered %d, %h, %h", $time, state, offset, data, buff);
        end
      endaction
@@ -127,7 +137,7 @@ module mkParser  (Parser);
      data_in_ff.deq;
      rg_buffered[2] <= rg_buffered[2] + 128;
      data_ff.enq(tagged Valid v);
-     dbg3($format("dequeue data %d %d", rg_buffered[2], rg_next_header_len[2]));
+     dbprint(3, $format("dequeue data %d %d", rg_buffered[2], rg_next_header_len[2]));
    endrule
 
    rule rl_start_state_deq if (parse_done[1] && sop_this_cycle && !w_parse_header_done);
@@ -149,5 +159,7 @@ module mkParser  (Parser);
 
    interface frameIn = toPut(data_in_ff);
    interface meta = toGet(meta_in_ff);
-   interface verbosity = toPut(cr_verbosity_ff);
+   method Action set_verbosity (int verbosity);
+     cf_verbosity <= verbosity;
+   endmethod
 endmodule
