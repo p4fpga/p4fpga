@@ -31,6 +31,7 @@ CONNECTALFLAGS += --bscflags="-show-range-conflict +RTS -K46777216 -RTS -demote-
 CONNECTALFLAGS += -m $(P4EXAMPLEDIR)/bsv/AsymmetricBRAM/mem_model.c
 CONNECTALFLAGS += -m generatedcpp/jni/matchtable_model.cpp
 CONNECTALFLAGS += --bscflags="-fdir $(CURDIR)/generatedbsv"
+CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/templates/
 CONNECTALFLAGS += --nocache
 CONNECTALFLAGS += --cxxflags=-std=c++11
 
