@@ -28,17 +28,20 @@ from collections import OrderedDict
 STRUCT_DEFAULT="""\
 instance DefaultValue#(%(name)s);
   defaultValue = unpack(0);
-endinstance"""
+endinstance
+"""
 
 STRUCT_MASK="""\
 instance DefaultMask#(%(name)s);
   defaultMask = unpack(maxBound);
-endinstance"""
+endinstance
+"""
 
 EXTRACT_TEMP="""\
 function %(name)s extract_%(lname)s(Bit#(%(width)s) data);
   return unpack(byteSwap(data));
-endfunction"""
+endfunction
+"""
 
 class Struct(object):
     def __init__(self, struct_attrs):

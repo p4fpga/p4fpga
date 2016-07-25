@@ -106,16 +106,19 @@ def main():
     # entry point for mid-end
     ir = p4fpga.ir_create(json_dict);
 
-    # entry point for backend
-    #builder = SourceCodeBuilder()
-    #ir.emit(builder, noisyFlag)
-
     if not os.path.exists("generatedbsv"):
         os.makedirs("generatedbsv")
 
     p4name = os.path.splitext(os.path.basename(options.source))[0]
     p4name = re.sub(r'\d+[-]+','', p4name)
-    generate_file(ir, os.path.join('generatedbsv', p4name+'.bsv'))
+
+    for idx, p in enumerate(ir.parsers.values()):
+        generate_file(p, os.path.join('generatedbsv', "ParserGenerated.bsv"))
+
+    for idx, p in enumerate(ir.deparsers.values()):
+        generate_file(p, os.path.join('generatedbsv', 'DeparserGenerated.bsv'))
+
+    generate_file(ir, os.path.join('generatedbsv', p4name+".bsv"))
     generate_file(top.Top(p4name), os.path.join('generatedbsv', "Main.bsv"))
     generate_file(top.API(p4name), os.path.join('generatedbsv', "MainAPI.bsv"))
     generate_file(top.Defs([]), os.path.join('generatedbsv', "MainDefs.bsv"))

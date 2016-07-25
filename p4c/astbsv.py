@@ -197,7 +197,7 @@ class Function:
         builder.decreaseIndent()
         builder.emitIndent()
         builder.append("endfunction")
-        #builder.newline()
+        builder.newline()
 
 class Variable:
     def __init__(self, name, t, value):
@@ -420,7 +420,7 @@ class Struct:
             p.emit(builder)
         builder.decreaseIndent()
         builder.emitIndent()
-        builder.append("} %(name)s deriving (Bits, Eq);" %({'name': self.name}))
+        builder.append("} %(name)s deriving (Bits, Eq, FShow);" %({'name': self.name}))
         builder.newline()
 
     def emit (self, builder):
@@ -452,7 +452,7 @@ class TypeDef:
             p.emit(builder)
             builder.newline()
         builder.decreaseIndent()
-        builder.append("} %(name)s deriving (Bits, Eq);" % {"name": self.name})
+        builder.append("} %(name)s deriving (Bits, Eq, FShow);" % {"name": self.name})
         builder.newline()
 
 class Param:

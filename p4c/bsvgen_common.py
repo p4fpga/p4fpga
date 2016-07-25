@@ -62,7 +62,8 @@ def emit_import(builder):
                       "GetPut", "List", "StmtFSM", "SpecialFIFOs", "Vector",
                       "Ethernet", "ClientServer", "DbgDefs", "PacketBuffer", 
                       "Pipe", "MatchTable", "Utils", "TxRx",
-                      "Register", "BuildVector", "CBus", "MIMO", "BUtils"]
+                      "Register", "BuildVector", "CBus", "MIMO", "BUtils",
+                      "ConfigReg", "PrintTrace"]
     pmap['imports'] = "\n".join(["import {}::*;".format(x) for x in sorted(import_modules)])
     builder.append(IMPORT_TEMPLATE % (pmap))
 

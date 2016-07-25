@@ -48,55 +48,6 @@ class Parser(object):
         self.states = states
         self.initial_state = "start"
 
-    def emitInterface(self, builder):
-        logger.info("emitParser")
-        TMP1 = "Put#(EtherData)"
-        TMP2 = "Get#(MetadataT)"
-        TMP3 = "Put#(int)"
-        TMP4 = "ParserPerfRec"
-        intf = ast.Interface(typedef="Parser")
-        intf.subinterfaces.append(ast.Interface("frameIn", TMP1))
-        intf.subinterfaces.append(ast.Interface("meta", TMP2))
-        intf.subinterfaces.append(ast.Interface("verbosity", TMP3))
-        intf.subinterfaces.append(ast.Method(name="read_perf_info", rtype=TMP4, params=[]))
-        intf.emitInterfaceDecl(builder)
-
-    def build_funct_succeed(self):
-        tmpl = []
-        tmpl.append("rg_buffered[0] <= rg_buffered[0] - offset;")
-        tmpl.append("rg_shift_amt[0] <= rg_buffered[0] - offset;")
-        tmpl.append("dbg3($format(\"succeed_and_next subtract offset = %%d shift_amt/buffered = %%d\", offset, rg_buffered[0] - offset));")
-        stmt = apply_pdict(tmpl, {})
-        ablock = apply_action_block(stmt)
-        funct = ast.Function("succeed_and_next", 'Action', "Bit#(32) offset", ablock)
-        return funct
-
-    def build_funct_fetch_next_header(self, cregIdx):
-        tmpl = []
-        tmpl.append("rg_next_header_len[%(idx)s] <= len;")
-        tmpl.append("w_parse_header_done.send();")
-        stmt = apply_pdict(tmpl, {'idx': cregIdx})
-        ablock = apply_action_block(stmt)
-        funct = ast.Function('fetch_next_header%d'%(cregIdx), 'Action', 'Bit#(32) len', ablock)
-        return funct
-
-    def build_funct_move_shift_amt(self):
-        tmpl = []
-        tmpl.append("rg_shift_amt[0] <= rg_shift_amt[0] + len;")
-        tmpl.append("w_load_header.send();")
-        stmt = apply_pdict(tmpl, {})
-        ablock = apply_action_block(stmt)
-        funct = ast.Function('move_shift_amt', 'Action', 'Bit#(32) len', ablock)
-        return funct
-
-    def build_funct_failed_and_trap(self):
-        tmpl = []
-        tmpl.append("rg_buffered[0] <= 0;")
-        stmt = apply_pdict(tmpl, {})
-        ablock = apply_action_block(stmt)
-        funct = ast.Function('failed_and_trap', 'Action', 'Bit#(32) offset', ablock)
-        return funct
-
     def build_funct_push_phv(self, phv):
         TMP1 = "MetadataT meta = defaultValue;"
         TMP2 = "meta.%(field)s = tagged Valid rg_tmp_%(field)s;"
@@ -109,16 +60,6 @@ class Parser(object):
         stmt.append(ast.Template(TMP3))
         ablock = apply_action_block(stmt)
         funct = ast.Function("push_phv", 'Action', params, ablock)
-        return funct
-
-    def build_funct_report_parse_action(self):
-        tmpl = []
-        tmpl.append("$display(\"(%%0d) Parser State %%h buffered %%d, %%h, %%h\", $time, state, offset, data, buff);")
-        stmt = apply_pdict(tmpl, {})
-        ifstmt = apply_if_verbosity(3, stmt)
-        ablock = apply_action_block(ifstmt)
-        params = "ParserState state, Bit#(32) offset, Bit#(128) data, Bit#(512) buff"
-        funct = ast.Function('report_parse_action', 'Action', params, ablock)
         return funct
 
     def build_funct_transition(self):
@@ -173,45 +114,15 @@ class Parser(object):
             return param
 
         funct = []
+        funct.append(ast.Template("\n"))
+        funct.append(ast.Template("`ifdef PARSER_FUNCTION\n"))
         for _, s in self.states.items():
             if s.name == self.initial_state:
                 continue
             params = build_param(s)
             funct.append(build_funct(s.name, params, s.transitions))
+        funct.append(ast.Template("`endif // PARSER_FUNCTION\n"))
         return funct
-
-    # need a default state to skip payload after processing header
-    def build_rule_start(self, next_state):
-        tmpl = []
-        tmpl.append("let v = data_in_ff.first.data;")
-        tmpl.append("data_ff.enq(tagged Valid v);")
-        tmpl.append("rg_buffered[2] <= 128;")
-        tmpl.append("rg_shift_amt[2] <= 0;")
-        tmpl.append("parse_done[1] <= False;")
-        tmpl.append("parse_state_ff.enq(%(state)s);")
-        rules = []
-        stmt = apply_pdict(tmpl, {"state": "State{}".format(CamelCase(next_state))})
-        rcond = "parse_done[1] && sop_this_cycle && !w_parse_header_done"
-        rules.append(ast.Rule('rl_start_state_deq', rcond, stmt))
-        tmpl2 = []
-        tmpl2.append("data_in_ff.deq;")
-        stmt2 = apply_pdict(tmpl2, {})
-        rcond2 = "parse_done[1] && (!sop_this_cycle || w_parse_header_done)"
-        rules.append(ast.Rule('rl_start_state_idle', rcond2, stmt2))
-        return rules
-
-    def build_rule_data_ff_load(self, initial_state):
-        tmpl = []
-        tmpl.append("let v = data_in_ff.first.data;")
-        tmpl.append("data_in_ff.deq;")
-        tmpl.append("rg_buffered[2] <= rg_buffered[2] + %s;"%(config.DP_WIDTH))
-        tmpl.append("data_ff.enq(tagged Valid v);")
-        tmpl.append("dbg3($format(\"dequeue data %%d %%d\", rg_buffered[2], rg_next_header_len[2]));")
-        stmt = apply_pdict(tmpl, {})
-        #FIXME: lookahead..
-        rcond = '(!parse_done[1] && rg_buffered[2] < rg_next_header_len[2]) && (w_parse_header_done || w_load_header)'
-        rule = ast.Rule('rl_data_ff_load', rcond, stmt)
-        return [rule]
 
     def build_rule_state_load(self, state):
         tmpl = []
@@ -306,6 +217,7 @@ class Parser(object):
             # back to start
             tmpl_to_start = []
             tmpl_to_start.append("parse_done[0] <= True;")
+            tmpl_to_start.append("w_parse_done.send();")
             tmpl_to_start.append("dbg3($format(\"%%s -> %%s\", \"%(name)s\", \"%(next_state)s\"));")
             tmpl_to_start.append("fetch_next_header%(cregIdx)s(0);")
 
@@ -365,21 +277,6 @@ class Parser(object):
             rules.append(build_rule_state_transition(cregIdx, state, next_state))
         return rules
 
-    def build_ff(self):
-        tmpl = []
-        tmpl.append("FIFO#(ParserState) parse_state_ff <- mkPipelineFIFO();")
-        tmpl.append("FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);")
-        tmpl.append("FIFOF#(EtherData) data_in_ff <- mkFIFOF;")
-        tmpl.append("FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;")
-        tmpl.append("PulseWire w_parse_header_done <- mkPulseWireOR();")
-        tmpl.append("PulseWire w_load_header <- mkPulseWireOR();")
-        tmpl.append("Reg#(Bit#(32)) rg_next_header_len[3] <- mkCReg(3, 0);")
-        tmpl.append("Reg#(Bit#(32)) rg_buffered[3] <- mkCReg(3, 0);")
-        tmpl.append("Reg#(Bit#(32)) rg_shift_amt[3] <- mkCReg(3, 0);")
-        tmpl.append("Reg#(Bit#(512)) rg_tmp[2] <- mkCReg(2, 0);")
-        stmt = apply_pdict(tmpl, {})
-        return stmt
-
     def build_reg(self, phv):
         TMP1 = "Reg#(Bit#(%(sz)s)) rg_tmp_%(name)s <- mkReg(0);"
         stmt = []
@@ -420,32 +317,11 @@ class Parser(object):
         #        fields.append((0, name))
         return fields
 
-    def build_boiler_plates(self):
-        stmt = []
-        stmt += bsvgen_common.buildVerbosity()
-        stmt += self.build_ff()
-        #phv = self.build_phv()
-        #stmt += self.build_reg(phv)
-        stmt.append(build_funct_dbg3())
-        stmt.append(self.build_funct_succeed())
-        stmt.append(self.build_funct_fetch_next_header(0))
-        stmt.append(self.build_funct_fetch_next_header(1))
-        stmt.append(self.build_funct_move_shift_amt())
-        stmt.append(self.build_funct_failed_and_trap())
-        #stmt.append(self.build_funct_push_phv(phv))
-        stmt.append(self.build_funct_report_parse_action())
-        stmt.append(ast.Template("let sop_this_cycle = data_in_ff.first.sop;"))
-        stmt.append(ast.Template("let eop_this_cycle = data_in_ff.first.eop;"))
-        stmt.append(ast.Template("let data_this_cycle = data_in_ff.first.data;"))
-        return stmt
-
-    def buildModuleStmt(self):
+    def build_rules(self):
         self.decide_default_state()
         stmt = []
-        stmt += self.build_boiler_plates()
-        stmt += self.build_funct_transition()
-        stmt += self.build_rule_data_ff_load(self.initial_state)
-        stmt += self.build_rule_start(self.initial_state)
+        stmt.append(ast.Template("\n"))
+        stmt.append(ast.Template("`ifdef PARSER_RULES\n"))
         for idx, s in enumerate(self.states.values()):
             if s.state_type == ParseState.REGULAR:
                 stmt += self.build_rule_state_load(s)
@@ -455,22 +331,21 @@ class Parser(object):
             else:
                 print s.state_type
                 stmt += self.build_rule_state_transitions(1, s)
+        stmt.append(ast.Template("`endif // PARSER_RULES\n"))
+        return stmt
 
-        self.cregs.add(('Bool', 'parse_done', 2, 'True'))
-
+    def build_states(self):
+        stmt = []
         # fill in missing registers
         for reg in self.regs:
-            stmt.insert(0, ast.Template("Reg#(%s) %s <- mkReg(%s);"% (reg[0], reg[1], reg[2])))
+            stmt.insert(0, ast.Template("Reg#(%s) %s <- mkReg(%s);\n"% (reg[0], reg[1], reg[2])))
         for reg in self.cregs:
-            stmt.insert(0, ast.Template("Reg#(%s) %s[%d] <- mkCReg(%d, %s);" % (reg[0], reg[1], reg[2], reg[2], reg[3])))
+            stmt.insert(0, ast.Template("Reg#(%s) %s[%d] <- mkCReg(%d, %s);\n" % (reg[0], reg[1], reg[2], reg[2], reg[3])))
         for wire in self.pulse_wires:
-            stmt.insert(0, ast.Template("PulseWire %(name)s <- mkPulseWireOR();", {'name': wire}))
+            stmt.insert(0, ast.Template("PulseWire %(name)s <- mkPulseWireOR();\n", {'name': wire}))
         for wire in self.dwires:
-            stmt.insert(0, ast.Template("Wire#(Bit#(%(width)s)) %(name)s <- mkDWire(0);", {'name': wire[0], 'width': wire[1]}))
+            stmt.insert(0, ast.Template("Wire#(Bit#(%(width)s)) %(name)s <- mkDWire(0);\n", {'name': wire[0], 'width': wire[1]}))
 
-        stmt.append(ast.Template("interface frameIn = toPut(data_in_ff);"))
-        stmt.append(ast.Template("interface meta = toGet(meta_in_ff);"))
-        stmt.append(ast.Template("interface verbosity = toPut(cr_verbosity_ff);"))
         return stmt
 
     def decide_default_state(self):
@@ -482,52 +357,28 @@ class Parser(object):
             else:
                 self.initial_state = "start"
 
-    def emitTypes(self, builder):
+    def buildTypes(self):
+        stmt = []
+        stmt.append(ast.Template("\n"))
+        stmt.append(ast.Template("`ifdef PARSER_STRUCT\n"))
         elem = []
         if self.initial_state == 'default':
             elem.append(ast.EnumElement("StateDefault", None, None))
         for s in self.states.values():
             elem.append(ast.EnumElement("State%s" % (CamelCase(s.name)), None, None))
         state = ast.Enum("ParserState", elem)
-        state.emit(builder)
-
-    def emitModule(self, builder):
-        logger.info("emitModule: Parser")
-        mname = "mkParser"
-        iname = "Parser"
-        params = []
-        provisos = []
-        decls = []
-        stmt = self.buildModuleStmt()
-        module = ast.Module(mname, params, iname, provisos, decls, stmt)
-        module.emit(builder)
+        stmt.append(state)
+        stmt.append(ast.Template("`endif //PARSER_STRUCT\n"))
+        return stmt
 
     def emit(self, builder):
-        builder.newline()
-        builder.append("// ====== PARSER ======")
-        builder.newline()
-        builder.newline()
-        assert isinstance(builder, SourceCodeBuilder)
         self.decide_default_state()
-        self.emitTypes(builder)
-        self.emitInterface(builder)
-        self.emitModule(builder)
-
-    #FIXME: need to factor out this logic
-    def _find_prev_unmerged_state(self, curr_state, visited):
-        if curr_state in self.map_merged_state and self.map_merged_state[curr_state] == True:
-            if curr_state in visited:
-                return []
-            visited.add(curr_state)
-            prev_states = []
-            if curr_state in self.map_parse_state_reverse:
-                prev_states = self.map_parse_state_reverse[curr_state]
-
-            all_states = []
-            print 'xxxxxxxxx', all_states, curr_state, prev_states
-            for state in prev_states:
-                all_states += self.find_prev_unmerged_state(state, visited)
-            return all_states
-        else:
-            return [ curr_state ]
+        for s in self.buildTypes():
+            s.emit(builder)
+        for s in self.build_funct_transition():
+            s.emit(builder)
+        for s in self.build_states():
+            s.emit(builder)
+        for s in self.build_rules():
+            s.emit(builder)
 
