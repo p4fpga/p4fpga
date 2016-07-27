@@ -26,7 +26,7 @@ import logging
 from ast_util import ParseState
 from bsvgen_common import build_funct_dbg3
 from sourceCodeBuilder import SourceCodeBuilder
-from utils import CamelCase, camelCase, GetFieldWidth
+from utils import CamelCase, camelCase, GetFieldWidth, p4name
 from utils import GetHeaderInState, GetHeaderType, GetHeaderWidth
 from utils import GetExpressionInState, GetTransitionKey, GetHeaderWidthInState
 from utils import GetState
@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 class Parser(object):
     def __init__(self, states):
         self.state_transitions = set()
+        self.state_transitions_generated = set()
         self.states = states
         self.initial_state = "start"
 
@@ -209,6 +210,12 @@ class Parser(object):
 
     def build_rule_state_transitions(self, cregIdx, state):
         def build_rule_state_transition(cregIdx, state, next_state):
+            # skip duplicated transition rule
+            transition = "%s_%s" % (state.name, next_state.name)
+            if transition in self.state_transitions_generated:
+                return
+            self.state_transitions_generated.add(transition)
+
             # forward transition
             tmpl_forward_flow = []
             tmpl_forward_flow.append("parse_state_ff.enq(%(NextState)s);")
@@ -272,7 +279,9 @@ class Parser(object):
             state_dict = GetState(next_state_name)
             state_id = state_dict['id']
             next_state = self.states[state_id]
-            rules.append(build_rule_state_transition(cregIdx, state, next_state))
+            rule = build_rule_state_transition(cregIdx, state, next_state)
+            if rule is not None:
+                rules.append(rule)
         return rules
 
     def build_phv(self):
@@ -282,7 +291,7 @@ class Parser(object):
             for f in it.request.members:
                 if f not in metadata:
                     width = GetFieldWidth(f)
-                    name = "$".join(f)
+                    name = p4name(f)
                     fields.append((width, name))
                     metadata.add(f)
         for f in config.ir.controls.values():
@@ -291,7 +300,7 @@ class Parser(object):
                     d = tuple(k['target'])
                     if d not in metadata:
                         width = GetFieldWidth(k['target'])
-                        name = "$".join(k['target'])
+                        name = p4name(k['target'])
                         fields.append((width, name))
                         metadata.add(d)
         #for it in config.ir.parsers.values():

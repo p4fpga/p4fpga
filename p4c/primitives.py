@@ -15,7 +15,7 @@
 
 import math
 import astbsv as ast
-from utils import CamelCase, GetFieldWidth
+from utils import CamelCase, GetFieldWidth, p4name
 import primitives as prm
 
 def get_reg_array_size(name, json_dict):
@@ -57,7 +57,7 @@ class ModifyField(Primitive):
         stmt = []
         dst_value = self.parameters[0]['value']
         dst_type = self.parameters[0]['type']
-        field = "$".join(dst_value)
+        field = p4name(dst_value)
         dsz = GetFieldWidth(dst_value)
         pdict = {"dsz": dsz, "field": field}
         stmt.append(ast.Template(TMP1, pdict))
@@ -74,11 +74,11 @@ class ModifyField(Primitive):
             assert runtime_data is not None
             src = runtime_data[src_value]
 
-            stmt.append(ast.Template(TMP1 % ("$".join(dst_value), "runtime_%s" % (src['name']))))
+            stmt.append(ast.Template(TMP1 % (p4name(dst_value), "runtime_%s" % (src['name']))))
         elif src_type == 'hexstr':
-            stmt.append(ast.Template(TMP1 % ("$".join(dst_value), "%s" % (src_value.replace("0x", "'h")))))
+            stmt.append(ast.Template(TMP1 % (p4name(dst_value), "%s" % (src_value.replace("0x", "'h")))))
         else:
-            stmt.append(ast.Template(TMP1 % ("$".join(dst_value), "$".join(src_value))))
+            stmt.append(ast.Template(TMP1 % (p4name(dst_value), p4name(src_value))))
         return stmt
 
 class RegisterRead(Primitive):
@@ -92,7 +92,7 @@ class RegisterRead(Primitive):
         name = self.parameters[1]['value']
         ptype = CamelCase(name) #FIXME
         if type(self.parameters[2]['value']) is list:
-            addr = "$".join(self.parameters[2]['value'])
+            addr = p4name(self.parameters[2]['value'])
         else:
             addr = self.parameters[2]['value'][0]
         stmt = []
@@ -107,7 +107,7 @@ class RegisterRead(Primitive):
         TMP1 = "let v_%(name)s = rx_info_%(tname)s.first;"
         TMP2 = "rx_info_%(tname)s.deq;"
         TMP3 = "let %(name)s = v_%(name)s.data;"
-        name = "$".join(self.parameters[0]['value'])
+        name = p4name(self.parameters[0]['value'])
         tname = self.parameters[1]['value']
         stmt = []
         stmt.append(ast.Template(TMP1, {"name": name, "tname": tname}))
@@ -160,7 +160,7 @@ class RegisterWrite(Primitive):
     def getDstReg(self, json_dict):
         name = self.parameters[0]['value']
         dsz, _ = get_reg_array_size(name, json_dict)
-        return (dsz, "$".join(self.parameters[2]['value']))
+        return (dsz, p4name(self.parameters[2]['value']))
 
     def getName(self):
         return self.parameters[0]['value']
@@ -172,11 +172,11 @@ class RegisterWrite(Primitive):
         name = self.parameters[0]['value']
         ptype = CamelCase(name)
         if type(self.parameters[1]['value']) is list:
-            addr = "$".join(self.parameters[1]['value'])
+            addr = p4name(self.parameters[1]['value'])
         else:
             addr = self.parameters[1]['value'][0]
         if type(self.parameters[2]['value']) is list:
-            data = "$".join(self.parameters[2]['value'])
+            data = p4name(self.parameters[2]['value'])
         else:
             data = self.parameters[2]['value'][0]
         stmt = []
@@ -194,7 +194,7 @@ class RegisterWrite(Primitive):
         TMP4 = "let rx_info_%(name)s = rx_%(name)s.u;"
         stmt = []
         name = self.parameters[0]['value']
-        field = "$".join(self.parameters[2]['value'])
+        field = p4name(self.parameters[2]['value'])
         dsz, asz= get_reg_array_size(name, json_dict)
         pdict = {'name': name, 'asz': asz, 'dsz': dsz, 'field': field}
         stmt.append(ast.Template(TMP1, pdict))
@@ -287,3 +287,101 @@ class CloneIngressPktToEgress(Primitive):
     def build(self):
         stmt = []
         return stmt
+
+class Count(Primitive):
+    def __init__(self, op, parameters):
+        self.op = op
+        self.parameters = parameters
+    def build(self):
+        stmt = []
+        return stmt
+
+class ModifyFieldWithHashBasedOffset(Primitive):
+    def __init__(self, op, parameters):
+        self.op = op
+        self.parameters = parameters
+    def build(self):
+        stmt = []
+        return stmt
+
+class CopyHeader(Primitive):
+    def __init__(self, op, parameters):
+        self.op = op
+        self.parameters = parameters
+    def build(self):
+        stmt = []
+        return stmt
+
+class BitXor(Primitive):
+    def __init__(self, op, parameters):
+        self.op = op
+        self.parameters = parameters
+    def build(self):
+        stmt = []
+        return stmt
+
+class CloneEgressPktToEgress(Primitive):
+    def __init__(self, op, parameters):
+        self.op = op
+        self.parameters = parameters
+    def build(self):
+        stmt = []
+        return stmt
+
+class GenerateDigest(Primitive):
+    def __init__(self, op, parameters):
+        self.op = op
+        self.parameters = parameters
+    def build(self):
+        stmt = []
+        return stmt
+
+class Add(Primitive):
+    def __init__(self, op, parameters):
+        self.op = op
+        self.parameters = parameters
+    def build(self):
+        stmt = []
+        return stmt
+
+class Subtract(Primitive):
+    def __init__(self, op, parameters):
+        self.op = op
+        self.parameters = parameters
+    def build(self):
+        stmt = []
+        return stmt
+
+class BitOr(Primitive):
+    def __init__(self, op, parameters):
+        self.op = op
+        self.parameters = parameters
+    def build(self):
+        stmt = []
+        return stmt
+
+class Push(Primitive):
+    def __init__(self, op, parameters):
+        self.op = op
+        self.parameters = parameters
+    def build(self):
+        stmt = []
+        return stmt
+
+class ModifyFieldRngUniform(Primitive):
+    def __init__(self, op, parameters):
+        self.op = op
+        self.parameters = parameters
+    def build(self):
+        stmt = []
+        return stmt
+
+class ExecuteMeter(Primitive):
+    def __init__(self, op, parameters):
+        self.op = op
+        self.parameters = parameters
+    def build(self):
+        stmt = []
+        return stmt
+
+

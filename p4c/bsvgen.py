@@ -85,6 +85,9 @@ def main():
     argparser.add_argument('--p4-v1.1', action='store_true',
                            help='Run the compiler on a P4 v1.1 program.',
                            default=False, required=False)
+    argparser.add_argument('--mem', action='store_true',
+                           help='Generate Pipeline with Shared Buffer.',
+                           default=False, required=False)
     options = argparser.parse_args()
 
     if options.json:
@@ -135,7 +138,13 @@ def main():
     generate_parser(ir)
     generate_deparser(ir)
     generate_file(ir, os.path.join('generatedbsv', p4name+".bsv"))
-    generate_file(top.Top(p4name), os.path.join('generatedbsv', "Main.bsv"))
+
+    with_mem = getattr(options, 'mem')
+    if with_mem:
+        generate_file(top.TopMemory(p4name), os.path.join('generatedbsv', "Main.bsv"))
+    else:
+        generate_file(top.TopStream(p4name), os.path.join('generatedbsv', 'Main.bsv'))
+
     generate_file(top.API(p4name), os.path.join('generatedbsv', "MainAPI.bsv"))
     generate_file(top.Defs([]), os.path.join('generatedbsv', "MainDefs.bsv"))
 

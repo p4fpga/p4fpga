@@ -22,10 +22,9 @@
 import astbsv as ast
 import bsvgen_common
 import logging
-import sourceCodeBuilder
-from utils import CamelCase
 import config
-from utils import GetHeaderWidth
+import sourceCodeBuilder
+from utils import CamelCase, p4name, GetHeaderWidth
 from ast_util import apply_pdict, apply_action_block, apply_if_verbosity
 
 logger = logging.getLogger(__name__)
@@ -51,7 +50,7 @@ class Deparser(object):
         tmpl = []
         tmpl.append("rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];")
         tmpl.append("move_buffered_amt(128);")
-        rname = "rl_deparse_%s_load" % state
+        rname = "rl_deparse_%s_load" % (state.translate(None, "[]"))
         rcond = "(deparse_state_ff.first == StateDeparse%s) && (rg_buffered[0] < %d)" % (CamelCase(state), width)
         stmt = apply_pdict(tmpl, {})
         rule = ast.Rule(rname, rcond, stmt)
@@ -61,7 +60,7 @@ class Deparser(object):
         tmpl = []
         tmpl.append("succeed_and_next(%d);" % width)
         tmpl.append("deparse_state_ff.deq;")
-        rname = "rl_deparse_%s_send" % state
+        rname = "rl_deparse_%s_send" % (state.translate(None, "[]"))
         rcond = "(deparse_state_ff.first == StateDeparse%s) && (rg_buffered[0] >= %d)" % (CamelCase(state), width)
         stmt = apply_pdict(tmpl, {})
         rule = ast.Rule(rname, rcond, stmt)
@@ -71,8 +70,8 @@ class Deparser(object):
         tmpl = []
         tmpl.append("deparse_state_ff.enq(StateDeparse%s);" % CamelCase(state))
         tmpl.append("fetch_next_header(%d);" % width)
-        rname = "rl_deparse_%s_next" % state
-        rcond = "w_deparse_%s" % state
+        rname = "rl_deparse_%s_next" % (state.translate(None, "[]"))
+        rcond = "w_deparse_%s" % (state.translate(None, "[]"))
         stmt = apply_pdict(tmpl, {})
         rule = ast.Rule(rname, rcond, stmt)
         return rule
@@ -102,8 +101,8 @@ class Deparser(object):
     def build_state(self):
         stmt = []
         stmt.append(ast.Template("`ifdef DEPARSER_STATE\n"))
-        for idx, s in enumerate(self.deparse_states):
-            stmt.append(ast.Template("PulseWire w_deparse_%(name)s <- mkPulseWire();\n", {'name': s}))
+        for idx, state in enumerate(self.deparse_states):
+            stmt.append(ast.Template("PulseWire w_deparse_%(name)s <- mkPulseWire();\n", {'name': state.translate(None, "[]")}))
         stmt.append(ast.Template("`endif // DEPARSER_STATE\n"))
         return stmt
 

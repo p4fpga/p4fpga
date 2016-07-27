@@ -16,7 +16,7 @@
 import astbsv as ast
 from bsvgen_common import emit_license, emit_import
 
-class Top(object):
+class TopMemory(object):
     def __init__(self, p4name):
         self.p4name = p4name
 
@@ -95,6 +95,89 @@ class Top(object):
         self.emit_import(builder)
         self.emitInterface(builder)
         self.emitModule(builder)
+        emit_license(builder)
+
+class TopStream(object):
+    def __init__(self, p4name):
+        self.p4name = p4name
+
+    def emit_import(self, builder):
+        TMP1 = "import %s::*;"
+        modules = ["Connectable",
+                   "Clocks",
+                   "BuildVector",
+                   "GetPut",
+                   "HostChannel",
+                   "StreamChannel",
+                   "PacketBuffer",
+                   "SharedBuff",
+                   "Sims",
+                   self.p4name,
+                   "MainAPI"
+                   ]
+        for x in sorted(modules):
+            builder.append(ast.Template(TMP1 % x))
+            builder.newline()
+
+
+    def build_module(self):
+        TMP = []
+        TMP.append("let verbose = True;")
+        TMP.append("Clock defaultClock <- exposeCurrentClock();")
+        TMP.append("Reset defaultReset <- exposeCurrentReset();")
+        TMP.append("`ifdef SIMULATION")
+        TMP.append("SimClocks clocks <- mkSimClocks();")
+        TMP.append("Clock txClock = clocks.clock_156_25;")
+        TMP.append("Clock phyClock = clocks.clock_644_53;")
+        TMP.append("Clock mgmtClock = clocks.clock_50;")
+        TMP.append("Clock rxClock = txClock;")
+        TMP.append("Reset txReset <- mkSyncReset(2, defaultReset, txClock);")
+        TMP.append("Reset phyReset <- mkSyncReset(2, defaultReset, phyClock);")
+        TMP.append("Reset mgmtReset <- mkSyncReset(2, defaultReset, mgmtClock);")
+        TMP.append("Reset rxReset = txReset;")
+        TMP.append("`endif")
+        TMP.append("HostChannel hostchan <- mkHostChannel();")
+        TMP.append("Ingress ingress <- mkIngress(vec(hostchan.next));")
+        TMP.append("Egress egress <- mkEgress(vec(ingress.next));")
+        TMP.append("StreamOutChannel txchan <- mkStreamOutChannel(txClock, txReset);")
+
+        TMP.append("PacketBuffer buff <- mkPacketBuffer();")
+        TMP.append("mkConnection(egress.next, txchan.prev);")
+        TMP.append("`ifdef SIMULATION")
+        TMP.append("rule drain_mac;")
+        TMP.append("   let v <- toGet(txchan.macTx).get;")
+        TMP.append("   if (verbose) $display(\"(%%0d) tx data \", $time, fshow(v));")
+        TMP.append("endrule")
+        TMP.append("`endif")
+        TMP.append("MainAPI api <- mkMainAPI(indication, hostchan, ingress, txchan);")
+        TMP.append("interface request = api.request;")
+        stmt = []
+        for t in TMP:
+            stmt.append(ast.Template(t))
+        return stmt
+
+
+
+    def emit_interface(self, builder):
+        intf = ast.Interface(typedef = "Main")
+        intf.subinterfaces.append(ast.Interface('request', 'MainRequest'))
+        intf.emitInterfaceDecl(builder)
+
+    def emit_module(self, builder):
+        mname = "mkMain"
+        decls = []
+        decls.append("MainIndication indication")
+        iname = "Main"
+        params = []
+        provisos = []
+        stmt = self.build_module()
+        module = ast.Module(mname, params, iname, provisos, decls, stmt)
+        module.emit(builder)
+
+    def emit(self, builder):
+        self.emit_import(builder)
+        self.emit_interface(builder)
+        self.emit_module(builder)
         emit_license(builder)
 
 class API():

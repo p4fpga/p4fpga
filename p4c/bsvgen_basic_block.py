@@ -23,7 +23,7 @@ import logging
 import astbsv as ast
 import primitives as prm
 import exceptions
-from utils import CamelCase
+from utils import CamelCase, p4name
 from bsvgen_struct import Struct, StructM
 from collections import OrderedDict
 from sourceCodeBuilder import SourceCodeBuilder
@@ -118,8 +118,8 @@ class BasicBlock(object):
                     param.append(p.parameters[0])
                     param.append(dst_field)
                     _p = prm.ModifyField("modify_field", param)
-                    _src = "$".join(dst_field['value'])
-                    _dst = "$".join(p.parameters[0]['value'])
+                    _src = p4name(dst_field['value'])
+                    _dst = p4name(p.parameters[0]['value'])
                     bypass_map[_dst] = _src
                     logger.info("BYPASS: %s", _p)
                     newPrimitives.append(_p)
@@ -180,8 +180,32 @@ class BasicBlock(object):
             obj = prm.SubtractFromField(p['op'], p['parameters'])
         elif p['op'] == 'clone_ingress_pkt_to_egress':
             obj = prm.CloneIngressPktToEgress(p['op'], p['parameters'])
+        elif p['op'] == 'count':
+            obj = prm.Count(p['op'], p['parameters'])
+        elif p['op'] == 'modify_field_with_hash_based_offset':
+            obj = prm.ModifyFieldWithHashBasedOffset(p['op'], p['parameters'])
+        elif p['op'] == 'copy_header':
+            obj = prm.CopyHeader(p['op'], p['parameters'])
+        elif p['op'] == 'bit_xor':
+            obj = prm.BitXor(p['op'], p['parameters'])
+        elif p['op'] == 'clone_egress_pkt_to_egress':
+            obj = prm.CloneEgressPktToEgress(p['op'], p['parameters'])
+        elif p['op'] == 'generate_digest':
+            obj = prm.GenerateDigest(p['op'], p['parameters'])
+        elif p['op'] == 'add':
+            obj = prm.Add(p['op'], p['parameters'])
+        elif p['op'] == 'subtract':
+            obj = prm.Subtract(p['op'], p['parameters'])
+        elif p['op'] == 'bit_or':
+            obj = prm.BitOr(p['op'], p['parameters'])
+        elif p['op'] == 'push':
+            obj = prm.Push(p['op'], p['parameters'])
+        elif p['op'] == 'modify_field_rng_uniform':
+            obj = prm.ModifyFieldRngUniform(p['op'], p['parameters'])
+        elif p['op'] == 'execute_meter':
+            obj = prm.ExecuteMeter(p['op'], p['parameters'])
         else:
-            raise Exception("Unsupported primitive", p['op'])
+            print ("ERROR: Unsupported primitive", p['op'])
         return obj, field_read, field_write
 
     def buildClientInterfaces(self, json_dict):
@@ -343,5 +367,6 @@ class BasicBlock(object):
         builder.newline()
         assert isinstance(builder, SourceCodeBuilder)
         self.emitInterface(builder)
+        builder.appendLine("(* synthesize *)")
         self.emitModule(builder)
 

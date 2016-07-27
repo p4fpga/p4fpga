@@ -20,7 +20,7 @@
 #
 
 import config
-import os
+import os, re
 import pprint
 import astbsv as ast
 
@@ -48,6 +48,9 @@ def GetExpressionInState (state_name):
                 if exp1['value']:
                     BuildExpression(exp1['value'], src, [])
                     return 'expression', dst, src
+            elif exp1['type'] == 'hexstr':
+                hexstr = hex(int(exp1['value'], 16))
+                return 'field', dst, hexstr.rstrip('L')
             else:
                 BuildExpression(exp1, [], src)
                 return 'field', dst, src[0]
@@ -56,11 +59,15 @@ def GetExpressionInState (state_name):
 def GetFieldWidth(field):
     hty = None
     fields = None
+    #print field
     for h in config.jsondata["headers"]:
-        if h["name"] == field[0]:
+        if h['name'].startswith(field[0]):
             hty = h["header_type"]
+            #print field[0], h['name']
+            break
 
     for h in config.jsondata["header_types"]:
+        #print h['name'], hty
         if h["name"] == hty:
             fields = h["fields"]
 
@@ -169,13 +176,13 @@ def BuildExpression(json_data, sb=[], metadata=[]):
             sb.append(")")
     elif (json_type == "header"):
         if type(json_value) == list:
-            sb.append("$".join(json_value))
+            sb.append(p4name(json_value))
         else:
             sb.append(json_value)
         metadata.append(json_value)
     elif (json_type == "field"):
         if type(json_value) == list:
-            sb.append("$".join(json_value))
+            sb.append(p4name(json_value))
         else:
             sb.append(json_value)
         metadata.append(json_value)
@@ -196,3 +203,5 @@ def createDirAndOpen(f, m):
         os.makedirs(d)
     return open(f, m)
 
+def p4name(name):
+    return "$".join(name).translate(None, "[]")

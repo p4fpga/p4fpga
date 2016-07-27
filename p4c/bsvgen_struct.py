@@ -23,7 +23,7 @@ import math
 import astbsv as ast
 import logging
 from sourceCodeBuilder import SourceCodeBuilder
-from utils import CamelCase, camelCase, GetFieldWidth
+from utils import CamelCase, camelCase, GetFieldWidth, p4name
 from collections import OrderedDict
 
 STRUCT_DEFAULT="""\
@@ -81,7 +81,7 @@ class StructM(object):
         e = []
         e.append(ast.StructMember("PacketInstance", "pkt"))
         for m in members:
-            _m = "$".join(m)
+            _m = p4name(m)
             e.append(ast.StructMember("Bit#(%s)"%(GetFieldWidth(m)), _m))
         for r in runtime_data:
             e.append(ast.StructMember("Bit#(%s)"%(r[0]), "runtime_%s"%(r[1])))
@@ -90,7 +90,7 @@ class StructM(object):
     def build_match_expr(self):
         e = ["pkt: .pkt"]
         for m in self.members:
-            _m = "$".join(m)
+            _m = p4name(m)
             e.append("%s: .%s" % (_m, _m))
         for m in self.runtime_data:
             e.append("runtime_%s: .runtime_%s" % (m[1], m[1]))
@@ -99,7 +99,7 @@ class StructM(object):
     def build_case_expr(self):
         e = ["pkt: pkt"]
         for m in self.members:
-            _m = "$".join(m)
+            _m = p4name(m)
             #-- begin optimization
             # bypass RAW optimization
             source_field = _m
@@ -116,7 +116,7 @@ class StructM(object):
     def get_members(self):
         e = []
         for m in self.members:
-            e.append("$".join(m))
+            e.append(p4name(m))
         return e
 
     def emit(self, builder):
@@ -157,13 +157,19 @@ class StructMetadata(object):
             for f in it.request.members:
                 if f not in metadata:
                     width = GetFieldWidth(f)
-                    name = "$".join(f)
+                    if type(f) == tuple:
+                        name = f[0].translate(None, "[]") + "$" + f[1]
+                    else:
+                        name = f.translate(None, "[]")
                     fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
                     metadata.add(f)
             for f in it.response.members:
                 if f not in metadata:
                     width = GetFieldWidth(f)
-                    name = "$".join(f)
+                    if type(f) == tuple:
+                        name = f[0].translate(None, "[]") + "$" + f[1]
+                    else:
+                        name = f.translate(None, "[]")
                     fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
                     metadata.add(f)
             # add runtime data to metadata
@@ -177,10 +183,15 @@ class StructMetadata(object):
         for f in ir.controls.values():
             for _, v in f.tables.items():
                 for k in v.key:
-                    d = tuple(k['target'])
+                    d = k['target']
+                    if type(k['target']) == list:
+                        d = tuple(k['target'])
                     if d not in metadata:
                         width = GetFieldWidth(k['target'])
-                        name = "$".join(k['target'])
+                        if type(d) is tuple:
+                            name = p4name(d)
+                        else:
+                            name = d.translate(None, "[]")
                         fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
                         metadata.add(d)
 
@@ -207,13 +218,18 @@ class StructTableReqT(object):
         total_width = 0
         pad_width = 0
         for k in key:
-            width = GetFieldWidth(k['target'])
-            total_width += width
-            name = "$".join(k['target'])
-            fields.append(ast.StructMember("Bit#(%s)" %(width), name))
+            if k['match_type'] == 'valid':
+                total_width += 1
+                name = 'valid_%s' % (k['target'].translate(None, "[]"))
+                fields.append(ast.StructMember("Bit#(Bool)", name))
+            else:
+                width = GetFieldWidth(k['target'])
+                total_width += width
+                name = p4name(k['target'])
+                fields.append(ast.StructMember("Bit#(%s)" %(width), name))
         if (total_width % 9):
             pad_width = 9 - total_width % 9
-            fields.append(ast.StructMember("Bit#(%s)" %(pad_width), "padding"))
+            fields.insert(0, ast.StructMember("Bit#(%s)" %(pad_width), "padding"))
 
         self.struct = ast.Struct("%sReqT"%(CamelCase(self.name)), fields)
         self.width = total_width + pad_width

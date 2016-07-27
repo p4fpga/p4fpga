@@ -17,7 +17,7 @@ import logging
 import astbsv as ast
 import exceptions
 import math
-from utils import CamelCase, camelCase
+from utils import CamelCase, camelCase, p4name
 from collections import OrderedDict
 
 logger = logging.getLogger(__name__)
@@ -186,16 +186,16 @@ class Control (object):
                 _stmt.append(ast.Template(TMP1, {"name": CamelCase(true_next)}))
                 _stmt.append(ast.Template(TMP2, {"name": true_next}))
                 stmt.append(ast.If(expr, _stmt))
+            if true_next in self.conditionals:
+                _stmt = []
+                self.buildConditionalStmt(true_next, _stmt, metadata)
+                stmt.append(ast.If(expr, _stmt))
+
             if false_next in self.tables:
                 _stmt = []
                 _stmt.append(ast.Template(TMP1, {"name": CamelCase(false_next)}))
                 _stmt.append(ast.Template(TMP2, {"name": false_next}))
                 stmt.append(ast.Else(_stmt))
-
-            if true_next in self.conditionals:
-                _stmt = []
-                self.buildConditionalStmt(true_next, _stmt, metadata)
-                stmt.append(ast.If(expr, _stmt))
             if false_next in self.conditionals:
                 _stmt = []
                 self.buildConditionalStmt(false_next, _stmt, metadata)
@@ -221,7 +221,7 @@ class Control (object):
             self.buildConditionalStmt(next_table, _stmt, metadata)
             for m in metadata:
                 if type(m) is tuple:
-                    _meta.append(ast.Template(TMP5, {"name": "$".join(m)}))
+                    _meta.append(ast.Template(TMP5, {"name": p4name(m)}))
             case_stmt.casePatStmt[_ctype] = _meta + _stmt
         stmt.append(case_stmt)
         return stmt

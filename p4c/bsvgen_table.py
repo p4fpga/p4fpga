@@ -25,7 +25,7 @@ import logging
 import cppgen
 import sys, os
 from sourceCodeBuilder import SourceCodeBuilder
-from utils import CamelCase
+from utils import CamelCase, p4name
 from bsvgen_struct import StructT, StructTableReqT, StructTableRspT
 
 logger = logging.getLogger(__name__)
@@ -158,8 +158,8 @@ class Table(object):
         keys = self.buildMatchKey()
         fields = []
         for k in keys:
-            stmt.append(ast.Template(TMP5, {"name": "$".join(k)}))
-            fields.append("%s: %s"%("$".join(k), "$".join(k)))
+            stmt.append(ast.Template(TMP5, {"name": p4name(k)}))
+            fields.append("%s: %s" % (p4name(k), p4name(k)))
         stmt.append(ast.Template(TMP3, {"type": self.req_name, "field": ",".join(fields)}))
         stmt.append(ast.Template(TMP4))
         stmt.append(ast.Template("packet_ff.enq(pkt);"))
@@ -222,7 +222,7 @@ class Table(object):
             fields = basic_block.response.build_match_expr()
             action_stmt = []
             for field in basic_block.response.members:
-                mname = "$".join(field)
+                mname = p4name(field)
                 action_stmt.append(ast.Template(TMP6 % {"mname": mname}))
 
             tagname = "%s%sRspT" % (CamelCase(self.name), CamelCase(action))
@@ -277,7 +277,7 @@ class Table(object):
         for idx, action in enumerate(self.actions):
             basic_block = self.basic_block_map[action]
             for f in basic_block.request.members:
-                stmt.append(ast.Template(TMP5, {"field": "$".join(f)}))
+                stmt.append(ast.Template(TMP5, {"field": p4name(f)}))
 
         for idx, action in enumerate(self.actions):
             basic_block = self.basic_block_map[action]
@@ -418,5 +418,6 @@ class Table(object):
         self.emitValueType(builder)
         self.emitKeyType(builder)
         self.emitInterface(builder)
+        builder.appendLine("(* synthesize *)")
         self.emitModule(builder)
 
