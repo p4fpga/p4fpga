@@ -221,7 +221,7 @@ class StructTableReqT(object):
             if k['match_type'] == 'valid':
                 total_width += 1
                 name = 'valid_%s' % (k['target'].translate(None, "[]"))
-                fields.append(ast.StructMember("Bit#(Bool)", name))
+                fields.append(ast.StructMember("Bool", name))
             else:
                 width = GetFieldWidth(k['target'])
                 total_width += width
@@ -251,6 +251,7 @@ class StructTableRspT(object):
             elements.append(ast.EnumElement(at.lstrip('_').upper(), "", idx))
         self.enum = ast.Enum(atype, elements)
         fields = []
+        field_set = set()
         fields.append(ast.StructMember(atype, "_action"))
         dwidth = 0
         for at in enumerate(actions):
@@ -259,8 +260,10 @@ class StructTableRspT(object):
             for data in runtime_data:
                 data_width = data['bitwidth']
                 data_name = "runtime_%s"%(data['name'])
-                fields.append(ast.StructMember("Bit#(%s)" %(data_width), data_name))
-                dwidth += data_width
+                if data_name not in field_set:
+                    fields.append(ast.StructMember("Bit#(%s)" %(data_width), data_name))
+                    field_set.add(data_name)
+                    dwidth += data_width
         self.struct = ast.Struct("%sRspT"%(CamelCase(self.name)), fields)
         self.width = int(math.ceil(math.log(len(actions) + 1, 2))) + dwidth
 

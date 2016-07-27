@@ -13,12 +13,14 @@
 # limitations under the License.
 #
 import argparse, logging, json, re, os, sys, yaml
+import astbsv as ast
 import p4fpga, top, bsvgen_table
 from sourceCodeBuilder import SourceCodeBuilder
 from collections import OrderedDict
 from p4c_bm import gen_json
 from pkg_resources import resource_string
 from bsvgen_common import emit_license, emit_import
+from utils import CamelCase
 
 # to be used for a destination file
 def _validate_path(path):
@@ -73,6 +75,71 @@ def generate_parser(ir):
 def generate_deparser(ir):
     for idx, p in enumerate(ir.deparsers.values()):
         generate_file(p, os.path.join('generatedbsv', 'DeparserGenerated.bsv'))
+
+def generate_basicblock(ir):
+    for name, p in ir.basic_blocks.items():
+        builder = SourceCodeBuilder()
+        builder.appendLine("import ClientServer::*;")
+        builder.appendLine("import UnionGenerated::*;")
+        builder.appendLine("import TxRx::*;")
+        builder.appendLine("import FIFOF::*;")
+        builder.appendLine("import GetPut::*;")
+        builder.appendLine("import Ethernet::*;")
+        builder.appendLine("import Pipe::*;")
+        builder.appendLine("import Utils::*;")
+        builder.appendLine("import DefaultValue::*;")
+        p.emit(builder);
+        with open(os.path.join('generatedbsv', '%s.bsv' % (CamelCase(name))), 'w') as bsv:
+            bsv.write(builder.toString())
+
+def generate_table(ir):
+    for c in ir.controls.values():
+        for name, t in sorted(c.tables.items()):
+            builder = SourceCodeBuilder()
+            builder.appendLine("import ClientServer::*;")
+            builder.appendLine("import UnionGenerated::*;")
+            builder.appendLine("import StructGenerated::*;")
+            builder.appendLine("import TxRx::*;")
+            builder.appendLine("import FIFOF::*;")
+            builder.appendLine("import Ethernet::*;")
+            builder.appendLine("import MatchTable::*;")
+            builder.appendLine("import Vector::*;")
+            builder.appendLine("import Pipe::*;")
+            builder.appendLine("import GetPut::*;")
+            builder.appendLine("import Utils::*;")
+            builder.appendLine("import DefaultValue::*;")
+            t.emit(builder);
+            with open(os.path.join('generatedbsv', '%s.bsv' % (CamelCase(name))), 'w') as bsv:
+                bsv.write(builder.toString())
+
+def generate_union(ir):
+    # tagged union BBRequest
+    def emit_union_bb_request(builder):
+        # emit union for basicblock req & rsp
+        stmt = []
+        requests = []
+        for it in ir.basic_blocks.values():
+            requests.append(it.request)
+        if len(requests) != 0:
+            union = ast.TypeDef ("union tagged", "BBRequest", requests)
+            union.emit(builder)
+
+    # tagged union BBResponse
+    def emit_union_bb_response(builder):
+        stmt = []
+        responses = []
+        for it in ir.basic_blocks.values():
+            responses.append(it.response)
+        if len(responses) != 0:
+            union = ast.TypeDef ("union tagged", "BBResponse", responses)
+            union.emit(builder)
+
+    builder = SourceCodeBuilder()
+    builder.appendLine("import Ethernet::*;")
+    emit_union_bb_request(builder)
+    emit_union_bb_response(builder)
+    with open(os.path.join('generatedbsv', 'UnionGenerated.bsv'), 'w') as bsv:
+        bsv.write(builder.toString())
 
 def main():
     argparser = argparse.ArgumentParser(
@@ -137,6 +204,9 @@ def main():
     generate_struct(ir)
     generate_parser(ir)
     generate_deparser(ir)
+    generate_basicblock(ir)
+    generate_union(ir)
+    generate_table(ir)
     generate_file(ir, os.path.join('generatedbsv', p4name+".bsv"))
 
     with_mem = getattr(options, 'mem')

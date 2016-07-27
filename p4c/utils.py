@@ -149,6 +149,16 @@ def GetTransitionKey(state):
             k['width'] = w
     return keys
 
+def map_bsv(op):
+    _dict = {"and" : "&&",
+             "or"  : "||",
+             "not" : "!",
+             "valid" : "isValid"}
+    if op in _dict:
+        return _dict[op]
+    else: 
+        return op
+
 def BuildExpression(json_data, sb=[], metadata=[]):
     if not json_data:
         return
@@ -171,8 +181,15 @@ def BuildExpression(json_data, sb=[], metadata=[]):
                 print "expr push back load const"
             else:
                 BuildExpression(json_left, sb, metadata)
-            sb.append(op)
-            BuildExpression(json_right, sb, metadata)
+            sb.append(map_bsv(op))
+            if (op == 'valid'):
+                sb.append("(")
+                if (json_right['type'] == 'header'):
+                    json_right['value'] = "meta.valid_%s" % json_right['value']
+                BuildExpression(json_right, sb, metadata)
+                sb.append(")")
+            else:
+                BuildExpression(json_right, sb, metadata)
             sb.append(")")
     elif (json_type == "header"):
         if type(json_value) == list:

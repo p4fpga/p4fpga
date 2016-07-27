@@ -279,8 +279,8 @@ class Control (object):
         module.emit(builder)
 
     def emit(self, builder):
-        for t in sorted(self.tables.values()):
-            t.emit(builder)
+        #for t in sorted(self.tables.values()):
+        #    t.emit(builder)
         builder.newline()
         builder.append("// ====== %s ======" % (self.name.upper()))
         builder.newline()

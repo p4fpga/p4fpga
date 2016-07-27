@@ -129,6 +129,7 @@ def render_pipelines(ir, json_dict):
             expr = []
             metadata = []
             BuildExpression(c["expression"], expr, metadata)
+            #print "xxxxx", expr
             if expr[1] == "valid":
                 _expr = "isValid(%s)" % ("meta."+"_".join(expr[1:-1]))
             else:

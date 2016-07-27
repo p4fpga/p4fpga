@@ -25,6 +25,7 @@ import os
 from collections import OrderedDict
 from meta_ir.instance import MetaIRInstance
 from bsvgen_common import emit_license, emit_import
+from utils import CamelCase
 
 class Program(MetaIRInstance):
     def __init__(self, name, inputfile):
@@ -43,7 +44,6 @@ class Program(MetaIRInstance):
 
         # objects
         self.structs = OrderedDict()
-        self.tables = OrderedDict()
         self.basic_blocks = OrderedDict()
         self.parsers = OrderedDict()
         self.deparsers = OrderedDict()
@@ -82,39 +82,10 @@ class Program(MetaIRInstance):
         for it in self.structs.values():
             it.emit(builder)
 
-    # tagged union BBRequest
-    def emit_union_bb_request(self, builder):
-        # emit union for basicblock req & rsp
-        stmt = []
-        requests = []
-        for it in self.basic_blocks.values():
-            requests.append(it.request)
-        if len(requests) != 0:
-            union = ast.TypeDef ("union tagged", "BBRequest", requests)
-            union.emit(builder)
-
-    # tagged union BBResponse
-    def emit_union_bb_response(self, builder):
-        stmt = []
-        responses = []
-        for it in self.basic_blocks.values():
-            responses.append(it.response)
-        if len(responses) != 0:
-            union = ast.TypeDef ("union tagged", "BBResponse", responses)
-            union.emit(builder)
-
     # Basic blocks
     def emit_basic_blocks(self, builder):
         # emit with info from multiple basic blocks
-        self.emit_union_bb_request(builder)
-        self.emit_union_bb_response(builder)
-
         for it in self.basic_blocks.values():
-            it.emit(builder)
-
-    # Table
-    def emit_tables(self, builder):
-        for it in self.tables:
             it.emit(builder)
 
     # Ingress and Egress
@@ -122,12 +93,21 @@ class Program(MetaIRInstance):
         for it in self.controls.values():
             it.emit(builder)
 
+    def emit_include(self, builder):
+        for n in self.basic_blocks.keys():
+            builder.appendLine("import %s::*;" % CamelCase(n))
+        for ctrl in self.controls.values():
+            for n in ctrl.tables.keys():
+                builder.appendLine("import %s::*;" % CamelCase(n))
+        builder.appendLine("import UnionGenerated::*;")
+
     def emit(self, builder):
         """
         Emit Mid-end IR to BSV
         """
         emit_import(builder)
-        self.emit_basic_blocks(builder)
+        self.emit_include(builder)
+        #self.emit_basic_blocks(builder)
         self.emit_controls(builder)
         emit_license(builder)
 
