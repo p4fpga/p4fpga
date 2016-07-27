@@ -210,7 +210,7 @@ class Table(object):
         TMP1 = "let v <- toGet(bbRspFifo[readyChannel]).get;"
         TMP2 = "let meta <- toGet(metadata_ff[1]).get;"
         TMP3 = "tagged %(name)sRspT {%(field)s}"
-        TMP4 = "MetadataResponse rsp = tagged %(name)s {pkt: pkt, meta: meta};"
+        TMP4 = "%(ty_metadata)s rsp = tagged %(name)s {pkt: pkt, meta: meta};"
         TMP5 = "tx_info_%(name)s.enq(rsp);"
         TMP6 = "meta.%(mname)s = tagged Valid %(mname)s;"
 
@@ -226,7 +226,7 @@ class Table(object):
                 action_stmt.append(ast.Template(TMP6 % {"mname": mname}))
 
             tagname = "%s%sRspT" % (CamelCase(self.name), CamelCase(action))
-            action_stmt.append(ast.Template(TMP4 % {"name": tagname}))
+            action_stmt.append(ast.Template(TMP4 % {"name": tagname, "ty_metadata": CamelCase(self.name)+"Response"}))
             action_stmt.append(ast.Template(TMP5 % {"name": "metadata"}))
             action = TMP3 % {"name": CamelCase(action), "field": fields}
             case_stmt.casePatStmt[action] = action_stmt
@@ -245,11 +245,11 @@ class Table(object):
 
     def buildTXRX(self, pname):
         TMP1 = "RX #(%(type)sRequest) rx_%(name)s <- mkRX;"
-        TMP3 = "TX #(%(type)sResponse) tx_%(name)s <- mkTX;"
+        TMP3 = "TX #(%(tblname)sResponse) tx_%(name)s <- mkTX;"
         TMP2 = "let rx_info_%(name)s = rx_%(name)s.u;"
         TMP4 = "let tx_info_%(name)s = tx_%(name)s.u;"
         stmt = []
-        pdict = {'type': CamelCase(pname), 'name': pname}
+        pdict = {'type': CamelCase(pname), 'name': pname, 'tblname': CamelCase(self.name)}
         stmt.append(ast.Template(TMP1, pdict))
         stmt.append(ast.Template(TMP2, pdict))
         stmt.append(ast.Template(TMP3, pdict))
@@ -371,12 +371,12 @@ class Table(object):
     def emitInterface(self, builder):
         logger.info("emitTable: {}".format(self.name))
         TMP1 = "prev_control_state_%(id)s"
-        TMP2 = "Server #(MetadataRequest, MetadataResponse)"
+        TMP2 = "Server #(MetadataRequest, %(ty_metadata)s)"
         TMP3 = "next_control_state_%(id)s"
         TMP4 = "Client #(BBRequest, BBResponse)"
         iname = CamelCase(self.name)
         intf = ast.Interface(typedef=iname)
-        s_intf = ast.Interface(TMP1 % {"id": 0}, TMP2)
+        s_intf = ast.Interface(TMP1 % {"id": 0}, TMP2 % {"ty_metadata": iname+"Response"})
         intf.subinterfaces.append(s_intf)
         for idx, _ in enumerate(self.actions):
             c_intf = ast.Interface(TMP3 % {"id": idx}, TMP4)

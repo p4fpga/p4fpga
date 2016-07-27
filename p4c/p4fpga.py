@@ -42,11 +42,13 @@ logger = logging.getLogger(__name__)
 def render_runtime_types(ir, json_dict):
     # metadata req/rsp
     ir.structs['metadata_request'] = StructT("MetadataRequest")
+    ir.structs['metadata_response'] = StructT("MetadataResponse")
 
-    responses = []
+    #responses = []
     for pipeline in json_dict['pipelines']:
         name = pipeline['name']
         for t in sorted(pipeline['tables'], key=lambda k: k['name']):
+            responses = []
             tname = t['name']
             tnext = t['actions']
             for n in tnext:
@@ -55,7 +57,8 @@ def render_runtime_types(ir, json_dict):
                 stmt.append(ast.StructMember("PacketInstance", "pkt"))
                 stmt.append(ast.StructMember("MetadataT", "meta"))
                 responses.append(ast.Struct(sname, stmt))
-    ir.structs['metadata_response'] = ast.TypeDef("union tagged", "MetadataResponse", responses)
+            union_name = "%sResponse" % CamelCase(tname)
+            ir.structs[union_name] = ast.TypeDef("union tagged", union_name, responses)
     ir.structs['metadata'] = StructMetadata("MetadataT", ir)
 
 def render_header_types(ir, json_dict):

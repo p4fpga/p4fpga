@@ -39,7 +39,7 @@ class Control (object):
         TMP1 = "FIFOF#(MetadataRequest) default_req_ff <- mkFIFOF;"
         TMP2 = "FIFOF#(MetadataResponse) default_rsp_ff <- mkFIFOF;"
         TMP3 = "FIFOF#(MetadataRequest) %(name)s_req_ff <- mkFIFOF;"
-        TMP4 = "FIFOF#(MetadataResponse) %(name)s_rsp_ff <- mkFIFOF;"
+        TMP4 = "FIFOF#(%(ty_metadata)s) %(name)s_rsp_ff <- mkFIFOF;"
         TMP5 = "FIFOF#(MetadataRequest) next_req_ff <- mkFIFOF;"
         TMP6 = "FIFOF#(MetadataResponse) next_rsp_ff <- mkFIFOF;"
         stmt = []
@@ -47,7 +47,7 @@ class Control (object):
         stmt.append(ast.Template(TMP2))
         for t in self.tables.values():
             stmt.append(ast.Template(TMP3, {"name": t.name} ))
-            stmt.append(ast.Template(TMP4, {"name": t.name} ))
+            stmt.append(ast.Template(TMP4, {"name": t.name, "ty_metadata": CamelCase(t.name)+"Response"} ))
         stmt.append(ast.Template(TMP5))
         stmt.append(ast.Template(TMP6))
         return stmt
