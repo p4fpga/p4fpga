@@ -7,6 +7,7 @@ cd ext/src
 2. Build gtest
 <br/><br/><pre><code>cd gtest
 CC=clang CXX=clang++  CXXFLAGS="-std=c++11 -stdlib=libc++" ./configure --prefix $(cd ../..; pwd)
+CC=gcc CXX=c++  CXXFLAGS="-std=c++11" ./configure --prefix $(cd ../..; pwd)
 make
 mkdir ../../lib/
 cp -fr include/gtest ../../include
