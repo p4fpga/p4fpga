@@ -25,8 +25,10 @@
 #include "GeneratedTypes.h"
 #include "lutils.h"
 #include "lpcap.h"
+#include <pcap.h> 
 
 #define DATA_WIDTH 128
+#define MAXBYTES2CAPTURE 2048 
 
 static MainRequestProxy *device = 0;
 
@@ -66,17 +68,19 @@ void usage (const char *program_name) {
      "usage: %s [OPTIONS] \n",
      program_name, program_name);
     printf("\nOther options:\n"
-    " -p, --parser=FILE                demo parsing pcap log\n"
+    " -p, --parser=FILE                pcap trace to run\n"
+    " -I, --intf=interface             listen on interface\n"
     );
 }
 
 static void 
-parse_options(int argc, char *argv[], char **pcap_file, struct arg_info* info) {
+parse_options(int argc, char *argv[], char **pcap_file, char **intf, struct arg_info* info) {
     int c, option_index;
 
     static struct option long_options [] = {
         {"help",                no_argument, 0, 'h'},
         {"pcap",                required_argument, 0, 'p'},
+        {"intf",                required_argument, 0, 'I'},
         {0, 0, 0, 0}
     };
 
@@ -96,29 +100,62 @@ parse_options(int argc, char *argv[], char **pcap_file, struct arg_info* info) {
             case 'p':
                 *pcap_file = optarg;
                 break;
+            case 'I':
+                fprintf(stderr, "%s", optarg);
+                *intf = optarg;
+                break;
             default:
                 break;
         }
     }
 }
 
+/* processPacket(): Callback function called by pcap_loop() everytime a packet */
+/* arrives to the network card. This function prints the captured raw data in  */
+/* hexadecimal.                                                                */
+void processPacket(u_char *arg, const struct pcap_pkthdr* pkthdr, const u_char * packet){ 
+    int *counter = (int *)arg; 
+    printf("Packet Count: %d\n", ++(*counter)); 
+    printf("Received Packet Size: %d\n", pkthdr->len); 
+    quick_tx_send_packet(packet, pkthdr->len);
+    return; 
+} 
 
 int main(int argc, char **argv)
 {
     char *pcap_file=NULL;
+    int count=0; 
+    pcap_t *descr = NULL; 
+    char errbuf[PCAP_ERRBUF_SIZE], *intf=NULL; 
+    memset(errbuf,0,PCAP_ERRBUF_SIZE); 
+
     struct pcap_trace_info pcap_info = {0, 0};
     MainIndication echoindication(IfcNames_MainIndicationH2S);
     device = new MainRequestProxy(IfcNames_MainRequestS2H);
 
-    parse_options(argc, argv, &pcap_file, 0);
+    parse_options(argc, argv, &pcap_file, &intf, 0);
     device->set_verbosity(4);
     device->read_version();
+
+    if (intf) {
+        printf("Opening device %s\n", intf); 
+        /* Open device in promiscuous mode */ 
+        if ( (descr = pcap_open_live(intf, MAXBYTES2CAPTURE, 1,  512, errbuf)) == NULL){
+           fprintf(stderr, "ERROR: %s\n", errbuf);
+           exit(1);
+        }
+
+        /* Loop forever & call processPacket() for every received packet*/ 
+        if ( pcap_loop(descr, -1, processPacket, (u_char *)&count) == -1){
+           fprintf(stderr, "ERROR: %s\n", pcap_geterr(descr) );
+           exit(1);
+        }
+    }
 
     if (pcap_file) {
         fprintf(stderr, "Attempts to read pcap file %s\n", pcap_file);
         load_pcap_file(pcap_file, &pcap_info);
     }
 
-    sleep(3);
     return 0;
 }
