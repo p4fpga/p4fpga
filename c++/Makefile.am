@@ -6,7 +6,7 @@ p4fpga_LDADD = libfrontend.a libp4ctoolkit.a
 p4fpga_CPPFLAGS = -I$(srcdir)/extensions/c++/libp4fpga/include
 
 p4fpga_SOURCES = \
-	extensions/c++/libp4fpga/src/p4-fpga.cpp \
+	extensions/c++/p4fpga/src/p4-fpga.cpp \
 	extensions/c++/libp4fpga/include/backend.h \
 	extensions/c++/libp4fpga/src/backend.cpp \
 	extensions/c++/libp4fpga/include/codegen.h \
