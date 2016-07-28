@@ -16,6 +16,9 @@ limitations under the License.
 
 // target implements IR::
 //
+
+#include <lib/cstring.h>
+
 namespace {
 
 class Target {
@@ -91,3 +94,5 @@ void emit_module(); //
     -- emit_methods();
 
 */
+
+}
