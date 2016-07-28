@@ -179,7 +179,7 @@ module mkDeparser(Deparser);
    endfunction
 
    function Bit#(max) create_mask (LUInt#(max) count);
-      Bit#(max) v = 1 << count - 1;
+      Bit#(max) v = (1 << count) - 1;
       return v;
    endfunction
 
