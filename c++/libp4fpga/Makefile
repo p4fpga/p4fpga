@@ -12,10 +12,11 @@ INCLUDES = \
 
 LDFLAGS = \
  -L $(P4C_HOME)/build \
- -lgc \
- -lgmp \
+ -lp4ctoolkit \
  -lfrontend \
- -lp4ctoolkit
+ -lgmp \
+ -lgmpxx \
+ -lgc 
 
 include ../Makefile.lib
 
