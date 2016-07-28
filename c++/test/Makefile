@@ -7,18 +7,28 @@ UNAME    := $(shell uname)
 CPPFLAGS =
 
 INCLUDES = \
-	-isystem /opt/local/libcpp-software/include \
- 	-I $(THISDIR)/../ext/include \
+ -I $(THISDIR)/../libp4fpga/include \
+ -I $(P4C_HOME)/build \
+ -I $(THISDIR)/../ext/include \
+ -I $(P4C_HOME) 
 
 LDFLAGS = \
-	-L $(THISDIR)/../ext/lib \
-	-L /opt/local/libcpp-software/lib \
-	-lgtest \
+ -L $(THISDIR)/../ext/lib \
+ -L $(THISDIR)/../libp4fpga/bin \
+ -L $(P4C_HOME)/build \
+ -lgtest \
+ -lfpgabackend \
+ -lp4ctoolkit \
+ -lfrontend \
+ -lgmp \
+ -lgmpxx \
+ -lgc 
 
 ifeq ($(UNAME), Linux)
 LDFLAGS += \
 	-Wl,-rpath,$(THISDIR)/../ext/lib \
-	-Wl,-rpath,/opt/local/libcpp-software/lib 
+        -Wl,-rpath,$(THISDIR)/../libp4fpga/bin \
+        -Wl,-rpath,$(P4C_HOME)/build 
 endif
 
 include ../Makefile.exe
