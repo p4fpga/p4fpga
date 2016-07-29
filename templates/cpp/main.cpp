@@ -117,7 +117,7 @@ void processPacket(u_char *arg, const struct pcap_pkthdr* pkthdr, const u_char *
     int *counter = (int *)arg; 
     printf("Packet Count: %d\n", ++(*counter)); 
     printf("Received Packet Size: %d\n", pkthdr->len); 
-    quick_tx_send_packet(packet, pkthdr->len);
+    mem_copy(packet, pkthdr->len);
     return; 
 } 
 
@@ -140,13 +140,13 @@ int main(int argc, char **argv)
     if (intf) {
         printf("Opening device %s\n", intf); 
         /* Open device in promiscuous mode */ 
-        if ( (descr = pcap_open_live(intf, MAXBYTES2CAPTURE, 1,  512, errbuf)) == NULL){
+        if ((descr = pcap_open_live(intf, MAXBYTES2CAPTURE, 1,  512, errbuf)) == NULL){
            fprintf(stderr, "ERROR: %s\n", errbuf);
            exit(1);
         }
 
         /* Loop forever & call processPacket() for every received packet*/ 
-        if ( pcap_loop(descr, -1, processPacket, (u_char *)&count) == -1){
+        if (pcap_loop(descr, -1, processPacket, (u_char *)&count) == -1){
            fprintf(stderr, "ERROR: %s\n", pcap_geterr(descr) );
            exit(1);
         }
