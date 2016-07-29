@@ -1,6 +1,0 @@
-P4FILE=p4src/switch.p4
-CONNECTALFLAGS += -D PARSER=switch
-CONNECTALFLAGS += -D DEPARSER=switch
-CONNECTALFLAGS += -D MATCHTABLE=switch
-CONNECTALFLAGS += -D TYPEDEF=switch
-include ../Makefile.common
