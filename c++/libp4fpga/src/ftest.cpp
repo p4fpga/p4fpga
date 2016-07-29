@@ -14,7 +14,7 @@ void Test::ir_toplevel() {
     auto parserBlock = package->getParameterValue(v1model.sw.parser.name);
     auto parser  = parserBlock->to<IR::ParserBlock>()->container;
     LOG1("sw.parser " << parserBlock);
-    auto type = parser->type;
+    //auto type = parser->type;
     LOG1("header idx " << v1model.parser.headersParam.index);
     auto hdr = parser->type->applyParams->getParameter(v1model.parser.headersParam.index);
     LOG1("hdr " << hdr);
