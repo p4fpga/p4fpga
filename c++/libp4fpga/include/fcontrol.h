@@ -18,7 +18,9 @@ class FPGAControl : public FPGAObject {
     std::set<const IR::Parameter*> toDereference;
 //    std::map<cstring, FPGATable*>  tables;
 
-    explicit FPGAControl(const FPGAProgram* program, const IR::ControlBlock* block);
+    explicit FPGAControl(const FPGAProgram* program, const IR::ControlBlock* block)
+      : program(program), controlBlock(block), headers(nullptr), accept(nullptr) {}
+
     virtual ~FPGAControl() {}
     void emit(CodeBuilder* builder);
     //void emitDeclaration(const IR::Declaration* decl, CodeBuilder *builder);

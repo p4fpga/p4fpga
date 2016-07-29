@@ -28,7 +28,7 @@ class Target {
     Target() = delete;
     virtual ~Target() {}
  public:
-    virtual void emit();
+  virtual void emit() {}
 };
 
 /*
