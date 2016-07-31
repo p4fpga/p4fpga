@@ -18,8 +18,8 @@ LDFLAGS = \
  -L $(THISDIR)/../libp4fpga/bin \
  -L $(P4C_HOME)/build \
  -lfpgabackend \
- -lp4ctoolkit \
  -lfrontend \
+ -lp4ctoolkit \
  -lgmp \
  -lgmpxx \
  -lgc 
