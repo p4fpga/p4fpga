@@ -5,4 +5,4 @@ all: $(BINDIR)/$(LIBRARY)
 $(BINDIR)/$(LIBRARY): $(OBJS)
 	@echo "Linking $@"
 	@mkdir -p $(dir $@)
-	@$(LINK) $(OBJS) -shared -o "$@"
+	@$(LINK) $(OBJS) -shared -o "$@" $(LDFLAGS)
