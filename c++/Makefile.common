@@ -34,7 +34,7 @@ CDP = g++
 DEP_OPT = -MM -MP
 DEPEND  = $(CDP) $(CPPFLAGS) $(CXXFLAGS) $(INCFLAGS) $(DEP_OPT)
 COMPILE = $(CXX) $(CPPFLAGS) $(CXXFLAGS) $(INCFLAGS) 
-LINK    = $(CXX) $(CPPFLAGS) $(CXXFLAGS) $(LDFLAGS)
+LINK    = $(CXX) $(CPPFLAGS) $(CXXFLAGS) 
 
 .PHONY: all objs clean distclean help show
 
