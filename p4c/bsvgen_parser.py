@@ -100,10 +100,15 @@ class Parser(object):
             for k in state.transition_keys:
                 if k['type'] == 'lookahead':
                     value = k
-                    width = k['value'][1] - k['value'][0]
+                    width = k['value'][1]
+                    #- k['value'][0]
                     param.append((width, 'current'))
                 else:
-                    param.append((k['width'], k['value'][1]))
+                    value = k['value'][1]
+                    # hack, append 
+                    if value[0].isupper():
+                        value = value[0].lower() + value
+                    param.append((k['width'], value))
             return param
 
         funct = []
@@ -164,7 +169,8 @@ class Parser(object):
                 print "WARNING: lookahead type not handled"
                 continue
             keys.append("%s.%s" % (GetHeaderType(k['value'][0]), k['value'][1]))
-            pdict['ktype'].add(GetHeaderType(k['value'][0]))
+            header_type = GetHeaderType(k['value'][0])
+            pdict['ktype'].add(header_type)
         pdict['field'] = ",".join(keys)
 
 
@@ -252,7 +258,10 @@ class Parser(object):
                 if k['type'] == 'lookahead':
                     keys.append("lookahead")
                 else:
-                    keys.append("%s$%s[1]" % (k['value'][0], k['value'][1]))
+                    field = k['value'][0]
+                    if field[0].isupper():
+                        field = field[0].lower() + field
+                    keys.append("%s$%s[1]" % (field, k['value'][1]))
             pdict['field'] = ", ".join(keys)
 
             #print state.name, state.state_type

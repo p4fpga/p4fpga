@@ -25,7 +25,7 @@ import logging
 import cppgen
 import sys, os
 from sourceCodeBuilder import SourceCodeBuilder
-from utils import CamelCase, p4name
+from utils import CamelCase, p4name, GetFieldWidth
 from bsvgen_struct import StructT, StructTableReqT, StructTableRspT
 
 logger = logging.getLogger(__name__)
@@ -157,10 +157,15 @@ class Table(object):
         stmt.append(ast.Template(TMP8))
         keys = self.buildMatchKey()
         fields = []
+        total_width = 0
         for k in keys:
+            width = GetFieldWidth(k)
+            total_width += width
             stmt.append(ast.Template(TMP5, {"name": p4name(k)}))
             fields.append("%s: %s" % (p4name(k), p4name(k)))
-        stmt.append(ast.Template(TMP3, {"type": self.req_name, "field": ",".join(fields)}))
+        if (total_width % 9):
+            fields.insert(0, "padding: 0")
+        stmt.append(ast.Template(TMP3, {"type": self.req_name, "field": ", ".join(fields)}))
         stmt.append(ast.Template(TMP4))
         stmt.append(ast.Template("packet_ff.enq(pkt);"))
         stmt.append(ast.Template("metadata_ff[0].enq(meta);"))

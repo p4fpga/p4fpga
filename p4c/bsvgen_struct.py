@@ -51,6 +51,8 @@ class Struct(object):
         fields = struct_attrs['fields']
         e = []
         for f, l in fields:
+            if f[0].isupper():
+                f = f[0].lower() + f
             e.append(ast.StructMember("Bit#(%s)"%(l), f))
         self.struct = ast.Struct(CamelCase(self.name), e)
         self._add_defaults(fields)
@@ -84,7 +86,7 @@ class StructM(object):
             _m = p4name(m)
             e.append(ast.StructMember("Bit#(%s)"%(GetFieldWidth(m)), _m))
         for r in runtime_data:
-            e.append(ast.StructMember("Bit#(%s)"%(r[0]), "runtime_%s"%(r[1])))
+            e.append(ast.StructMember("Bit#(%s)"%(r[0]), "runtime_%s_%d"%(r[1], r[0])))
         self.struct = ast.Struct(name, e)
 
     def build_match_expr(self):
@@ -93,7 +95,7 @@ class StructM(object):
             _m = p4name(m)
             e.append("%s: .%s" % (_m, _m))
         for m in self.runtime_data:
-            e.append("runtime_%s: .runtime_%s" % (m[1], m[1]))
+            e.append("runtime_%s_%d: .runtime_%s" % (m[1], m[0], m[1]))
         return ", ".join(e)
 
     def build_case_expr(self):
@@ -110,7 +112,7 @@ class StructM(object):
             #-- end optimization
             e.append("%s: %s" % (_m, source_field))
         for m in self.runtime_data:
-            e.append("runtime_%s: resp.runtime_%s" % (m[1], m[1]))
+            e.append("runtime_%s_%d: resp.runtime_%s" % (m[1], m[0], m[1]))
         return ", ".join(e)
 
     def get_members(self):
@@ -176,7 +178,7 @@ class StructMetadata(object):
             for f in it.runtime_data:
                 if f not in metadata:
                     width = f[0]
-                    name = "runtime_%s" %(f[1])
+                    name = "runtime_%s_%d" %(f[1], f[0])
                     fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
                     metadata.add(f)
 

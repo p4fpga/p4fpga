@@ -79,7 +79,7 @@ def GetFieldWidth(field):
 def GetHeaderType(header):
     assert type(header) == str
     for h in config.jsondata["headers"]:
-        if h["name"] == header:
+        if h["name"].startswith(header):
             return h["header_type"]
     return None
 
