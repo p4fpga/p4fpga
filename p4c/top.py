@@ -31,7 +31,8 @@ class TopMemory(object):
                    "PacketBuffer",
                    "SharedBuff",
                    "Sims",
-                   self.p4name,
+                   "Ingress", # should come from arch.p4
+                   "Egress", # should come from arch.p4
                    "MainAPI"
                    ]
         for x in sorted(modules):
@@ -112,7 +113,8 @@ class TopStream(object):
                    "PacketBuffer",
                    "SharedBuff",
                    "Sims",
-                   self.p4name,
+                   "Ingress", # should come from arch.p4
+                   "Egress", # should come from arch.p4
                    "MainAPI"
                    ]
         for x in sorted(modules):
@@ -197,7 +199,8 @@ class API():
                    "TxChannel",
                    "Vector",
                    "MainDefs",
-                   self.p4name
+                   "Ingress", # should come from arch.p4
+                   "Egress", # should come from arch.p4
                    ]
         for x in sorted(modules):
             builder.append(ast.Template(TMP1 % x))
@@ -238,6 +241,7 @@ class API():
         TMP = []
         TMP.append("hostchan.set_verbosity(unpack(verbosity));")
         TMP.append("txchan.set_verbosity(unpack(verbosity));")
+        TMP.append("ingress.set_verbosity(unpack(verbosity));")
         stmt = []
         for t in TMP:
             stmt.append(ast.Template(t))

@@ -80,6 +80,8 @@ def generate_basicblock(ir):
     for name, p in ir.basic_blocks.items():
         builder = SourceCodeBuilder()
         builder.appendLine("import ClientServer::*;")
+        builder.appendLine("import ConfigReg::*;")
+        builder.appendLine("import Connectable::*;")
         builder.appendLine("import UnionGenerated::*;")
         builder.appendLine("import TxRx::*;")
         builder.appendLine("import FIFOF::*;")
@@ -88,6 +90,8 @@ def generate_basicblock(ir):
         builder.appendLine("import Pipe::*;")
         builder.appendLine("import Utils::*;")
         builder.appendLine("import DefaultValue::*;")
+        builder.appendLine("import CPU::*;")
+        builder.appendLine("import IMem::*;")
         p.emit(builder);
         with open(os.path.join('generatedbsv', '%s.bsv' % (CamelCase(name))), 'w') as bsv:
             bsv.write(builder.toString())
@@ -97,6 +101,7 @@ def generate_table(ir):
         for name, t in sorted(c.tables.items()):
             builder = SourceCodeBuilder()
             builder.appendLine("import ClientServer::*;")
+            builder.appendLine("import ConfigReg::*;")
             builder.appendLine("import UnionGenerated::*;")
             builder.appendLine("import StructGenerated::*;")
             builder.appendLine("import TxRx::*;")
@@ -140,6 +145,23 @@ def generate_union(ir):
     emit_union_bb_response(builder)
     with open(os.path.join('generatedbsv', 'UnionGenerated.bsv'), 'w') as bsv:
         bsv.write(builder.toString())
+
+def generate_pipeline(ir):
+    def emit_include(builder):
+        for n in ir.basic_blocks.keys():
+            builder.appendLine("import %s::*;" % CamelCase(n))
+        for ctrl in ir.controls.values():
+            for n in ctrl.tables.keys():
+                builder.appendLine("import %s::*;" % CamelCase(n))
+        builder.appendLine("import UnionGenerated::*;")
+    for c in ir.controls.values():
+        builder = SourceCodeBuilder()
+        emit_import(builder)
+        emit_include(builder)
+        c.emit(builder)
+        emit_license(builder)
+        with open(os.path.join('generatedbsv', '%s.bsv' % (CamelCase(c.name))), 'w') as bsv:
+            bsv.write(builder.toString())
 
 def main():
     argparser = argparse.ArgumentParser(
@@ -207,7 +229,7 @@ def main():
     generate_basicblock(ir)
     generate_union(ir)
     generate_table(ir)
-    generate_file(ir, os.path.join('generatedbsv', p4name+".bsv"))
+    generate_pipeline(ir)
 
     with_mem = getattr(options, 'mem')
     if with_mem:

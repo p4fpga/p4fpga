@@ -94,21 +94,3 @@ class Program(MetaIRInstance):
         for it in self.controls.values():
             it.emit(builder)
 
-    def emit_include(self, builder):
-        for n in self.basic_blocks.keys():
-            builder.appendLine("import %s::*;" % CamelCase(n))
-        for ctrl in self.controls.values():
-            for n in ctrl.tables.keys():
-                builder.appendLine("import %s::*;" % CamelCase(n))
-        builder.appendLine("import UnionGenerated::*;")
-
-    def emit(self, builder):
-        """
-        Emit Mid-end IR to BSV
-        """
-        emit_import(builder)
-        self.emit_include(builder)
-        #self.emit_basic_blocks(builder)
-        self.emit_controls(builder)
-        emit_license(builder)
-

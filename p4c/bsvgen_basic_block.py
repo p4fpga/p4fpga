@@ -19,6 +19,7 @@
 # DEALINGS IN THE SOFTWARE.
 #
 
+import sys, os
 import logging
 import astbsv as ast
 import primitives as prm
@@ -27,6 +28,7 @@ from utils import CamelCase, p4name
 from bsvgen_struct import Struct, StructM
 from collections import OrderedDict
 from sourceCodeBuilder import SourceCodeBuilder
+from bsvgen_common import build_funct_verbosity
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,7 @@ class BasicBlock(object):
                     for d in rdata:
                         fields.add((d['bitwidth'], d['name']))
             return fields
+
 
         def addRawRuntimeData(action, json_dict):
             actions = json_dict['actions']
@@ -134,6 +137,12 @@ class BasicBlock(object):
         self.primitives = newPrimitives
         self.bypass_map = bypass_map
 
+    def generate_basicblock_instr(self):
+        global generated_table_sim
+        init_file = os.path.join('generatedbsv', self.name+'.hex')
+        if not os.path.isfile(init_file):
+            open(init_file, 'w')
+
     def buildPrimitives(self, p):
         def check_field(p, idx):
             if p['parameters'][idx]['type'] == 'field':
@@ -225,7 +234,7 @@ class BasicBlock(object):
         return stmt
 
     def buildServerInterfaceDef(self):
-        TMP1 = "interface %(name)s = toServer(rx_%(name)s.e, tx_%(name)s.e);"
+        TMP1 = "interface %(name)s = cpu.prev_control_state;"
         stmt = []
         pdict = {"name": "prev_control_state"}
         stmt.append(ast.Template(TMP1, pdict))
@@ -303,6 +312,23 @@ class BasicBlock(object):
         rules.append(rule)
         return rules
 
+    def buildCPU (self):
+        tmpl = []
+        tmpl.append(ast.Template("CPU cpu <- mkCPU();"))
+        tmpl.append(ast.Template("IMem imem <- mkIMem(\"%s.hex\");" % self.name))
+        tmpl.append(ast.Template("mkConnection(cpu.imem_client, imem.cpu_server);\n"))
+        return tmpl
+
+    def build_intf_decl_verbosity(self):
+        stmt = []
+        stmt.append(ast.Template("method Action set_verbosity (int verbosity);"))
+        stmt.append(ast.Template("  cf_verbosity <= verbosity;"))
+        stmt.append(ast.Template("  cpu.set_verbosity(verbosity);"))
+        stmt.append(ast.Template("  imem.set_verbosity(verbosity);"))
+        stmt.append(ast.Template("endmethod"))
+        return stmt
+
+
     def buildModuleStmt(self):
         TMP1 = "Reg#(Bit#(%(dsz)s)) rg_%(field)s <- mkReg(0);"
         """
@@ -310,25 +336,28 @@ class BasicBlock(object):
         then build the action module
         """
         stmt = []
-        stmt += self.buildTXRX()
-        stmt += self.buildFFs()
+        stmt += build_funct_verbosity()
+        stmt += self.buildCPU()
+        #stmt += self.buildTXRX()
+        #stmt += self.buildFFs()
         #-- begin optimization
-        regs = set()
-        for p in self.primitives:
-            stmt += p.buildTXRX(self.json_dict)
-            _reg = p.getDstReg(self.json_dict)
-            if _reg != None:
-                regs.add(_reg)
-        for r in regs:
-            stmt.append(ast.Template(TMP1, {'dsz': r[0], 'field': r[1]}))
+        #regs = set()
+        #for p in self.primitives:
+        #    stmt += p.buildTXRX(self.json_dict)
+        #    _reg = p.getDstReg(self.json_dict)
+        #    if _reg != None:
+        #        regs.add(_reg)
+        #for r in regs:
+        #    stmt.append(ast.Template(TMP1, {'dsz': r[0], 'field': r[1]}))
         #-- end optimization
-        for p in self.primitives:
-            stmt += p.buildTempReg(self.json_dict)
-        stmt += self.buildHandleRequest()
-        stmt += self.buildHandleResponse()
+        #for p in self.primitives:
+        #    stmt += p.buildTempReg(self.json_dict)
+        #stmt += self.buildHandleRequest()
+        #stmt += self.buildHandleResponse()
         for p in self.primitives:
             stmt += p.buildInterfaceDef();
         stmt += self.buildServerInterfaceDef()
+        stmt += self.build_intf_decl_verbosity()
         return stmt
 
     def optimize(self):
@@ -347,6 +376,8 @@ class BasicBlock(object):
         stmt += self.serverInterfaces
         intf = ast.Interface(typedef=iname)
         intf.subinterfaces = stmt
+        intf1 = ast.Method("set_verbosity", "Action", "int verbosity")
+        intf.subinterfaces.append(intf1)
         intf.emitInterfaceDecl(builder)
 
     def emitModule(self, builder):
@@ -369,4 +400,5 @@ class BasicBlock(object):
         self.emitInterface(builder)
         builder.appendLine("(* synthesize *)")
         self.emitModule(builder)
+        self.generate_basicblock_instr()
 

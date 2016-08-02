@@ -67,21 +67,18 @@ def emit_import(builder):
     pmap['imports'] = "\n".join(["import {}::*;".format(x) for x in sorted(import_modules)])
     builder.append(IMPORT_TEMPLATE % (pmap))
 
-def buildVerbosity():
-    TMP1 = "Reg#(int) cr_verbosity[2] <- mkCRegU(2);"
-    TMP2 = "FIFOF#(int) cr_verbosity_ff <- mkFIFOF;"
-    TMP3 = "let x = cr_verbosity_ff.first;"
-    TMP4 = "cr_verbosity_ff.deq;"
-    TMP5 = "cr_verbosity[1] <= x;"
+def build_funct_verbosity():
+    TMP1 = "Reg#(int) cf_verbosity <- mkConfigRegU;"
     stmt = []
     stmt.append(ast.Template(TMP1))
-    stmt.append(ast.Template(TMP2))
     rl_stmt = []
-    rl_stmt.append(ast.Template(TMP3))
-    rl_stmt.append(ast.Template(TMP4))
-    rl_stmt.append(ast.Template(TMP5))
-    rule = ast.Rule("set_verbosity", [], rl_stmt)
-    stmt.append(rule)
+    rl_stmt.append(ast.Template("action"))
+    rl_stmt.append(ast.Template("if (cf_verbosity > fromInteger(level)) begin"))
+    rl_stmt.append(ast.Template("  $display(\"(%%d) \", $time, msg);"))
+    rl_stmt.append(ast.Template("end"))
+    rl_stmt.append(ast.Template("endaction"))
+    funct = ast.Function("dbprint", 'Action', 'Integer level, Fmt msg', rl_stmt)
+    stmt.append(funct)
     return stmt
 
 def build_funct_dbg3():

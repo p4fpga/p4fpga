@@ -27,6 +27,7 @@ import sys, os
 from sourceCodeBuilder import SourceCodeBuilder
 from utils import CamelCase, p4name, GetFieldWidth
 from bsvgen_struct import StructT, StructTableReqT, StructTableRspT
+from bsvgen_common import build_funct_verbosity
 
 logger = logging.getLogger(__name__)
 
@@ -328,6 +329,13 @@ class Table(object):
         rule = ast.Rule(rname, cond, stmt)
         return rule
 
+    def build_intf_decl_verbosity(self):
+        stmt = []
+        stmt.append(ast.Template("method Action set_verbosity (int verbosity);"))
+        stmt.append(ast.Template("  cf_verbosity <= verbosity;"))
+        stmt.append(ast.Template("endmethod"))
+        return stmt
+
     def buildModuleStmt(self):
         TMP1 = "Vector#(%(num)s, FIFOF#(BBRequest)) bbReqFifo <- replicateM(mkFIFOF);"
         TMP2 = "Vector#(%(num)s, FIFOF#(BBResponse)) bbRspFifo <- replicateM(mkFIFOF);"
@@ -339,6 +347,7 @@ class Table(object):
         TMP7 = "FIFOF#(PacketInstance) packet_ff <- mkFIFOF;"
 
         stmt = []
+        stmt += build_funct_verbosity()
         stmt += self.buildTXRX("metadata")
 
         num = len(self.actions)
@@ -371,6 +380,7 @@ class Table(object):
         stmt.append(ast.Template(TMP5 % {"name": "metadata","id": 0}))
         for idx, _ in enumerate(self.actions):
             stmt.append(ast.Template(TMP4 % {"id": idx}))
+        stmt += self.build_intf_decl_verbosity()
         return stmt
 
     def emitInterface(self, builder):
@@ -386,6 +396,8 @@ class Table(object):
         for idx, _ in enumerate(self.actions):
             c_intf = ast.Interface(TMP3 % {"id": idx}, TMP4)
             intf.subinterfaces.append(c_intf)
+        intf1 = ast.Method("set_verbosity", "Action", "int verbosity")
+        intf.subinterfaces.append(intf1)
         intf.emitInterfaceDecl(builder)
 
     def emitModule(self, builder):

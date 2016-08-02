@@ -19,6 +19,7 @@ import exceptions
 import math
 from utils import CamelCase, camelCase, p4name
 from collections import OrderedDict
+from bsvgen_common import build_funct_verbosity
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,22 @@ class Control (object):
         self.basic_blocks = []
         self.registers = []
         self.entry = []
+
+    def build_intf_decl_verbosity(self):
+        stmt = []
+        basic_block_set = dict() # to ensure unique name
+        stmt.append(ast.Template("method Action set_verbosity (int verbosity);"))
+        stmt.append(ast.Template("  cf_verbosity <= verbosity;"))
+        for b in self.basic_blocks:
+            if b not in basic_block_set:
+                basic_block_set[b] = 0
+            else:
+                basic_block_set[b] += 1
+            stmt.append(ast.Template("  %s_%d.set_verbosity(verbosity);" % (b.name, basic_block_set[b])))
+        for k, v in self.tables.items():
+            stmt.append(ast.Template("  %s.set_verbosity(verbosity);" % v.name))
+        stmt.append(ast.Template("endmethod"))
+        return stmt
 
     def buildFFs(self):
         TMP1 = "FIFOF#(MetadataRequest) default_req_ff <- mkFIFOF;"
@@ -248,6 +265,7 @@ class Control (object):
 
     def buildModuleStmt(self):
         stmt = []
+        stmt += build_funct_verbosity()
         stmt += self.buildFFs()
         stmt += self.buildConnection()
         stmt += self.buildTableInstance()
@@ -259,13 +277,16 @@ class Control (object):
         stmt.append(ast.Template("  interface request = toGet(next_req_ff);"))
         stmt.append(ast.Template("  interface response = toPut(next_rsp_ff);"))
         stmt.append(ast.Template("endinterface);"))
+        stmt += self.build_intf_decl_verbosity()
         return stmt
 
     def emitInterface(self, builder):
         iname = CamelCase(self.name)
         table_intf = ast.Interface(typedef=iname)
         intf0 = ast.Interface("next", "Client#(MetadataRequest, MetadataResponse)")
+        intf1 = ast.Method("set_verbosity", "Action", "int verbosity")
         table_intf.subinterfaces.append(intf0)
+        table_intf.subinterfaces.append(intf1)
         table_intf.emitInterfaceDecl(builder)
 
     def emitModule(self, builder):
@@ -279,8 +300,6 @@ class Control (object):
         module.emit(builder)
 
     def emit(self, builder):
-        #for t in sorted(self.tables.values()):
-        #    t.emit(builder)
         builder.newline()
         builder.append("// ====== %s ======" % (self.name.upper()))
         builder.newline()
