@@ -195,6 +195,10 @@ typedef struct {
   PacketInstance pkt;
   MetadataT meta;
 } MetadataRequest deriving (Bits, Eq, FShow);
+typedef struct {
+  PacketInstance pkt;
+  MetadataT meta;
+} MetadataResponse deriving (Bits, Eq, FShow);
 typedef union tagged {
   struct {
     PacketInstance pkt;
@@ -216,6 +220,8 @@ typedef union tagged {
     PacketInstance pkt;
     MetadataT meta;
   } EthertypeMatchMimPacketRspT;
+} EthertypeMatchResponse deriving (Bits, Eq, FShow);
+typedef union tagged {
   struct {
     PacketInstance pkt;
     MetadataT meta;
@@ -224,6 +230,8 @@ typedef union tagged {
     PacketInstance pkt;
     MetadataT meta;
   } Ipv4MatchSetEgressPortRspT;
+} Ipv4MatchResponse deriving (Bits, Eq, FShow);
+typedef union tagged {
   struct {
     PacketInstance pkt;
     MetadataT meta;
@@ -232,6 +240,8 @@ typedef union tagged {
     PacketInstance pkt;
     MetadataT meta;
   } Ipv6MatchSetEgressPortRspT;
+} Ipv6MatchResponse deriving (Bits, Eq, FShow);
+typedef union tagged {
   struct {
     PacketInstance pkt;
     MetadataT meta;
@@ -240,15 +250,15 @@ typedef union tagged {
     PacketInstance pkt;
     MetadataT meta;
   } L2MatchSetEgressPortRspT;
-} MetadataResponse deriving (Bits, Eq, FShow);
+} L2MatchResponse deriving (Bits, Eq, FShow);
 typedef struct {
+  Maybe#(Bit#(16)) ethernet$etherType;
+  Maybe#(Bit#(48)) ethernet$srcAddr;
+  Maybe#(Bit#(8)) runtime$egress_port_8;
   Maybe#(Bit#(4)) ing_metadata$packet_type;
   Maybe#(Bit#(8)) ing_metadata$egress_port;
-  Maybe#(Bit#(8)) runtime_egress_port;
-  Maybe#(Bit#(16)) ethernet$etherType;
   Maybe#(Bit#(32)) ipv4$srcAddr;
   Maybe#(Bit#(128)) ipv6$srcAddr;
-  Maybe#(Bit#(48)) ethernet$srcAddr;
 } MetadataT deriving (Bits, Eq, FShow);
 instance DefaultValue#(MetadataT);
   defaultValue = unpack(0);

@@ -8,7 +8,7 @@ import HostChannel::*;
 import MainDefs::*;
 import MultiProtocol::*;
 import PacketBuffer::*;
-import StreamChannel::*;
+import TxChannel::*;
 import Vector::*;
 interface MainRequest;
   method Action read_version ();
@@ -21,7 +21,7 @@ endinterface
 interface MainAPI;
   interface MainRequest request;
 endinterface
-module mkMainAPI #(MainIndication indication,StreamInChannel hostchan,Ingress ingress,StreamOutChannel txchan) (MainAPI);
+module mkMainAPI #(MainIndication indication,HostChannel hostchan,Ingress ingress,TxChannel txchan) (MainAPI);
   interface MainRequest request;
     method Action read_version ();
         let v = `NicVersion;

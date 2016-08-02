@@ -119,29 +119,25 @@ endfunction
 
 `ifdef PARSER_RULES
 (* mutually_exclusive="rl_parse_ipv4_parse_udp, rl_parse_ipv6_parse_tcp, rl_parse_ipv4_parse_icmp, rl_start_parse_ethernet, rl_parse_udp_start, rl_parse_ipv4_start, rl_parse_ethernet_start, rl_parse_ipv6_parse_udp, rl_parse_ipv6_parse_icmp, rl_parse_icmp_start, rl_parse_ethernet_parse_vlan_tag, rl_parse_ethernet_parse_ipv4, rl_parse_ethernet_parse_ipv6, rl_parse_vlan_tag_start, rl_parse_vlan_tag_parse_ipv4, rl_parse_vlan_tag_parse_ipv6, rl_parse_tcp_start, rl_parse_ipv4_parse_tcp, rl_parse_ipv6_start" *)
-rule rl_parse_done if (w_parse_done);
-   MetadataT meta = defaultValue;
-   let ethernet <- toGet(ethernet_out_ff).get;
-   let icmp <- toGet(icmp_out_ff).get;
-   let ipv4 <- toGet(ipv4_out_ff).get;
-   let ipv6 <- toGet(ipv6_out_ff).get;
-   let vlan <- toGet(vlan_tag_out_ff).get;
-   let tcp <- toGet(tcp_out_ff).get;
-   let udp <- toGet(udp_out_ff).get;
-   if (isValid(ethernet)) begin
-     meta.ethernet$etherType = tagged Valid fromMaybe(?, ethernet).etherType;
-     meta.ethernet$srcAddr = tagged Valid fromMaybe(?, ethernet).srcAddr;
-   end
-   if (isValid(ipv4)) begin
-     meta.ipv4$srcAddr = tagged Valid fromMaybe(?, ipv4).srcAddr;
-   end
-   if (isValid(ipv6)) begin
-     meta.ipv6$srcAddr = tagged Valid fromMaybe(?, ipv6).srcAddr;
-   end
-   dbprint(3, $format("parse_done"));
-   meta_in_ff.enq(meta);
+rule rl_parse_done if ((w_parse_done));
+  MetadataT meta = defaultValue;
+  let ethernet <- toGet(ethernet_out_ff).get;
+  let vlan_tag <- toGet(vlan_tag_out_ff).get;
+  let ipv4 <- toGet(ipv4_out_ff).get;
+  let ipv6 <- toGet(ipv6_out_ff).get;
+  if (isValid(ethernet)) begin
+    meta.ethernet$etherType = tagged Valid fromMaybe(?, ethernet).etherType;
+    meta.ethernet$srcAddr = tagged Valid fromMaybe(?, ethernet).srcAddr;
+  end
+  if (isValid(ipv4)) begin
+    meta.ipv4$srcAddr = tagged Valid fromMaybe(?, ipv4).srcAddr;
+  end
+  if (isValid(ipv6)) begin
+    meta.ipv6$srcAddr = tagged Valid fromMaybe(?, ipv6).srcAddr;
+  end
+  dbprint(3, $format("parse_done"));
+  meta_in_ff.enq(meta);
 endrule
-
 rule rl_start_parse_ethernet if ((w_start_parse_ethernet));
   parse_state_ff.enq(StateParseEthernet);
   dbprint(3, $format("%s -> %s", "start", "parse_ethernet"));
@@ -165,13 +161,13 @@ rule rl_parse_ethernet_extract if ((parse_state_ff.first == StateParseEthernet) 
     data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
   end
   report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
-  let ethernet_t = extract_ethernet_t(truncate(data));
-  compute_next_state_parse_ethernet(ethernet_t.etherType);
-  ethernet_out_ff.enq(tagged Valid ethernet_t);
+  let ethernet = extract_ethernet_t(truncate(data));
+  compute_next_state_parse_ethernet(ethernet.etherType);
   rg_tmp[0] <= zeroExtend(data >> 112);
   succeed_and_next(112);
   dbprint(3, $format("extract %s", "parse_ethernet"));
   parse_state_ff.deq;
+  ethernet_out_ff.enq(tagged Valid ethernet);
 endrule
 rule rl_parse_ethernet_parse_vlan_tag if ((w_parse_ethernet_parse_vlan_tag));
   parse_state_ff.enq(StateParseVlanTag);
@@ -212,12 +208,13 @@ rule rl_parse_vlan_tag_extract if ((parse_state_ff.first == StateParseVlanTag) &
     data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
   end
   report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
-  let vlan_tag_t = extract_vlan_tag_t(truncate(data));
-  compute_next_state_parse_vlan_tag(vlan_tag_t.etherType);
+  let vlan_tag = extract_vlan_tag_t(truncate(data));
+  compute_next_state_parse_vlan_tag(vlan_tag.etherType);
   rg_tmp[0] <= zeroExtend(data >> 32);
   succeed_and_next(32);
   dbprint(3, $format("extract %s", "parse_vlan_tag"));
   parse_state_ff.deq;
+  vlan_tag_out_ff.enq(tagged Valid vlan_tag);
 endrule
 rule rl_parse_vlan_tag_parse_ipv4 if ((w_parse_vlan_tag_parse_ipv4));
   parse_state_ff.enq(StateParseIpv4);
@@ -253,13 +250,13 @@ rule rl_parse_ipv4_extract if ((parse_state_ff.first == StateParseIpv4) && (rg_b
     data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
   end
   report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
-  let ipv4_t = extract_ipv4_t(truncate(data));
-  compute_next_state_parse_ipv4(ipv4_t.fragOffset,ipv4_t.ihl,ipv4_t.protocol);
+  let ipv4 = extract_ipv4_t(truncate(data));
+  compute_next_state_parse_ipv4(ipv4.fragOffset,ipv4.ihl,ipv4.protocol);
   rg_tmp[0] <= zeroExtend(data >> 160);
   succeed_and_next(160);
   dbprint(3, $format("extract %s", "parse_ipv4"));
-  ipv4_out_ff.enq(tagged Valid ipv4_t);
   parse_state_ff.deq;
+  ipv4_out_ff.enq(tagged Valid ipv4);
 endrule
 rule rl_parse_ipv4_parse_icmp if ((w_parse_ipv4_parse_icmp));
   parse_state_ff.enq(StateParseIcmp);
@@ -300,12 +297,13 @@ rule rl_parse_ipv6_extract if ((parse_state_ff.first == StateParseIpv6) && (rg_b
     data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
   end
   report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
-  let ipv6_t = extract_ipv6_t(truncate(data));
-  compute_next_state_parse_ipv6(ipv6_t.nextHdr);
+  let ipv6 = extract_ipv6_t(truncate(data));
+  compute_next_state_parse_ipv6(ipv6.nextHdr);
   rg_tmp[0] <= zeroExtend(data >> 320);
   succeed_and_next(320);
   dbprint(3, $format("extract %s", "parse_ipv6"));
   parse_state_ff.deq;
+  ipv6_out_ff.enq(tagged Valid ipv6);
 endrule
 rule rl_parse_ipv6_parse_icmp if ((w_parse_ipv6_parse_icmp));
   parse_state_ff.enq(StateParseIcmp);
@@ -440,13 +438,11 @@ PulseWire w_parse_vlan_tag_parse_ipv6 <- mkPulseWireOR();
 PulseWire w_parse_tcp_start <- mkPulseWireOR();
 PulseWire w_parse_ipv4_parse_tcp <- mkPulseWireOR();
 PulseWire w_parse_ipv6_start <- mkPulseWireOR();
-
 FIFOF#(Maybe#(EthernetT)) ethernet_out_ff <- mkDFIFOF(tagged Invalid);
-FIFOF#(Maybe#(IcmpT)) icmp_out_ff <- mkDFIFOF(tagged Invalid);
+FIFOF#(Maybe#(VlanTagT)) vlan_tag_out_ff <- mkDFIFOF(tagged Invalid);
 FIFOF#(Maybe#(Ipv4T)) ipv4_out_ff <- mkDFIFOF(tagged Invalid);
 FIFOF#(Maybe#(Ipv6T)) ipv6_out_ff <- mkDFIFOF(tagged Invalid);
-FIFOF#(Maybe#(VlanTagT)) vlan_tag_out_ff <- mkDFIFOF(tagged Invalid);
+FIFOF#(Maybe#(IcmpT)) icmp_out_ff <- mkDFIFOF(tagged Invalid);
 FIFOF#(Maybe#(TcpT)) tcp_out_ff <- mkDFIFOF(tagged Invalid);
 FIFOF#(Maybe#(UdpT)) udp_out_ff <- mkDFIFOF(tagged Invalid);
-
 `endif
