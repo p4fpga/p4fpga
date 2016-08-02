@@ -35,11 +35,12 @@ from ast_util import apply_pdict, apply_action_block, apply_if_verbosity
 logger = logging.getLogger(__name__)
 
 class Parser(object):
-    def __init__(self, states):
+    def __init__(self, states, metadata):
         self.state_transitions = set()
         self.state_transitions_generated = set()
         self.states = states
         self.initial_state = "start"
+        self.metadata = metadata
 
     def build_funct_push_phv(self, phv):
         TMP1 = "MetadataT meta = defaultValue;"
@@ -158,6 +159,8 @@ class Parser(object):
         tmpl2.append("dbprint(3, $format(\"extract %%s\", \"%(name)s\"));")
         tmpl2.append("parse_state_ff.deq;")
 
+        TMP3 = "%(ktype)s_out_ff.enq(tagged Valid %(ktype)s);"
+
         pdict = {}
         pdict['name'] = state.name
         pdict['CurrState'] = 'State%s' % (CamelCase(state.name))
@@ -173,11 +176,12 @@ class Parser(object):
             pdict['ktype'].add(header_type)
         pdict['field'] = ",".join(keys)
 
-
         stmt = apply_pdict(tmpl, pdict)
         for ktype in pdict['ktype']:
             stmt += [ast.Template(TMP, {'ktype': ktype})]
         stmt += apply_pdict(tmpl2, pdict)
+        for ktype in pdict['ktype']:
+            stmt += [ast.Template(TMP3, {'ktype': ktype})]
 
         # build expression
         setexpr = GetExpressionInState(state.name)
@@ -190,6 +194,40 @@ class Parser(object):
         rname = 'rl_%(name)s_extract' % pdict
         attr = ['fire_when_enabled']
         rule = ast.Rule(rname, rcond, stmt, attr)
+        return [rule]
+
+    def build_rule_parse_done(self):
+        TMP1 = "let %(ktype)s <- toGet(%(ktype)s_out_ff).get;"
+        stmt = []
+        stmt += [ast.Template("MetadataT meta = defaultValue;")]
+        pdict = {}
+        pdict['ktype'] = set()
+        for idx, s in enumerate(self.states.values()):
+            keys = []
+            for k in s.transition_keys:
+                if k['type'] == 'lookahead':
+                    print "WARNING: lookahead type not handled"
+                    continue
+                keys.append("%s.%s" % (GetHeaderType(k['value'][0]), k['value'][1]))
+                header_type = GetHeaderType(k['value'][0])
+                pdict['ktype'].add(header_type)
+            pdict['field'] = ",".join(keys)
+        for ktype in pdict['ktype']:
+            stmt += [ast.Template(TMP1, {'ktype': ktype})]
+
+        for ktype in pdict['ktype']:
+            if ktype in  self.metadata:
+                stmt_if = []
+                for f in self.metadata[ktype]:
+                    stmt_if.append(ast.Template("meta.%(metafield)s = tagged Valid fromMaybe(?, %(ktype)s).%(field)s;" % {'metafield': "%s$%s" % (ktype, f[1]), 'ktype': ktype, 'field': f[1]}))
+                stmt += [ast.If("isValid(%s)" % ktype, stmt_if)]
+
+        stmt += [ast.Template("dbprint(3, $format(\"parse_done\"));")]
+        stmt += [ast.Template("meta_in_ff.enq(meta);")]
+
+        rcond = '(w_parse_done)' % pdict
+        rname = 'rl_parse_done' % pdict
+        rule = ast.Rule(rname, rcond, stmt, [])
         return [rule]
 
     def build_mutually_exclusive_attribute(self):
@@ -325,6 +363,7 @@ class Parser(object):
         stmt.append(ast.Template("\n"))
         stmt.append(ast.Template("`ifdef PARSER_RULES\n"))
         stmt += self.build_mutually_exclusive_attribute()
+        stmt += self.build_rule_parse_done()
         for idx, s in enumerate(self.states.values()):
             if s.state_type == ParseState.REGULAR:
                 stmt += self.build_rule_state_load(s)
@@ -341,6 +380,14 @@ class Parser(object):
         stmt.append(ast.Template("`ifdef PARSER_STATE\n"))
         for transition in self.state_transitions:
             stmt.append(ast.Template("PulseWire w_%(name)s <- mkPulseWireOR();\n", {'name': transition}))
+        for _, s in self.states.items():
+            for op in s.parse_ops:
+                if (op['op'] == 'extract'):
+                    for param in op['parameters']:
+                        if (param['type'] == 'regular'):
+                            htype = GetHeaderType(param['value'])
+                            print htype
+                            stmt.append(ast.Template("FIFOF#(Maybe#(%(Type)s)) %(type)s_out_ff <- mkDFIFOF(tagged Invalid);\n", {'type': htype, 'Type': CamelCase(htype)}))
         stmt.append(ast.Template("`endif"))
         return stmt
 

@@ -153,50 +153,12 @@ class StructMetadata(object):
     def __init__(self, name, ir):
         self.name = name
 
-        metadata = set()
+        metadata = ir.global_metadata;
         fields = []
-        for it in ir.basic_blocks.values():
-            for f in it.request.members:
-                if f not in metadata:
-                    width = GetFieldWidth(f)
-                    if type(f) == tuple:
-                        name = f[0].translate(None, "[]") + "$" + f[1]
-                    else:
-                        name = f.translate(None, "[]")
-                    fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
-                    metadata.add(f)
-            for f in it.response.members:
-                if f not in metadata:
-                    width = GetFieldWidth(f)
-                    if type(f) == tuple:
-                        name = f[0].translate(None, "[]") + "$" + f[1]
-                    else:
-                        name = f.translate(None, "[]")
-                    fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
-                    metadata.add(f)
-            # add runtime data to metadata
-            for f in it.runtime_data:
-                if f not in metadata:
-                    width = f[0]
-                    name = "runtime_%s_%d" %(f[1], f[0])
-                    fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
-                    metadata.add(f)
-
-        for f in ir.controls.values():
-            for _, v in f.tables.items():
-                for k in v.key:
-                    d = k['target']
-                    if type(k['target']) == list:
-                        d = tuple(k['target'])
-                    if d not in metadata:
-                        width = GetFieldWidth(k['target'])
-                        if type(d) is tuple:
-                            name = p4name(d)
-                        else:
-                            name = d.translate(None, "[]")
-                        fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(width), name))
-                        metadata.add(d)
-
+        for header, flds in metadata.items():
+            for f in flds:
+                name = "%s$%s" % (header, f[1])
+                fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(f[0]), name))
         # valid fields
         #for it in ir.parsers.values():
         #    for h in it.header_instances.values():

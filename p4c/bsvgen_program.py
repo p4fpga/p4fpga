@@ -52,6 +52,7 @@ class Program(MetaIRInstance):
         self.other_processors = {}
         self.start_processor = []
         self.table_init = []
+        self.global_metadata = {}
 
         # BIR processor layout
         for layout in self.processor_layout.values():

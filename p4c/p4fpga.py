@@ -34,10 +34,62 @@ from bsvgen_table import Table
 from bsvgen_struct import Struct, StructT, StructMetadata
 from utils import CamelCase, GetHeaderWidth, GetFieldWidth, GetState
 from utils import GetHeaderInState, BuildExpression, GetTransitionKey
-from utils import GetHeaderWidthInState
+from utils import GetHeaderWidthInState, p4name, GetHeaderType
 from ast_util import ParseState
 
 logger = logging.getLogger(__name__)
+
+def process_global_metadata(ir):
+    '''
+    Build a dictionary of metadata organized as dictioanry
+    with packet header as key, and list of tuple(width, field) as value.
+    '''
+    metadata = {}
+    def add_field (header, field):
+        if header == 'runtime':
+            header_type = 'runtime'
+        else:
+            header_type = GetHeaderType(header)
+        if header_type not in metadata:
+            metadata[header_type] = set()
+        metadata[header_type].add(field)
+
+    for it in ir.basic_blocks.values():
+        for f in it.request.members:
+            if f not in metadata:
+                width = GetFieldWidth(f)
+                if type(f) == tuple:
+                    header = f[0].translate(None, "[]")
+                    field = f[1]
+                add_field(header, (width, field))
+        for f in it.response.members:
+            if f not in metadata:
+                width = GetFieldWidth(f)
+                if type(f) == tuple:
+                    header = f[0].translate(None, "[]")
+                    field = f[1]
+                add_field(header, (width, field))
+        for f in it.runtime_data:
+            if f not in metadata:
+                width = f[0]
+                header = 'runtime'
+                field = "%s_%d" %(f[1], f[0])
+                add_field(header, (width, field))
+
+    for f in ir.controls.values():
+        for _, v in f.tables.items():
+            for k in v.key:
+                d = k['target']
+                if type(k['target']) == list:
+                    d = tuple(k['target'])
+                if d not in metadata:
+                    width = GetFieldWidth(k['target'])
+                    if type(d) is tuple:
+                        header = d[0]
+                        field = d[1]
+                    add_field(header, (width, field))
+    # save to ir object
+    return metadata
 
 def render_runtime_types(ir, json_dict):
     # metadata req/rsp
@@ -95,7 +147,7 @@ def render_parsers(ir, json_dict):
         parse_state.transition_keys = GetTransitionKey(state)
         if parse_state.parse_ops == []:
             parse_state.state_type = ParseState.EMPTY
-    ir.parsers['parser'] = Parser(map_state)
+    ir.parsers['parser'] = Parser(map_state, ir.global_metadata)
 
 def render_deparsers(ir, json_dict):
     deparsers = json_dict['deparsers']
@@ -166,10 +218,11 @@ def ir_create(json_dict):
     config.jsondata = json_dict
     config.ir = ir
     render_header_types(ir, json_dict)
-    render_parsers(ir, json_dict)
     render_deparsers(ir, json_dict)
     render_basic_blocks(ir, json_dict)
     render_pipelines(ir, json_dict)
+    ir.global_metadata = process_global_metadata(ir)
     render_runtime_types(ir, json_dict)
+    render_parsers(ir, json_dict)
     return ir
 
