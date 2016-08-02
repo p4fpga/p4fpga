@@ -151,7 +151,7 @@ class Parser(object):
         tmpl.append("  data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];")
         tmpl.append("end")
         tmpl.append("report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);")
-        TMP = "let %(ktype)s = extract_%(ktype)s(truncate(data));"
+        TMP = "let %(header)s = extract_%(ktype)s(truncate(data));"
         tmpl2 = []
         tmpl2.append("compute_next_state_%(name)s(%(field)s);")
         tmpl2.append("rg_tmp[0] <= zeroExtend(data >> %(len)s);")
@@ -159,7 +159,7 @@ class Parser(object):
         tmpl2.append("dbprint(3, $format(\"extract %%s\", \"%(name)s\"));")
         tmpl2.append("parse_state_ff.deq;")
 
-        TMP3 = "%(ktype)s_out_ff.enq(tagged Valid %(ktype)s);"
+        TMP3 = "%(header)s_out_ff.enq(tagged Valid %(header)s);"
 
         pdict = {}
         pdict['name'] = state.name
@@ -171,17 +171,18 @@ class Parser(object):
             if k['type'] == 'lookahead':
                 print "WARNING: lookahead type not handled"
                 continue
-            keys.append("%s.%s" % (GetHeaderType(k['value'][0]), k['value'][1]))
             header_type = GetHeaderType(k['value'][0])
-            pdict['ktype'].add(header_type)
+            header = k['value'][0]
+            keys.append("%s.%s" % (header, k['value'][1]))
+            pdict['ktype'].add((header, header_type))
         pdict['field'] = ",".join(keys)
 
         stmt = apply_pdict(tmpl, pdict)
-        for ktype in pdict['ktype']:
-            stmt += [ast.Template(TMP, {'ktype': ktype})]
+        for hdr, ktype in pdict['ktype']:
+            stmt += [ast.Template(TMP, {'header': hdr, 'ktype': ktype})]
         stmt += apply_pdict(tmpl2, pdict)
-        for ktype in pdict['ktype']:
-            stmt += [ast.Template(TMP3, {'ktype': ktype})]
+        for hdr, ktype in pdict['ktype']:
+            stmt += [ast.Template(TMP3, {'header': hdr, 'ktype': ktype})]
 
         # build expression
         setexpr = GetExpressionInState(state.name)
@@ -208,9 +209,8 @@ class Parser(object):
                 if k['type'] == 'lookahead':
                     print "WARNING: lookahead type not handled"
                     continue
-                keys.append("%s.%s" % (GetHeaderType(k['value'][0]), k['value'][1]))
-                header_type = GetHeaderType(k['value'][0])
-                pdict['ktype'].add(header_type)
+                keys.append("%s.%s" % (k['value'][0], k['value'][1]))
+                pdict['ktype'].add(k['value'][0])
             pdict['field'] = ",".join(keys)
         for ktype in pdict['ktype']:
             stmt += [ast.Template(TMP1, {'ktype': ktype})]
@@ -386,8 +386,7 @@ class Parser(object):
                     for param in op['parameters']:
                         if (param['type'] == 'regular'):
                             htype = GetHeaderType(param['value'])
-                            print htype
-                            stmt.append(ast.Template("FIFOF#(Maybe#(%(Type)s)) %(type)s_out_ff <- mkDFIFOF(tagged Invalid);\n", {'type': htype, 'Type': CamelCase(htype)}))
+                            stmt.append(ast.Template("FIFOF#(Maybe#(%(Type)s)) %(type)s_out_ff <- mkDFIFOF(tagged Invalid);\n", {'type': param['value'], 'Type': CamelCase(htype)}))
         stmt.append(ast.Template("`endif"))
         return stmt
 

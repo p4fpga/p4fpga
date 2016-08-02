@@ -46,13 +46,9 @@ def process_global_metadata(ir):
     '''
     metadata = {}
     def add_field (header, field):
-        if header == 'runtime':
-            header_type = 'runtime'
-        else:
-            header_type = GetHeaderType(header)
-        if header_type not in metadata:
-            metadata[header_type] = set()
-        metadata[header_type].add(field)
+        if header not in metadata:
+            metadata[header] = set()
+        metadata[header].add(field)
 
     for it in ir.basic_blocks.values():
         for f in it.request.members:
