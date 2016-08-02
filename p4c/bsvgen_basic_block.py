@@ -328,6 +328,12 @@ class BasicBlock(object):
         stmt.append(ast.Template("endmethod"))
         return stmt
 
+    def build_instr(self):
+        TMP = "// INST: %s"
+        tmpl = []
+        for p in self.primitives:
+            tmpl.append(ast.Template(TMP % p))
+        return tmpl
 
     def buildModuleStmt(self):
         TMP1 = "Reg#(Bit#(%(dsz)s)) rg_%(field)s <- mkReg(0);"
@@ -338,22 +344,7 @@ class BasicBlock(object):
         stmt = []
         stmt += build_funct_verbosity()
         stmt += self.buildCPU()
-        #stmt += self.buildTXRX()
-        #stmt += self.buildFFs()
-        #-- begin optimization
-        #regs = set()
-        #for p in self.primitives:
-        #    stmt += p.buildTXRX(self.json_dict)
-        #    _reg = p.getDstReg(self.json_dict)
-        #    if _reg != None:
-        #        regs.add(_reg)
-        #for r in regs:
-        #    stmt.append(ast.Template(TMP1, {'dsz': r[0], 'field': r[1]}))
-        #-- end optimization
-        #for p in self.primitives:
-        #    stmt += p.buildTempReg(self.json_dict)
-        #stmt += self.buildHandleRequest()
-        #stmt += self.buildHandleResponse()
+        stmt += self.build_instr()
         for p in self.primitives:
             stmt += p.buildInterfaceDef();
         stmt += self.buildServerInterfaceDef()
