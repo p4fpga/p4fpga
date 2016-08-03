@@ -160,10 +160,15 @@ class Table(object):
         fields = []
         total_width = 0
         for k in keys:
-            width = GetFieldWidth(k)
-            total_width += width
-            stmt.append(ast.Template(TMP5, {"name": p4name(k)}))
-            fields.append("%s: %s" % (p4name(k), p4name(k)))
+            if type(k) != list:
+                total_width += 1
+                name = 'valid_%s' % k
+                fields.append("%s: %s" %(p4name(name), p4name(name)))
+            else:
+                width = GetFieldWidth(k)
+                total_width += width
+                stmt.append(ast.Template(TMP5, {"name": p4name(k)}))
+                fields.append("%s: %s" % (p4name(k), p4name(k)))
         if (total_width % 9):
             fields.insert(0, "padding: 0")
         stmt.append(ast.Template(TMP3, {"type": self.req_name, "field": ", ".join(fields)}))
