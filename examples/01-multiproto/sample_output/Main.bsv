@@ -1,10 +1,11 @@
 import BuildVector::*;
 import Clocks::*;
 import Connectable::*;
+import Egress::*;
 import GetPut::*;
 import HostChannel::*;
+import Ingress::*;
 import MainAPI::*;
-import MultiProtocol::*;
 import PacketBuffer::*;
 import SharedBuff::*;
 import Sims::*;

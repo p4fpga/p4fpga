@@ -3,8 +3,8 @@ typedef enum {
   StateDeparseStart,
   StateDeparseEthernet,
   StateDeparseVlanTag,
-  StateDeparseIpv4,
   StateDeparseIpv6,
+  StateDeparseIpv4,
   StateDeparseTcp,
   StateDeparseUdp,
   StateDeparseIcmp
@@ -35,18 +35,6 @@ rule rl_deparse_vlan_tag_send if ((deparse_state_ff.first == StateDeparseVlanTag
   succeed_and_next(32);
   deparse_state_ff.deq;
 endrule
-rule rl_deparse_ipv4_next if (w_deparse_ipv4);
-  deparse_state_ff.enq(StateDeparseIpv4);
-  fetch_next_header(160);
-endrule
-rule rl_deparse_ipv4_load if ((deparse_state_ff.first == StateDeparseIpv4) && (rg_buffered[0] < 160));
-  rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-  move_buffered_amt(128);
-endrule
-rule rl_deparse_ipv4_send if ((deparse_state_ff.first == StateDeparseIpv4) && (rg_buffered[0] >= 160));
-  succeed_and_next(160);
-  deparse_state_ff.deq;
-endrule
 rule rl_deparse_ipv6_next if (w_deparse_ipv6);
   deparse_state_ff.enq(StateDeparseIpv6);
   fetch_next_header(320);
@@ -57,6 +45,18 @@ rule rl_deparse_ipv6_load if ((deparse_state_ff.first == StateDeparseIpv6) && (r
 endrule
 rule rl_deparse_ipv6_send if ((deparse_state_ff.first == StateDeparseIpv6) && (rg_buffered[0] >= 320));
   succeed_and_next(320);
+  deparse_state_ff.deq;
+endrule
+rule rl_deparse_ipv4_next if (w_deparse_ipv4);
+  deparse_state_ff.enq(StateDeparseIpv4);
+  fetch_next_header(160);
+endrule
+rule rl_deparse_ipv4_load if ((deparse_state_ff.first == StateDeparseIpv4) && (rg_buffered[0] < 160));
+  rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+  move_buffered_amt(128);
+endrule
+rule rl_deparse_ipv4_send if ((deparse_state_ff.first == StateDeparseIpv4) && (rg_buffered[0] >= 160));
+  succeed_and_next(160);
   deparse_state_ff.deq;
 endrule
 rule rl_deparse_tcp_next if (w_deparse_tcp);
@@ -99,8 +99,8 @@ endrule
 `ifdef DEPARSER_STATE
 PulseWire w_deparse_ethernet <- mkPulseWire();
 PulseWire w_deparse_vlan_tag <- mkPulseWire();
-PulseWire w_deparse_ipv4 <- mkPulseWire();
 PulseWire w_deparse_ipv6 <- mkPulseWire();
+PulseWire w_deparse_ipv4 <- mkPulseWire();
 PulseWire w_deparse_tcp <- mkPulseWire();
 PulseWire w_deparse_udp <- mkPulseWire();
 PulseWire w_deparse_icmp <- mkPulseWire();

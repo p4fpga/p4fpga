@@ -2,11 +2,12 @@ import BuildVector::*;
 import Clocks::*;
 import Connectable::*;
 import DefaultValue::*;
+import Egress::*;
 import Ethernet::*;
 import GetPut::*;
 import HostChannel::*;
+import Ingress::*;
 import MainDefs::*;
-import MultiProtocol::*;
 import PacketBuffer::*;
 import TxChannel::*;
 import Vector::*;
@@ -38,6 +39,7 @@ module mkMainAPI #(MainIndication indication,HostChannel hostchan,Ingress ingres
     method Action set_verbosity (Bit#(32) verbosity);
         hostchan.set_verbosity(unpack(verbosity));
         txchan.set_verbosity(unpack(verbosity));
+        ingress.set_verbosity(unpack(verbosity));
     endmethod
   endinterface
 

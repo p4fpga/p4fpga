@@ -1,4 +1,5 @@
 import ClientServer::*;
+import ConfigReg::*;
 import UnionGenerated::*;
 import StructGenerated::*;
 import TxRx::*;
@@ -49,9 +50,19 @@ interface L2Match;
   interface Server #(MetadataRequest, L2MatchResponse) prev_control_state_0;
   interface Client #(BBRequest, BBResponse) next_control_state_0;
   interface Client #(BBRequest, BBResponse) next_control_state_1;
+  method Action set_verbosity (int verbosity);
 endinterface
 (* synthesize *)
 module mkL2Match  (L2Match);
+  Reg#(int) cf_verbosity <- mkConfigRegU;
+  function Action dbprint(Integer level, Fmt msg);
+    action
+    if (cf_verbosity > fromInteger(level)) begin
+      $display("(%d) ", $time, msg);
+    end
+    endaction
+  endfunction
+
   RX #(MetadataRequest) rx_metadata <- mkRX;
   let rx_info_metadata = rx_metadata.u;
   TX #(L2MatchResponse) tx_metadata <- mkTX;
@@ -85,6 +96,7 @@ module mkL2Match  (L2Match);
 
   rule rl_handle_execute;
     let rsp <- matchTable.lookupPort.response.get;
+    dbprint(3, $format("L2Match handle", fshow(rsp)));
     let pkt <- toGet(packet_ff).get;
     let meta <- toGet(metadata_ff[0]).get;
     if (rsp matches tagged Valid .data) begin
@@ -99,6 +111,7 @@ module mkL2Match  (L2Match);
           bbReqFifo[1].enq(req); //FIXME: replace with RXTX.
         end
       endcase
+      dbprint(3, $format("L2Match execute %h %h %h", NOP, SET_EGRESS_PORT, resp._action));
       // forward metadata to next stage.
       metadata_ff[1].enq(meta);
     end
@@ -123,4 +136,7 @@ module mkL2Match  (L2Match);
   interface prev_control_state_0 = toServer(rx_metadata.e, tx_metadata.e);
   interface next_control_state_0 = toClient(bbReqFifo[0], bbRspFifo[0]);
   interface next_control_state_1 = toClient(bbReqFifo[1], bbRspFifo[1]);
+  method Action set_verbosity (int verbosity);
+    cf_verbosity <= verbosity;
+  endmethod
 endmodule

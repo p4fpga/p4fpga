@@ -1,4 +1,5 @@
 import ClientServer::*;
+import ConfigReg::*;
 import UnionGenerated::*;
 import StructGenerated::*;
 import TxRx::*;
@@ -54,9 +55,19 @@ interface EthertypeMatch;
   interface Client #(BBRequest, BBResponse) next_control_state_2;
   interface Client #(BBRequest, BBResponse) next_control_state_3;
   interface Client #(BBRequest, BBResponse) next_control_state_4;
+  method Action set_verbosity (int verbosity);
 endinterface
 (* synthesize *)
 module mkEthertypeMatch  (EthertypeMatch);
+  Reg#(int) cf_verbosity <- mkConfigRegU;
+  function Action dbprint(Integer level, Fmt msg);
+    action
+    if (cf_verbosity > fromInteger(level)) begin
+      $display("(%d) ", $time, msg);
+    end
+    endaction
+  endfunction
+
   RX #(MetadataRequest) rx_metadata <- mkRX;
   let rx_info_metadata = rx_metadata.u;
   TX #(EthertypeMatchResponse) tx_metadata <- mkTX;
@@ -159,4 +170,7 @@ module mkEthertypeMatch  (EthertypeMatch);
   interface next_control_state_2 = toClient(bbReqFifo[2], bbRspFifo[2]);
   interface next_control_state_3 = toClient(bbReqFifo[3], bbRspFifo[3]);
   interface next_control_state_4 = toClient(bbReqFifo[4], bbRspFifo[4]);
+  method Action set_verbosity (int verbosity);
+    cf_verbosity <= verbosity;
+  endmethod
 endmodule

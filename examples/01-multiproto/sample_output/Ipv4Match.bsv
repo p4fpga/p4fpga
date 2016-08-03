@@ -1,4 +1,5 @@
 import ClientServer::*;
+import ConfigReg::*;
 import UnionGenerated::*;
 import StructGenerated::*;
 import TxRx::*;
@@ -49,9 +50,19 @@ interface Ipv4Match;
   interface Server #(MetadataRequest, Ipv4MatchResponse) prev_control_state_0;
   interface Client #(BBRequest, BBResponse) next_control_state_0;
   interface Client #(BBRequest, BBResponse) next_control_state_1;
+  method Action set_verbosity (int verbosity);
 endinterface
 (* synthesize *)
 module mkIpv4Match  (Ipv4Match);
+  Reg#(int) cf_verbosity <- mkConfigRegU;
+  function Action dbprint(Integer level, Fmt msg);
+    action
+    if (cf_verbosity > fromInteger(level)) begin
+      $display("(%d) ", $time, msg);
+    end
+    endaction
+  endfunction
+
   RX #(MetadataRequest) rx_metadata <- mkRX;
   let rx_info_metadata = rx_metadata.u;
   TX #(Ipv4MatchResponse) tx_metadata <- mkTX;
@@ -123,4 +134,7 @@ module mkIpv4Match  (Ipv4Match);
   interface prev_control_state_0 = toServer(rx_metadata.e, tx_metadata.e);
   interface next_control_state_0 = toClient(bbReqFifo[0], bbRspFifo[0]);
   interface next_control_state_1 = toClient(bbReqFifo[1], bbRspFifo[1]);
+  method Action set_verbosity (int verbosity);
+    cf_verbosity <= verbosity;
+  endmethod
 endmodule
