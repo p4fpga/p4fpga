@@ -320,7 +320,10 @@ class BasicBlock(object):
                 if (param['type'] == 'field'):
                     reglist.append("cons(" + "$".join(param['value']))
         #note: use cons to form a list of registers to ALU
-        regs = "".join(reglist) + ", nil" + ")" * len(reglist)
+        if len(reglist) != 0: 
+            regs = "".join(reglist) + ", nil" + ")" * len(reglist)
+        else:
+            regs = ""
         tmpl.append(ast.Template("CPU cpu <- mkCPU(%s);" % regs))
         tmpl.append(ast.Template("IMem imem <- mkIMem(\"%s.hex\");" % self.name))
         tmpl.append(ast.Template("mkConnection(cpu.imem_client, imem.cpu_server);\n"))
