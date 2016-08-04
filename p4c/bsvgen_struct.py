@@ -101,16 +101,9 @@ class StructM(object):
     def build_case_expr(self):
         e = ["pkt: pkt"]
         for m in self.members:
-            _m = p4name(m)
-            #-- begin optimization
-            # bypass RAW optimization
-            source_field = _m
-            if self.bypass_map:
-                if _m in self.bypass_map:
-                    #print 'zz', _m, self.bypass_map[_m]
-                    source_field = "rg_%s"%(self.bypass_map[_m])
-            #-- end optimization
-            e.append("%s: %s" % (_m, source_field))
+            fullname = p4name(m)
+            field = m[1]
+            e.append("%s: %s" % (fullname, field))
         for m in self.runtime_data:
             e.append("runtime_%s_%d: resp.runtime_%s" % (m[1], m[0], m[1]))
         return ", ".join(e)

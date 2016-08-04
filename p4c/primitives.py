@@ -42,6 +42,7 @@ class Primitive(object):
     def buildRequest(self, json_dict, runtime_data): return []
     def buildResponse(self): return []
     def buildTempReg(self, json_dict): return []
+    def readTempReg(self, json_dict): return []
     def getDstReg(self, json_dict): return None
 
 class ModifyField(Primitive):
@@ -59,7 +60,22 @@ class ModifyField(Primitive):
         dst_type = self.parameters[0]['type']
         field = p4name(dst_value)
         dsz = GetFieldWidth(dst_value)
+        if dsz < 64: #FIXME: only support 64-bit for now
+            dsz = 64
         pdict = {"dsz": dsz, "field": field}
+        stmt.append(ast.Template(TMP1, pdict))
+        return stmt
+
+    def readTempReg(self, json_dict=None):
+        TMP1 = "Bit#(%(dsz)s) %(field)s = %(funct)s(%(tmpReg)s);"
+        stmt = []
+        dst_value = self.parameters[0]['value']
+        dst_type = self.parameters[0]['type']
+        dsz = GetFieldWidth(dst_value)
+        pdict = {'dsz': dsz,
+                 'field': dst_value[1],
+                 'tmpReg': p4name(dst_value),
+                 'funct' : "truncate" if (dsz < 64) else "" }
         stmt.append(ast.Template(TMP1, pdict))
         return stmt
 

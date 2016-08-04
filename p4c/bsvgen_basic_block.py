@@ -234,7 +234,7 @@ class BasicBlock(object):
         return stmt
 
     def buildServerInterfaceDef(self):
-        TMP1 = "interface %(name)s = cpu.prev_control_state;"
+        TMP1 = "interface %(name)s = toServer(rx_%(name)s.e, tx_%(name)s.e);"
         stmt = []
         pdict = {"name": "prev_control_state"}
         stmt.append(ast.Template(TMP1, pdict))
@@ -276,8 +276,7 @@ class BasicBlock(object):
         ctype = "%sReqT"%(cname)
         pdict = {"type": ctype, "field": self.request.build_match_expr()}
         casePatStmts = []
-        for p in self.primitives:
-            casePatStmts += p.buildRequest(self.json_dict, self.raw_runtime_data)
+        casePatStmts.append(ast.Template("cpu.run();"))
         casePatStmts += self.buildPacketFF()
 
         stmt.append(ast.Template(TMP2))
@@ -285,10 +284,9 @@ class BasicBlock(object):
 
         case_stmt = ast.Case("v")
         ctype = ast.Template(TMP1, pdict)
-        #case_stmt.casePatItem[ctype] = ast.Template(TMP1, pdict)
         case_stmt.casePatStmt[ctype] = casePatStmts
         stmt.append(case_stmt)
-        rule = ast.Rule(rname, [], stmt)
+        rule = ast.Rule(rname, 'cpu.not_running()', stmt)
         rules.append(rule)
         return rules
 
@@ -304,6 +302,8 @@ class BasicBlock(object):
         # optimized bypass register
         # field must include bypass register
         stmt.append(ast.Template(TMP1))
+        for p in self.primitives:
+            stmt += p.readTempReg(self.json_dict)
         rsp_prefix = CamelCase(self.name)
         stmt.append(ast.Template(TMP2, {"type": "%sRspT"%(rsp_prefix),
                                         "field": self.response.build_case_expr()}))
@@ -314,7 +314,14 @@ class BasicBlock(object):
 
     def buildCPU (self):
         tmpl = []
-        tmpl.append(ast.Template("CPU cpu <- mkCPU();"))
+        reglist = []
+        for p in self.primitives:
+            for param in p.parameters:
+                if (param['type'] == 'field'):
+                    reglist.append("cons(" + "$".join(param['value']))
+        #note: use cons to form a list of registers to ALU
+        regs = "".join(reglist) + ", nil" + ")" * len(reglist)
+        tmpl.append(ast.Template("CPU cpu <- mkCPU(%s);" % regs))
         tmpl.append(ast.Template("IMem imem <- mkIMem(\"%s.hex\");" % self.name))
         tmpl.append(ast.Template("mkConnection(cpu.imem_client, imem.cpu_server);\n"))
         return tmpl
@@ -343,8 +350,15 @@ class BasicBlock(object):
         """
         stmt = []
         stmt += build_funct_verbosity()
+        stmt += self.buildTXRX()
+        stmt += self.buildFFs()
+        for p in self.primitives:
+            stmt += p.buildTempReg(self.json_dict)
+
         stmt += self.buildCPU()
         stmt += self.build_instr()
+        stmt += self.buildHandleRequest();
+        stmt += self.buildHandleResponse();
         for p in self.primitives:
             stmt += p.buildInterfaceDef();
         stmt += self.buildServerInterfaceDef()
