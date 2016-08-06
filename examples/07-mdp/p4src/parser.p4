@@ -63,27 +63,31 @@ header_type event_metadata_t {
 	}
 }
 
-header_type MDIncrementalRefreshBook32 {
+header_type mdIncrementalRefreshBook32 {
 	fields {
 		transactTime : 64;
 		matchEventIndicator : 16;
 		blockLength: 16;
-		NoMDEntries: 16;
+		noMDEntries: 16;
 	}
 }
 
-header_type MDIncrementalRefreshBook32Group {
+header_type mdIncrementalRefreshBook32Group {
 	fields {
-		MDEntryPx : 64;
-		MDEntrySize : 32;
-		SecurityID : 32;
-		RptReq : 32;
-		NumberOfOrders : 32;
-		MDPriceLevel : 8;
-		MDUpdateAction : 8;
-		MDEntryType : 8;
+		mdEntryPx : 64;
+		mdEntrySize : 32;
+		securityID : 32;
+		rptReq : 32;
+		numberOfOrders : 32;
+		mdPriceLevel : 8;
+		mdUpdateAction : 8;
+		mdEntryType : 8;
 		padding : 40;
 	}
+}
+
+field_list bloom_hash_fields {
+	mdp.msgSeqNum;
 }
 
 header ethernet_t ethernet;
@@ -92,8 +96,8 @@ header udp_t udp;
 header mdp_packet_t mdp;
 header mdp_message_t mdp_msg;
 header mdp_sbe_t mdp_sbe;
-header MDIncrementalRefreshBook32 mdp_refreshbook;
-header MDIncrementalRefreshBook32Group group[10];
+header mdIncrementalRefreshBook32 mdp_refreshbook;
+header mdIncrementalRefreshBook32Group group[10];
 metadata event_metadata_t event_metadata;
 
 parser start {
@@ -119,16 +123,29 @@ parser parse_ipv4 {
 parser parse_udp {
     extract(udp);
     return select(udp.dstPort) {
-        default: parse_mdp;
+		15311: parse_mdp;
+        default: ingress;
     }
 }
 
 parser parse_mdp {
 	extract(mdp);
+	return parse_mdp_msg;
+}	
+
+parser parse_mdp_msg {
 	extract(mdp_msg);
+	return parse_mdp_sbe;
+}
+
+parser parse_mdp_sbe {
 	extract(mdp_sbe);
+	return parse_mdp_refreshbook;
+}
+
+parser parse_mdp_refreshbook {
 	extract(mdp_refreshbook);
-	set_metadata(event_metadata.group_size, mdp_refreshbook.NoMDEntries);
+	set_metadata(event_metadata.group_size, mdp_refreshbook.noMDEntries);
 	return select(event_metadata.group_size) {
 		0: ingress;
 		default: parse_mdp_group;
@@ -143,3 +160,4 @@ parser parse_mdp_group {
 		default: parse_mdp_group;
 	}
 }
+

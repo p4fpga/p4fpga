@@ -31,8 +31,18 @@ import UnionGenerated::*;
 
 interface Ingress;
   interface Client#(MetadataRequest, MetadataResponse) next;
+  method Action set_verbosity (int verbosity);
 endinterface
 module mkIngress #(Vector#(numClients, Client#(MetadataRequest, MetadataResponse)) mdc) (Ingress);
+  Reg#(int) cf_verbosity <- mkConfigRegU;
+  function Action dbprint(Integer level, Fmt msg);
+    action
+    if (cf_verbosity > fromInteger(level)) begin
+      $display("(%d) ", $time, msg);
+    end
+    endaction
+  endfunction
+
   FIFOF#(MetadataRequest) default_req_ff <- mkFIFOF;
   FIFOF#(MetadataResponse) default_rsp_ff <- mkFIFOF;
   FIFOF#(MetadataRequest) next_req_ff <- mkFIFOF;
@@ -53,34 +63,9 @@ module mkIngress #(Vector#(numClients, Client#(MetadataRequest, MetadataResponse
     interface request = toGet(next_req_ff);
     interface response = toPut(next_rsp_ff);
   endinterface);
-endmodule
-
-// ====== EGRESS ======
-
-interface Egress;
-  interface Client#(MetadataRequest, MetadataResponse) next;
-endinterface
-module mkEgress #(Vector#(numClients, Client#(MetadataRequest, MetadataResponse)) mdc) (Egress);
-  FIFOF#(MetadataRequest) default_req_ff <- mkFIFOF;
-  FIFOF#(MetadataResponse) default_rsp_ff <- mkFIFOF;
-  FIFOF#(MetadataRequest) next_req_ff <- mkFIFOF;
-  FIFOF#(MetadataResponse) next_rsp_ff <- mkFIFOF;
-  Vector#(numClients, Server#(MetadataRequest, MetadataResponse)) mds = replicate(toServer(default_req_ff, default_rsp_ff));
-  mkConnection(mds, mdc);
-  // Basic Blocks
-  rule default_next_state if (default_req_ff.notEmpty);
-    default_req_ff.deq;
-    let _req = default_req_ff.first;
-    let meta = _req.meta;
-    let pkt = _req.pkt;
-    MetadataRequest req = MetadataRequest {pkt: pkt, meta: meta};
-    next_req_ff.enq(req);
-  endrule
-
-  interface next = (interface Client#(MetadataRequest, MetadataResponse);
-    interface request = toGet(next_req_ff);
-    interface response = toPut(next_rsp_ff);
-  endinterface);
+  method Action set_verbosity (int verbosity);
+    cf_verbosity <= verbosity;
+  endmethod
 endmodule
 // Copyright (c) 2016 P4FPGA Project
 
