@@ -16,9 +16,9 @@ P4FPGADIR?=$(DEV_ROOT)/p4fpga
 S2H_INTERFACES=MainRequest:Main.request
 H2S_INTERFACES=Main:MainIndication,MemServerIndication
 BSVFILES=generatedbsv/Main.bsv generatedbsv/MainAPI.bsv generatedbsv/MainDefs.bsv
-CPPFILES=main.cpp
-CPPFILES += $(SONICDIR)/sw/lpcap.c
+CPPFILES = $(P4FPGADIR)/templates/cpp/main.cpp $(SONICDIR)/sw/lpcap.c
 CONNECTALFLAGS += -I $(SONICDIR)/sw/
+CONNECTALFLAGS += -lpcap
 CONNECTALFLAGS += --bsvpath=$(P4EXAMPLEDIR)/bsv/AsymmetricBRAM
 CONNECTALFLAGS += --bsvpath=$(P4EXAMPLEDIR)/bsv/Bcam
 CONNECTALFLAGS += --bsvpath=$(SONICDIR)/hw/bsv
@@ -27,10 +27,10 @@ CONNECTALFLAGS += -D NicVersion=$(shell printf "%d" 0x`git rev-parse --short=8 H
 CONNECTALFLAGS += -D DataBusWidth=128
 CONNECTALFLAGS += -D IMPORT_HOSTIF
 CONNECTALFLAGS += -D BYTE_ENABLES
-CONNECTALFLAGS += --bscflags="-show-range-conflict +RTS -K46777216 -RTS -demote-errors G0066:G0045 -suppress-warnings G0046:G0020:G0023:S0015:S0080:S0039 -steps-max-intervals 20"
+CONNECTALFLAGS += --bscflags="-show-range-conflict +RTS -K596777766 -RTS -demote-errors G0066:G0045 -suppress-warnings G0046:G0020:G0023:S0015:S0080:S0039 -steps-max-intervals 20"
 CONNECTALFLAGS += -m $(P4EXAMPLEDIR)/bsv/AsymmetricBRAM/mem_model.c
 CONNECTALFLAGS += -m generatedcpp/jni/matchtable_model.cpp
-CONNECTALFLAGS += --bscflags="-fdir $(CURDIR)/generatedbsv"
+CONNECTALFLAGS += --bscflags="-fdir $(CURDIR)/sample_input"
 CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/templates/
 CONNECTALFLAGS += --nocache
 CONNECTALFLAGS += --cxxflags=-std=c++11
@@ -39,9 +39,14 @@ CONNECTALFLAGS += --cxxflags=-std=c++11
 CONNECTALFLAGS += --cxxflags="-L\"/home/hwang/questasim/questa_sim/gcc-4.3.3-linux_x86_64/lib64\""
 BURST_LEN_SIZE=12
 
+PROJ_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+
 ALL: codegen simgen
 
 codegen: $(P4FILE)
+	$(foreach file, $(P4FILE), python ${P4FPGADIR}/p4c/bsvgen.py --mem $(file);)
+
+codegen-stream: $(P4File)
 	$(foreach file, $(P4FILE), python ${P4FPGADIR}/p4c/bsvgen.py $(file);)
 
 simgen: codegen
