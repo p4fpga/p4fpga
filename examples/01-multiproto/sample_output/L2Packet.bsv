@@ -41,7 +41,6 @@ module mkL2Packet  (L2Packet);
 
   // INST: modify_field [OrderedDict([('type', 'field'), ('value', ['ing_metadata', 'packet_type'])]), OrderedDict([('type', 'hexstr'), ('value', '0x0')])]
   rule l2_packet_request if (cpu.not_running());
-    dbprint(3, $format("l2 packet request"));
     let v = rx_info_prev_control_state.first;
     rx_info_prev_control_state.deq;
     case (v) matches
