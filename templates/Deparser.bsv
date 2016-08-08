@@ -55,6 +55,12 @@ import StructGenerated::*;
 `include "DeparserGenerated.bsv"
 `undef DEPARSER_STRUCT
 
+typedef TDiv#(PktDataWidth, 8) MaskWidth;
+typedef TLog#(PktDataWidth) DataSize;
+typedef TLog#(TDiv#(PktDataWidth, 8)) MaskSize;
+typedef TAdd#(DataSize, 1) NumBits;
+typedef TAdd#(MaskSize, 1) NumBytes;
+
 interface Deparser;
    interface PipeIn#(MetadataT) metadata;
    interface PktWriteServer writeServer;
@@ -64,21 +70,6 @@ interface Deparser;
 endinterface
 module mkDeparser (Deparser);
    Reg#(int) cf_verbosity <- mkConfigRegU;
-
-   FIFOF#(EtherData) data_in_ff <- mkFIFOF;
-   FIFOF#(EtherData) data_out_ff <- mkFIFOF;
-   FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;
-   FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
-   FIFO#(DeparserState) deparse_state_ff <- mkPipelineFIFO();
-   Array#(Reg#(Bit#(32))) rg_next_header_len <- mkCReg(3, 0);
-   Array#(Reg#(Bit#(32))) rg_buffered <- mkCReg(3, 0);
-   Array#(Reg#(Bit#(32))) rg_processed <- mkCReg(3, 0);
-   Array#(Reg#(Bit#(32))) rg_shift_amt <- mkCReg(3, 0);
-   Array#(Reg#(Bit#(512))) rg_tmp <- mkCReg(2, 0);
-   Array#(Reg#(Bool)) deparse_done <- mkCReg(2, True);
-   Array#(Reg#(Bool)) header_done <- mkCReg(2, True);
-   PulseWire w_deparse_header_done <- mkPulseWire();
-
    function Action dbprint(Integer level, Fmt msg);
       action
       if (cf_verbosity > fromInteger(level)) begin
@@ -86,6 +77,20 @@ module mkDeparser (Deparser);
       end
       endaction
    endfunction
+
+   FIFOF#(EtherData) data_in_ff <- printTimedTraceM("in_ff", mkFIFOF);
+   FIFOF#(EtherData) data_out_ff <- printTimedTraceM("out_ff", mkFIFOF);
+   FIFOF#(MetadataT) meta_in_ff <- printTimedTraceM("deparse_meta_in_ff", mkFIFOF);
+   FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
+   FIFO#(DeparserState) deparse_state_ff <- printTimedTraceM("deparseState", mkPipelineFIFO());
+   Array#(Reg#(Bit#(32))) rg_next_header_len <- mkCReg(3, 0);
+   Array#(Reg#(Bit#(32))) rg_buffered <- mkCReg(3, 0); // number of bytes buffered in rg_tmp
+   Array#(Reg#(Bit#(32))) rg_processed <- mkCReg(3, 0); // number of bytes in current header that have been sent.
+   Array#(Reg#(Bit#(32))) rg_shift_amt <- mkCReg(3, 0); // number of bytes to shift to append new bytes to rg_tmp
+   Array#(Reg#(Bit#(512))) rg_tmp <- mkCReg(2, 0);
+   Array#(Reg#(Bool)) deparse_done <- mkCReg(2, True);
+   Array#(Reg#(Bool)) header_done <- mkCReg(2, True);
+   PulseWire w_deparse_header_done <- mkPulseWire();
 
    // app-specific states
    `define DEPARSER_STATE
@@ -139,22 +144,25 @@ module mkDeparser (Deparser);
 
   rule rl_deparse_payload if (deparse_done[1] && !sop_this_cycle);
     let v = data_in_ff.first;
+    dbprint(3, $format("Dep payload", fshow(v)));
     data_in_ff.deq;
-    dbprint(3, $format("shift amt %d", rg_shift_amt[1]));
+    dbprint(3, $format("Dep payload shift amt %d", rg_shift_amt[1]));
     if (rg_shift_amt[1] != 0) begin
       Bit#(128) data_mask = create_mask(cExtend(rg_shift_amt[1]));
       Bit#(16) mask_out = create_mask(cExtend(rg_shift_amt[1] >> 3));
       let data = EtherData { sop: v.sop, eop: v.eop, data: truncate(rg_tmp[1]) & data_mask, mask: mask_out};
       data_out_ff.enq(data);
+      dbprint(3, $format("Deparser payload2 rg_shift_amt=%d", rg_shift_amt[1], fshow(data)));
       rg_shift_amt[1] <= 0;
     end
     else begin
+      dbprint(3, $format("Deparser payload1 ", fshow(v)));
       data_out_ff.enq(v);
     end
   endrule
 
   rule rl_data_ff_load if (!deparse_done[1] && (rg_buffered[2] < rg_next_header_len[2]));
-    dbprint(3, $format("dequeue data_in_ff"));
+    dbprint(3, $format("dequeue data_in_ff %d < %d", rg_buffered[2], rg_next_header_len[2]));
     data_in_ff.deq;
   endrule
 
@@ -163,14 +171,16 @@ module mkDeparser (Deparser);
     if (rg_processed[1] < 128) begin
        amt = rg_processed[1];
     end
+    let v = data_in_ff.first;
+    dbprint(3, $format("Deparser ", fshow(v)));
     Bit#(128) data_out = truncate(rg_tmp[1] & create_mask(cExtend(amt)));
     Bit#(16) mask_out = create_mask(cExtend(amt >> 3));
-    let data = EtherData { sop: sop_this_cycle, eop: eop_this_cycle, data: data_out, mask: mask_out };
+    let data = EtherData { sop: sop_this_cycle, eop: False, data: data_out, mask: mask_out };
     rg_tmp[1] <= rg_tmp[1] >> amt;
     rg_processed[1] <= rg_processed[1] - amt;
     rg_shift_amt[1] <= rg_shift_amt[1] - amt;
     data_out_ff.enq(data);
-    dbprint(3, $format("Deparser ", fshow(data), rg_shift_amt[1] - amt));
+    dbprint(3, $format("Deparser rg_processed=%d rg_shift_amt=%d amt=%d", rg_processed[1], rg_shift_amt[1], amt, fshow(data)));
   endrule
 
   // wait till all processed bits are sent, cont. to send payload.

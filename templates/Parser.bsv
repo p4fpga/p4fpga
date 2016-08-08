@@ -65,8 +65,8 @@ module mkParser  (Parser);
    Reg#(Bool) parse_done[2] <- mkCReg(2, True);
    FIFO#(ParserState) parse_state_ff <- mkPipelineFIFO();
    FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
-   FIFOF#(EtherData) data_in_ff <- mkFIFOF;
-   FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;
+   FIFOF#(EtherData) data_in_ff <- printTimedTraceM("data_in_ff", mkFIFOF);
+   FIFOF#(MetadataT) meta_in_ff <- printTimedTraceM("meta_in_ff", mkFIFOF);
    PulseWire w_parse_done <- mkPulseWire();
    PulseWire w_parse_header_done <- mkPulseWireOR();
    PulseWire w_load_header <- mkPulseWireOR();
@@ -128,29 +128,29 @@ module mkParser  (Parser);
    let eop_this_cycle = data_in_ff.first.eop;
    let data_this_cycle = data_in_ff.first.data;
 
-    `define PARSER_FUNCTION
-    `include "ParserGenerated.bsv"
-    `undef PARSER_FUNCTION
+   `define PARSER_FUNCTION
+   `include "ParserGenerated.bsv"
+   `undef PARSER_FUNCTION
 
    rule rl_data_ff_load if ((!parse_done[1] && rg_buffered[2] < rg_next_header_len[2]) && (w_parse_header_done || w_load_header));
-     let v = data_in_ff.first.data;
-     data_in_ff.deq;
-     rg_buffered[2] <= rg_buffered[2] + 128;
-     data_ff.enq(tagged Valid v);
-     dbprint(3, $format("dequeue data %d %d", rg_buffered[2], rg_next_header_len[2]));
+      let v = data_in_ff.first.data;
+      data_in_ff.deq;
+      rg_buffered[2] <= rg_buffered[2] + 128;
+      data_ff.enq(tagged Valid v);
+      dbprint(3, $format("dequeue data %d %d", rg_buffered[2], rg_next_header_len[2]));
    endrule
 
    rule rl_start_state_deq if (parse_done[1] && sop_this_cycle && !w_parse_header_done);
-     let v = data_in_ff.first.data;
-     data_ff.enq(tagged Valid v);
-     rg_buffered[2] <= 128;
-     rg_shift_amt[2] <= 0;
-     parse_done[1] <= False;
-     parse_state_ff.enq(StateStart);
+      let v = data_in_ff.first.data;
+      data_ff.enq(tagged Valid v);
+      rg_buffered[2] <= 128;
+      rg_shift_amt[2] <= 0;
+      parse_done[1] <= False;
+      parse_state_ff.enq(StateParseEthernet);
    endrule
 
    rule rl_start_state_idle if (parse_done[1] && (!sop_this_cycle || w_parse_header_done));
-     data_in_ff.deq;
+      data_in_ff.deq;
    endrule
 
    `define PARSER_RULES
@@ -160,6 +160,6 @@ module mkParser  (Parser);
    interface frameIn = toPut(data_in_ff);
    interface meta = toGet(meta_in_ff);
    method Action set_verbosity (int verbosity);
-     cf_verbosity <= verbosity;
+      cf_verbosity <= verbosity;
    endmethod
 endmodule
