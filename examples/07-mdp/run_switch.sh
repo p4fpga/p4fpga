@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PROG="main"
+PROG="mdp"
 
 source ../env.sh
 
