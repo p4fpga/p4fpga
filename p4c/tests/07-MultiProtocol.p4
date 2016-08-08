@@ -101,6 +101,10 @@ header udp_t      udp;
 header icmp_t     icmp;
 
 parser start {
+	return parse_ethernet;
+}
+
+parser parse_ethernet {
     extract(ethernet);
     return select(latest.etherType) {
         0x8100, 0x9100 : parse_vlan_tag;
@@ -245,7 +249,7 @@ control ingress {
         default {
           apply(l2_match);
         }
-    }        
+    }
 }
 
 control egress {
