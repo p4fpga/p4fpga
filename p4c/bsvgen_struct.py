@@ -25,6 +25,7 @@ import logging
 from sourceCodeBuilder import SourceCodeBuilder
 from utils import CamelCase, camelCase, GetFieldWidth, p4name
 from collections import OrderedDict
+from bsvgen_keyword import Keywords
 
 STRUCT_DEFAULT="""\
 instance DefaultValue#(%(name)s);
@@ -44,6 +45,11 @@ function %(name)s extract_%(lname)s(Bit#(%(width)s) data);
 endfunction
 """
 
+def avoid_bsv_keyword(word):
+    if word in Keywords:
+        word = "_" + word
+    return word
+
 class Struct(object):
     def __init__(self, struct_attrs):
         self.name = struct_attrs['name']
@@ -53,7 +59,7 @@ class Struct(object):
         for f, l in fields:
             if f[0].isupper():
                 f = f[0].lower() + f
-            e.append(ast.StructMember("Bit#(%s)"%(l), f))
+            e.append(ast.StructMember("Bit#(%s)"%(l), avoid_bsv_keyword(f)))
         self.struct = ast.Struct(CamelCase(self.name), e)
         self._add_defaults(fields)
 
@@ -152,6 +158,7 @@ class StructMetadata(object):
             for f in flds:
                 name = "%s$%s" % (header, f[1])
                 fields.append(ast.StructMember("Maybe#(Bit#(%s))"%(f[0]), name))
+                avoid_bsv_keyword(f[1])
         # valid fields
         #for it in ir.parsers.values():
         #    for h in it.header_instances.values():

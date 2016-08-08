@@ -321,20 +321,45 @@ class BasicBlock(object):
                     reglist.append("cons(" + "$".join(param['value']))
         #note: use cons to form a list of registers to ALU
         if len(reglist) != 0: 
-            regs = "".join(reglist) + ", nil" + ")" * len(reglist)
-        else:
-            regs = ""
-        tmpl.append(ast.Template("CPU cpu <- mkCPU(%s);" % regs))
-        tmpl.append(ast.Template("IMem imem <- mkIMem(\"%s.hex\");" % self.name))
-        tmpl.append(ast.Template("mkConnection(cpu.imem_client, imem.cpu_server);\n"))
+            regs = ",".join(reglist) + ", nil" + ")" * len(reglist)
+            tmpl.append(ast.Template("CPU cpu <- mkCPU(%s);" % regs))
+            tmpl.append(ast.Template("IMem imem <- mkIMem(\"%s.hex\");" % self.name))
+            tmpl.append(ast.Template("mkConnection(cpu.imem_client, imem.cpu_server);\n"))
         return tmpl
+
+    def buildLoopback(self):
+        TMP1 = "tagged %(type)s {%(field)s}"
+        TMP2 = "let v = rx_info_prev_control_state.first;"
+        TMP3 = "rx_info_prev_control_state.deq;"
+        TMP4 = "BBResponse rsp = tagged %(type)s {pkt: pkt};"
+        TMP5 = "tx_info_prev_control_state.enq(rsp);"
+        rules = []
+        stmt = []
+        cname = CamelCase(self.name)
+        ctype = "%sReqT"%(cname)
+        pdict = {"type": ctype, "field": self.request.build_match_expr()}
+        casePatStmts = []
+        stmt.append(ast.Template(TMP2))
+        stmt.append(ast.Template(TMP3))
+        ctype = ast.Template(TMP1, pdict)
+        case_stmt = ast.Case("v")
+        case_stmt.casePatStmt[ctype] = casePatStmts
+        rsp_prefix = CamelCase(self.name)
+        casePatStmts.append(ast.Template(TMP4, {"type": "%sRspT"%(rsp_prefix)} ))
+        casePatStmts.append(ast.Template(TMP5, {"name": self.name}))
+        stmt.append(case_stmt)
+        rname = self.name + "_loopback"
+        rule = ast.Rule(rname, [], stmt)
+        rules.append(rule)
+        return rules
 
     def build_intf_decl_verbosity(self):
         stmt = []
         stmt.append(ast.Template("method Action set_verbosity (int verbosity);"))
         stmt.append(ast.Template("  cf_verbosity <= verbosity;"))
-        stmt.append(ast.Template("  cpu.set_verbosity(verbosity);"))
-        stmt.append(ast.Template("  imem.set_verbosity(verbosity);"))
+        if len(self.primitives) != 0:
+            stmt.append(ast.Template("  cpu.set_verbosity(verbosity);"))
+            stmt.append(ast.Template("  imem.set_verbosity(verbosity);"))
         stmt.append(ast.Template("endmethod"))
         return stmt
 
@@ -358,10 +383,13 @@ class BasicBlock(object):
         for p in self.primitives:
             stmt += p.buildTempReg(self.json_dict)
 
-        stmt += self.buildCPU()
-        stmt += self.build_instr()
-        stmt += self.buildHandleRequest();
-        stmt += self.buildHandleResponse();
+        if len(self.primitives) != 0:
+            stmt += self.buildCPU()
+            stmt += self.build_instr()
+            stmt += self.buildHandleRequest();
+            stmt += self.buildHandleResponse();
+        else:
+            stmt += self.buildLoopback()
         for p in self.primitives:
             stmt += p.buildInterfaceDef();
         stmt += self.buildServerInterfaceDef()

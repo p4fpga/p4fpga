@@ -49,7 +49,9 @@ class Deparser(object):
     def rule_state_load(self, state, width):
         tmpl = []
         tmpl.append("rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];")
-        tmpl.append("move_buffered_amt(128);")
+        tmpl.append("UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);")
+        tmpl.append("UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;")
+        tmpl.append("move_buffered_amt(cExtend(n_bits_used));")
         rname = "rl_deparse_%s_load" % (state.translate(None, "[]"))
         rcond = "(deparse_state_ff.first == StateDeparse%s) && (rg_buffered[0] < %d)" % (CamelCase(state), width)
         stmt = apply_pdict(tmpl, {})
