@@ -78,8 +78,8 @@ module mkDeparser (Deparser);
       endaction
    endfunction
 
-   FIFOF#(EtherData) data_in_ff <- printTimedTraceM("in_ff", mkFIFOF);
-   FIFOF#(EtherData) data_out_ff <- printTimedTraceM("out_ff", mkFIFOF);
+   FIFOF#(EtherData) data_in_ff <- printTimedTraceM("deparse_in_ff", mkFIFOF);
+   FIFOF#(EtherData) data_out_ff <- printTimedTraceM("deparse_out_ff", mkFIFOF);
    FIFOF#(MetadataT) meta_in_ff <- printTimedTraceM("deparse_meta_in_ff", mkFIFOF);
    FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
    FIFO#(DeparserState) deparse_state_ff <- printTimedTraceM("deparseState", mkPipelineFIFO());
@@ -132,6 +132,7 @@ module mkDeparser (Deparser);
   endfunction
 
   rule rl_start_state if (deparse_done[1] && sop_this_cycle);
+    rg_tmp[1] <= 0;
     rg_buffered[2] <= 0;
     rg_shift_amt[2] <= 0;
     rg_processed[2] <= 0;
