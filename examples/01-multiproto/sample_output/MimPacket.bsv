@@ -35,7 +35,7 @@ module mkMimPacket  (MimPacket);
   let tx_info_prev_control_state = tx_prev_control_state.u;
   FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;
   Reg#(Bit#(64)) ing_metadata$packet_type <- mkReg(0);
-  CPU cpu <- mkCPU(cons(ing_metadata$packet_type, nil));
+  CPU cpu <- mkCPU("mim", cons(ing_metadata$packet_type, nil));
   IMem imem <- mkIMem("mim_packet.hex");
   mkConnection(cpu.imem_client, imem.cpu_server);
 

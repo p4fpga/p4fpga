@@ -56,8 +56,11 @@ module mkEgress #(Vector#(numClients, Client#(MetadataRequest, MetadataResponse)
 
   FIFOF#(MetadataRequest) default_req_ff <- mkFIFOF;
   FIFOF#(MetadataResponse) default_rsp_ff <- mkFIFOF;
-  FIFOF#(MetadataRequest) next_req_ff <- mkFIFOF;
-  FIFOF#(MetadataResponse) next_rsp_ff <- mkFIFOF;
+
+  TX #(MetadataRequest) tx_next_req <- mkTX;
+  RX #(MetadataResponse) rx_next_rsp <- mkRX;
+  let tx_next_req_info = tx_next_req.u;
+  let rx_next_rsp_info = rx_next_rsp.u;
   Vector#(numClients, Server#(MetadataRequest, MetadataResponse)) mds = replicate(toServer(default_req_ff, default_rsp_ff));
   mkConnection(mds, mdc);
   // Basic Blocks
@@ -67,13 +70,10 @@ module mkEgress #(Vector#(numClients, Client#(MetadataRequest, MetadataResponse)
     let meta = _req.meta;
     let pkt = _req.pkt;
     MetadataRequest req = MetadataRequest {pkt: pkt, meta: meta};
-    next_req_ff.enq(req);
+    tx_next_req_info.enq(req);
   endrule
 
-  interface next = (interface Client#(MetadataRequest, MetadataResponse);
-    interface request = toGet(next_req_ff);
-    interface response = toPut(next_rsp_ff);
-  endinterface);
+  interface next = toClient(tx_next_req.e, rx_next_rsp.e);
   method Action set_verbosity (int verbosity);
     cf_verbosity <= verbosity;
   endmethod
