@@ -80,7 +80,7 @@ module mkDeparser (Deparser);
 
    FIFOF#(EtherData) data_in_ff <- printTimedTraceM("deparse_in_ff", mkFIFOF);
    FIFOF#(EtherData) data_out_ff <- printTimedTraceM("deparse_out_ff", mkFIFOF);
-   FIFOF#(MetadataT) meta_in_ff <- printTimedTraceM("deparse_meta_in_ff", mkFIFOF);
+   FIFOF#(MetadataT) meta_in_ff <- printTimedTraceM("deparse_meta_in_ff", mkSizedFIFOF(16));
    FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
    FIFO#(DeparserState) deparse_state_ff <- printTimedTraceM("deparseState", mkPipelineFIFO());
    Array#(Reg#(Bit#(32))) rg_next_header_len <- mkCReg(3, 0);
