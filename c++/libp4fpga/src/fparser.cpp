@@ -16,7 +16,6 @@
 
 #include "ir/ir.h"
 #include "fparser.h"
-#include "codegen.h"
 #include "codegeninspector.h"
 #include "string_utils.h"
 #include <algorithm>
@@ -114,22 +113,22 @@ namespace FPGA {
 
   bool ParserTranslationVisitor::preorder(const IR::Type_Header* type) {
     auto hdr = type->to<IR::Type_Header>();
-    bsv_.getParserBuilder().append("typedef struct {");
-    bsv_.getParserBuilder().newline();
-    bsv_.getParserBuilder().increaseIndent();
+    bsv_.getStructBuilder().append("typedef struct {");
+    bsv_.getStructBuilder().newline();
+    bsv_.getStructBuilder().increaseIndent();
     for (auto f: *hdr->fields) {
       if (f->type->is<IR::Type_Bits>()) {
 	auto width = f->type->to<IR::Type_Bits>()->size;
 	auto name = f->name;
-	bsv_.getParserBuilder().emitIndent();
-	bsv_.getParserBuilder().appendFormat("Bit#(%d) %s;", width, name.toString());
-	bsv_.getParserBuilder().newline();
+	bsv_.getStructBuilder().emitIndent();
+	bsv_.getStructBuilder().appendFormat("Bit#(%d) %s;", width, name.toString());
+	bsv_.getStructBuilder().newline();
       }
     }
-    bsv_.getParserBuilder().decreaseIndent();
+    bsv_.getStructBuilder().decreaseIndent();
     auto name = hdr->name;
-    bsv_.getParserBuilder().appendFormat("} %s deriving (Bits, Eq);", CamelCase(name.toString()));
-    bsv_.getParserBuilder().newline();
+    bsv_.getStructBuilder().appendFormat("} %s deriving (Bits, Eq);", CamelCase(name.toString()));
+    bsv_.getStructBuilder().newline();
     return false;
   }
 

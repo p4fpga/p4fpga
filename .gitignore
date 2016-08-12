@@ -28,4 +28,12 @@ c++/ext/src/gtest/libtool
 c++/ext/src/gtest/samples/.dirstamp
 c++/ext/src/gtest/scripts/gtest-config
 c++/ext/src/gtest/src/.dirstamp
+bin/
+build/
 
+*.json
+*.yml
+
+dist/
+p4c_bm.egg-info/
+pif_ir/

@@ -21,7 +21,7 @@ limitations under the License.
 #include "frontends/p4/typeMap.h"
 #include "frontends/p4/evaluator/evaluator.h"
 #include "frontends/p4/fromv1.0/v1model.h"
-#include "codegen.h"
+#include "codebuilder.h"
 #include "translator.h"
 #include "bsvprogram.h"
 

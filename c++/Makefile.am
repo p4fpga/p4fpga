@@ -11,7 +11,7 @@ p4fpga_SOURCES = \
 	extensions/c++/p4fpga/src/p4-fpga.cpp \
 	extensions/c++/libp4fpga/include/backend.h \
 	extensions/c++/libp4fpga/src/backend.cpp \
-	extensions/c++/libp4fpga/include/codegen.h \
+	extensions/c++/libp4fpga/include/codebuilder.h \
 	extensions/c++/libp4fpga/include/codegeninspector.h \
 	extensions/c++/libp4fpga/src/codegeninspector.cpp \
 	extensions/c++/libp4fpgaincludesrc/string_utils.h \

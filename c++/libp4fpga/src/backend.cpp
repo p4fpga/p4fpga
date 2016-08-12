@@ -44,8 +44,12 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
 
     boost::filesystem::path parserFile ("ParserGenerated.bsv");
     boost::filesystem::path parserPath = dir / parserFile;
-        
+
+    boost::filesystem::path structFile ("StructGenerated.bsv");
+    boost::filesystem::path structPath = dir / structFile;
+    
     std::ofstream(parserPath.native()) <<  bsv.getParserBuilder().toString();
+    std::ofstream(structPath.native()) <<  bsv.getStructBuilder().toString();
     
 }
 }  // namespace FPGA
