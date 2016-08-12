@@ -24,25 +24,40 @@
 
 namespace FPGA {
 
-  inline void append_format(BSVProgram & bsv, const char* fmt, ...)
+
+
+  inline static std::string format_string(boost::format& message)
+  {
+    return message.str();
+  }
+  
+  template <typename TValue, typename... TArgs>
+    std::string format_string(boost::format& message, TValue&& arg, TArgs&&... args)
+  {
+    message % std::forward<TValue>(arg);
+    return format_string(message, std::forward<TArgs>(args)...);
+  }
+
+  template <typename... TArgs>
+    void append_format(BSVProgram & bsv, const char* fmt, TArgs&&... args)
   {
     bsv.getParserBuilder().emitIndent();	
-    va_list args;
-    va_start(args,fmt);
-    bsv.getParserBuilder().appendFormat(fmt, args);	
-    va_end(args);
+    boost::format msg(fmt);
+    std::string s = format_string(msg, std::forward<TArgs>(args)...);         
+    bsv.getParserBuilder().appendFormat(s.c_str());	
     bsv.getParserBuilder().newline();
   }
 
-  inline void append_line(BSVProgram & bsv, const char* fmt, ...)
-  {
-    bsv.getParserBuilder().emitIndent();	
-    va_list args;    
-    va_start(args,fmt);
-    bsv.getParserBuilder().appendLine((boost::format("fmt") % args).str().c_str());	
-    va_end(args);
-
-  }
+  
+  template <typename... TArgs>
+    void append_line(BSVProgram & bsv, const char* fmt, TArgs&&... args)
+    {
+      bsv.getParserBuilder().emitIndent();	
+      boost::format msg(fmt);
+      std::string s = format_string(msg, std::forward<TArgs>(args)...);      
+      bsv.getParserBuilder().appendLine(s.c_str());	
+      
+    }
  
   inline void incr_indent(BSVProgram & bsv)
   {
