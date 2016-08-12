@@ -22,7 +22,7 @@ class FPGAControl : public FPGAObject {
       : program(program), controlBlock(block), headers(nullptr), accept(nullptr) {}
 
     virtual ~FPGAControl() {}
-    void emit(CodeBuilder* builder);
+    void emit(BSVProgram & bsv);
     //void emitDeclaration(const IR::Declaration* decl, CodeBuilder *builder);
     //void emitTables(CodeBuilder* builder);
     bool build();

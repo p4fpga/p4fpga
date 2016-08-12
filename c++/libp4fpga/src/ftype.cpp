@@ -1,4 +1,5 @@
 #include "ftype.h"
+#include "bsvprogram.h"
 
 namespace FPGA {
 
@@ -32,11 +33,11 @@ FPGAType* FPGATypeFactory::create(const IR::Type* type) {
 }
 
 void
-FPGABoolType::declare(CodeBuilder* builder, cstring id, bool asPointer) {
-    emit(builder);
+FPGABoolType::declare(BSVProgram & bsv, cstring id, bool asPointer) {
+    emit(bsv);
     if (asPointer)
-        builder->append("*");
-    builder->appendFormat(" %s", id.c_str());
+        bsv.getParserBuilder().append("*");
+    bsv.getParserBuilder().appendFormat(" %s", id.c_str());
 }
 
 //cstring FPGAType::toString(const Target* target) {
@@ -59,32 +60,32 @@ unsigned FPGAScalarType::alignment() const {
         return 1;
 }
 
-void FPGAScalarType::emit(CodeBuilder* builder) {
+void FPGAScalarType::emit(BSVProgram & bsv) {
     auto prefix = isSigned ? "i" : "u";
 
     if (width <= 8)
-        builder->appendFormat("%s8", prefix);
+        bsv.getParserBuilder().appendFormat("%s8", prefix);
     else if (width <= 16)
-        builder->appendFormat("%s16", prefix);
+        bsv.getParserBuilder().appendFormat("%s16", prefix);
     else if (width <= 32)
-        builder->appendFormat("%s32", prefix);
+        bsv.getParserBuilder().appendFormat("%s32", prefix);
     else
-        builder->appendFormat("char*");
+        bsv.getParserBuilder().appendFormat("char*");
 }
 
 void
-FPGAScalarType::declare(CodeBuilder* builder, cstring id, bool asPointer) {
+FPGAScalarType::declare(BSVProgram & bsv, cstring id, bool asPointer) {
     if (width <= 32) {
-        emit(builder);
+        emit(bsv);
         if (asPointer)
-            builder->append("*");
-        builder->spc();
-        builder->append(id);
+            bsv.getParserBuilder().append("*");
+        bsv.getParserBuilder().spc();
+        bsv.getParserBuilder().append(id);
     } else {
         if (asPointer)
-            builder->append("char*");
+            bsv.getParserBuilder().append("char*");
         else
-            builder->appendFormat("char %s[%d]", id.c_str(), bytesRequired());
+            bsv.getParserBuilder().appendFormat("char %s[%d]", id.c_str(), bytesRequired());
     }
 }
 
@@ -118,72 +119,72 @@ FPGAStructType::FPGAStructType(const IR::Type_StructLike* strct) :
 }
 
 void
-FPGAStructType::declare(CodeBuilder* builder, cstring id, bool asPointer) {
-    builder->append(kind);
+FPGAStructType::declare(BSVProgram & bsv, cstring id, bool asPointer) {
+    bsv.getParserBuilder().append(kind);
     if (asPointer)
-        builder->append("*");
+        bsv.getParserBuilder().append("*");
     const char* n = name.c_str();
-    builder->appendFormat(" %s %s", n, id.c_str());
+    bsv.getParserBuilder().appendFormat(" %s %s", n, id.c_str());
 }
 
-void FPGAStructType::emitInitializer(CodeBuilder* builder) {
-    builder->blockStart();
+void FPGAStructType::emitInitializer(BSVProgram & bsv) {
+    bsv.getParserBuilder().blockStart();
     if (type->is<IR::Type_Struct>() || type->is<IR::Type_Union>()) {
         for (auto f : fields) {
-            builder->emitIndent();
-            builder->appendFormat(".%s = ", f->field->name.name);
-            f->type->emitInitializer(builder);
-            builder->append(",");
-            builder->newline();
+            bsv.getParserBuilder().emitIndent();
+            bsv.getParserBuilder().appendFormat(".%s = ", f->field->name.name);
+            f->type->emitInitializer(bsv);
+            bsv.getParserBuilder().append(",");
+            bsv.getParserBuilder().newline();
         }
     } else if (type->is<IR::Type_Header>()) {
-        builder->emitIndent();
-        builder->appendLine(".ebpf_valid = 0");
+        bsv.getParserBuilder().emitIndent();
+        bsv.getParserBuilder().appendLine(".ebpf_valid = 0");
     } else {
         BUG("Unexpected type %1%", type);
     }
-    builder->blockEnd(false);
+    bsv.getParserBuilder().blockEnd(false);
 }
 
-void FPGAStructType::emit(CodeBuilder* builder) {
-    builder->emitIndent();
-    builder->append(kind);
-    builder->spc();
-    builder->append(name);
-    builder->spc();
-    builder->blockStart();
+void FPGAStructType::emit(BSVProgram & bsv) {
+    bsv.getParserBuilder().emitIndent();
+    bsv.getParserBuilder().append(kind);
+    bsv.getParserBuilder().spc();
+    bsv.getParserBuilder().append(name);
+    bsv.getParserBuilder().spc();
+    bsv.getParserBuilder().blockStart();
 
     for (auto f : fields) {
         auto type = f->type;
-        builder->emitIndent();
+        bsv.getParserBuilder().emitIndent();
 
-        type->declare(builder, f->field->name, false);
-        builder->append("; ");
-        builder->append("/* ");
-        builder->append(type->type->toString());
-        builder->append(" */");
-        builder->newline();
+        type->declare(bsv, f->field->name, false);
+        bsv.getParserBuilder().append("; ");
+        bsv.getParserBuilder().append("/* ");
+        bsv.getParserBuilder().append(type->type->toString());
+        bsv.getParserBuilder().append(" */");
+        bsv.getParserBuilder().newline();
     }
 
     if (type->is<IR::Type_Header>()) {
-        builder->emitIndent();
+        bsv.getParserBuilder().emitIndent();
         auto type = FPGATypeFactory::instance->create(IR::Type_Boolean::get());
-        type->declare(builder, "ebpf_valid", false);
-        builder->endOfStatement(true);
+        type->declare(bsv, "ebpf_valid", false);
+        bsv.getParserBuilder().endOfStatement(true);
     }
 
-    builder->blockEnd(false);
-    builder->endOfStatement(true);
+    bsv.getParserBuilder().blockEnd(false);
+    bsv.getParserBuilder().endOfStatement(true);
 }
 
 ///////////////////////////////////////////////////////////////
 
-void FPGATypeName::declare(CodeBuilder* builder, cstring id, bool asPointer) {
-    canonical->declare(builder, id, asPointer);
+void FPGATypeName::declare(BSVProgram & bsv, cstring id, bool asPointer) {
+    canonical->declare(bsv, id, asPointer);
 }
 
-void FPGATypeName::emitInitializer(CodeBuilder* builder) {
-    canonical->emitInitializer(builder);
+void FPGATypeName::emitInitializer(BSVProgram & bsv) {
+    canonical->emitInitializer(bsv);
 }
 
 unsigned FPGATypeName::widthInBits() {

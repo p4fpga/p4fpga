@@ -46,9 +46,9 @@ bool FPGAProgram::build() {
     return true;
 }
 
-void FPGAProgram::emit(CodeBuilder *builder) {
+void FPGAProgram::emit(BSVProgram & bsv) {
     //target->parser->emit(builder);
-    parser->emit(builder);
+  parser->emit(bsv); 
     // emitIncludes
     // emitPreamble
     // ...

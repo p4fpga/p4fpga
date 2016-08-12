@@ -23,6 +23,7 @@ limitations under the License.
 #include "frontends/p4/fromv1.0/v1model.h"
 #include "codegen.h"
 #include "translator.h"
+#include "bsvprogram.h"
 
 namespace FPGA {
 
@@ -34,7 +35,7 @@ class FPGAControl;
 class FPGAObject {
  public:
     virtual ~FPGAObject() {}
-    virtual void emit(CodeBuilder* builder) = 0;
+    virtual void emit(BSVProgram & bsv) = 0;
     template<typename T> bool is() const { return to<T>() != nullptr; }
     template<typename T> const T* to() const {
         return dynamic_cast<const T*>(this); }
@@ -54,7 +55,7 @@ class FPGAProgram : public FPGAObject {
     ExpressionTranslator*     tr;
 
     // write program as bluespec source code
-    void emit(CodeBuilder *builder) override;
+    void emit(BSVProgram & bsv) override;
     bool build();  // return 'true' on success
 
     FPGAProgram(const IR::P4Program* program, P4::ReferenceMap* refMap,

@@ -14,36 +14,36 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "codegen.h"
+#include "codegeninspector.h"
 #include "ftype.h"
 
 namespace FPGA {
 
 bool CodeGenInspector::preorder(const IR::Constant* expression) {
-    builder->append(expression->toString());
+    bsv_.getParserBuilder().append(expression->toString());
     return true;
 }
 
 bool CodeGenInspector::preorder(const IR::Declaration_Variable* decl) {
     auto type = FPGATypeFactory::instance->create(decl->type);
-    type->declare(builder, decl->name.name, false);
+    type->declare(bsv_, decl->name.name, false);
     if (decl->initializer != nullptr) {
-        builder->append(" = ");
+        bsv_.getParserBuilder().append(" = ");
         visit(decl->initializer);
     }
-    builder->endOfStatement();
+    bsv_.getParserBuilder().endOfStatement();
     return false;
 }
 
 bool CodeGenInspector::preorder(const IR::Operation_Binary* b) {
     widthCheck(b);
-    builder->append("(");
+    bsv_.getParserBuilder().append("(");
     visit(b->left);
-    builder->spc();
-    builder->append(b->getStringOp());
-    builder->spc();
+    bsv_.getParserBuilder().spc();
+    bsv_.getParserBuilder().append(b->getStringOp());
+    bsv_.getParserBuilder().spc();
     visit(b->right);
-    builder->append(")");
+    bsv_.getParserBuilder().append(")");
     return false;
 }
 
@@ -54,85 +54,85 @@ bool CodeGenInspector::comparison(const IR::Operation_Relation* b) {
     bool scalar = (et->is<FPGAScalarType>() &&
                    FPGAScalarType::generatesScalar(et->to<FPGAScalarType>()->widthInBits()));
     if (scalar) {
-        builder->append("(");
+        bsv_.getParserBuilder().append("(");
         visit(b->left);
-        builder->spc();
-        builder->append(b->getStringOp());
-        builder->spc();
+        bsv_.getParserBuilder().spc();
+        bsv_.getParserBuilder().append(b->getStringOp());
+        bsv_.getParserBuilder().spc();
         visit(b->right);
-        builder->append(")");
+        bsv_.getParserBuilder().append(")");
     } else {
         if (!et->is<IHasWidth>())
             BUG("%1%: Comparisons for type %2% not yet implemented", type);
         unsigned width = et->to<IHasWidth>()->implementationWidthInBits();
-        builder->append("memcmp(&");
+        bsv_.getParserBuilder().append("memcmp(&");
         visit(b->left);
-        builder->append(", &");
+        bsv_.getParserBuilder().append(", &");
         visit(b->right);
-        builder->appendFormat(", %d)", width / 8);
+        bsv_.getParserBuilder().appendFormat(", %d)", width / 8);
     }
     return false;
 }
 
 bool CodeGenInspector::preorder(const IR::Mux* b) {
     widthCheck(b);
-    builder->append("(");
+    bsv_.getParserBuilder().append("(");
     visit(b->e0);
-    builder->append(" ? ");
+    bsv_.getParserBuilder().append(" ? ");
     visit(b->e1);
-    builder->append(" : ");
+    bsv_.getParserBuilder().append(" : ");
     visit(b->e2);
-    builder->append(")");
+    bsv_.getParserBuilder().append(")");
     return false;
 }
 
 bool CodeGenInspector::preorder(const IR::Operation_Unary* u) {
     widthCheck(u);
-    builder->append("(");
-    builder->append(u->getStringOp());
+    bsv_.getParserBuilder().append("(");
+    bsv_.getParserBuilder().append(u->getStringOp());
     visit(u->expr);
-    builder->append(")");
+    bsv_.getParserBuilder().append(")");
     return false;
 }
 
 bool CodeGenInspector::preorder(const IR::ArrayIndex* a) {
-    builder->append("(");
+    bsv_.getParserBuilder().append("(");
     visit(a->left);
-    builder->append("[");
+    bsv_.getParserBuilder().append("[");
     visit(a->right);
-    builder->append("]");
-    builder->append(")");
+    bsv_.getParserBuilder().append("]");
+    bsv_.getParserBuilder().append(")");
     return false;
 }
 
 bool CodeGenInspector::preorder(const IR::Cast* c) {
     widthCheck(c);
-    builder->append("(");
-    builder->append("(");
+    bsv_.getParserBuilder().append("(");
+    bsv_.getParserBuilder().append("(");
     auto et = FPGATypeFactory::instance->create(c->destType);
-    et->emit(builder);
-    builder->append(")");
+    et->emit(bsv_);
+    bsv_.getParserBuilder().append(")");
     visit(c->expr);
-    builder->append(")");
+    bsv_.getParserBuilder().append(")");
     return false;
 }
 
 bool CodeGenInspector::preorder(const IR::Member* e) {
     visit(e->expr);
-    builder->append(".");
-    builder->append(e->member);
+    bsv_.getParserBuilder().append(".");
+    bsv_.getParserBuilder().append(e->member);
     return false;
 }
 
 bool CodeGenInspector::preorder(const IR::Path* p) {
     if (p->prefix != nullptr)
-        builder->append(p->prefix->toString());
-    builder->append(p->name);
+        bsv_.getParserBuilder().append(p->prefix->toString());
+    bsv_.getParserBuilder().append(p->name);
     return false;
 }
 
 bool CodeGenInspector::preorder(const IR::BoolLiteral* b) {
-    builder->append(b->toString());
+    bsv_.getParserBuilder().append(b->toString());
     return false;
 }
 
@@ -140,94 +140,94 @@ bool CodeGenInspector::preorder(const IR::BoolLiteral* b) {
 
 bool CodeGenInspector::preorder(const IR::Type_Typedef* type) {
     auto et = FPGATypeFactory::instance->create(type->type);
-    builder->append("typedef ");
-    et->emit(builder);
-    builder->spc();
-    builder->append(type->name);
-    builder->endOfStatement();
+    bsv_.getParserBuilder().append("typedef ");
+    et->emit(bsv_);
+    bsv_.getParserBuilder().spc();
+    bsv_.getParserBuilder().append(type->name);
+    bsv_.getParserBuilder().endOfStatement();
     return false;
 }
 
 bool CodeGenInspector::preorder(const IR::Type_Enum* type) {
-    builder->append("enum ");
-    builder->append(type->name);
-    builder->spc();
-    builder->blockStart();
+    bsv_.getParserBuilder().append("enum ");
+    bsv_.getParserBuilder().append(type->name);
+    bsv_.getParserBuilder().spc();
+    bsv_.getParserBuilder().blockStart();
     for (auto e : *type->getDeclarations()) {
-        builder->emitIndent();
-        builder->append(e->getName().name);
-        builder->appendLine(",");
+        bsv_.getParserBuilder().emitIndent();
+        bsv_.getParserBuilder().append(e->getName().name);
+        bsv_.getParserBuilder().appendLine(",");
     }
-    builder->blockEnd(true);
+    bsv_.getParserBuilder().blockEnd(true);
     return false;
 }
 
 bool CodeGenInspector::preorder(const IR::AssignmentStatement* a) {
     visit(a->left);
-    builder->append(" = ");
+    bsv_.getParserBuilder().append(" = ");
     visit(a->right);
-    builder->endOfStatement();
+    bsv_.getParserBuilder().endOfStatement();
     return false;
 }
 
 bool CodeGenInspector::preorder(const IR::BlockStatement* s) {
-    builder->blockStart();
+    bsv_.getParserBuilder().blockStart();
     setVecSep("\n", "\n");
     visit(s->components);
     doneVec();
-    builder->blockEnd(false);
+    bsv_.getParserBuilder().blockEnd(false);
     return false;
 }
 
 // This is correct only after inlining
 bool CodeGenInspector::preorder(const IR::ExitStatement*) {
-    builder->append("return");
-    builder->endOfStatement();
+    bsv_.getParserBuilder().append("return");
+    bsv_.getParserBuilder().endOfStatement();
     return false;
 }
 
 bool CodeGenInspector::preorder(const IR::ReturnStatement*) {
-    builder->append("return");
-    builder->endOfStatement();
+    bsv_.getParserBuilder().append("return");
+    bsv_.getParserBuilder().endOfStatement();
     return false;
 }
 
 bool CodeGenInspector::preorder(const IR::EmptyStatement*) {
-    builder->endOfStatement();
+    bsv_.getParserBuilder().endOfStatement();
     return false;
 }
 
 bool CodeGenInspector::preorder(const IR::IfStatement* s) {
-    builder->append("if (");
+    bsv_.getParserBuilder().append("if (");
     visit(s->condition);
-    builder->append(") ");
+    bsv_.getParserBuilder().append(") ");
     if (!s->ifTrue->is<IR::BlockStatement>()) {
-        builder->increaseIndent();
-        builder->newline();
-        builder->emitIndent();
+        bsv_.getParserBuilder().increaseIndent();
+        bsv_.getParserBuilder().newline();
+        bsv_.getParserBuilder().emitIndent();
     }
     visit(s->ifTrue);
     if (!s->ifTrue->is<IR::BlockStatement>())
-        builder->decreaseIndent();
+        bsv_.getParserBuilder().decreaseIndent();
     if (s->ifFalse != nullptr) {
-        builder->newline();
-        builder->emitIndent();
-        builder->append("else ");
+        bsv_.getParserBuilder().newline();
+        bsv_.getParserBuilder().emitIndent();
+        bsv_.getParserBuilder().append("else ");
         if (!s->ifFalse->is<IR::BlockStatement>()) {
-            builder->increaseIndent();
-            builder->newline();
-            builder->emitIndent();
+            bsv_.getParserBuilder().increaseIndent();
+            bsv_.getParserBuilder().newline();
+            bsv_.getParserBuilder().emitIndent();
         }
         visit(s->ifFalse);
         if (!s->ifFalse->is<IR::BlockStatement>())
-            builder->decreaseIndent();
+            bsv_.getParserBuilder().decreaseIndent();
     }
     return false;
 }
 
 bool CodeGenInspector::preorder(const IR::MethodCallStatement* s) {
     visit(s->methodCall);
-    builder->endOfStatement();
+    bsv_.getParserBuilder().endOfStatement();
     return false;
 }
 
@@ -257,13 +257,13 @@ bool CodeGenInspector::preorder(const IR::IndexedVector<IR::StatOrDecl> *v) {
     VecPrint sep = getSep();
     for (auto a : *v) {
         if (!first) {
-            builder->append(sep.separator); }
+            bsv_.getParserBuilder().append(sep.separator); }
         if (sep.separator.endsWith("\n")) {
-            builder->emitIndent(); }
+            bsv_.getParserBuilder().emitIndent(); }
         first = false;
         visit(a); }
     if (!v->empty() && !sep.terminator.isNullOrEmpty()) {
-        builder->append(sep.terminator); }
+        bsv_.getParserBuilder().append(sep.terminator); }
     return false;
 }
 

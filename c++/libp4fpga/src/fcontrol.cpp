@@ -21,7 +21,7 @@ bool FPGAControl::build() {
     return true;
 }
 
-void FPGAControl::emit(CodeBuilder* builder) {
+void FPGAControl::emit(BSVProgram & bsv) {
     //
 }
 

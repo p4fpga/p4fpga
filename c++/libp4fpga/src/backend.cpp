@@ -8,6 +8,7 @@
 #include "ftest.h"
 #include "ftype.h"
 //#include "codegen.h"
+#include "bsvprogram.h"
 
 namespace FPGA {
 void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
@@ -23,11 +24,11 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
 
     FPGATypeFactory::createFactory(typeMap);
 
-    auto test = new Test(toplevel->getProgram(), refMap, typeMap, toplevel);
-    test->build();
+    Test test(toplevel->getProgram(), refMap, typeMap, toplevel);
+    test.build();
 
-    auto fpgaprog = new FPGAProgram(toplevel->getProgram(), refMap, typeMap, toplevel);
-    if (!fpgaprog->build())
+    FPGAProgram fpgaprog(toplevel->getProgram(), refMap, typeMap, toplevel);
+    if (!fpgaprog.build())
         return;
     if (options.outputFile.isNullOrEmpty())
         return;
@@ -35,10 +36,11 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
     if (stream == nullptr)
         return;
 
-    CodeBuilder builder;
-    fpgaprog->emit(&builder);
+    // TODO(rjs): start here to change to program
+    BSVProgram bsv;
+    fpgaprog.emit(bsv);
     LOG1("emit fpgaprog");
-    *stream << builder.toString();
+    *stream << bsv.getParserBuilder().toString();
     stream->flush();
 }
 }  // namespace FPGA
