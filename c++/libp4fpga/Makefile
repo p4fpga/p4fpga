@@ -14,6 +14,8 @@ LDFLAGS = \
  -L $(P4C_HOME)/build \
  -lp4ctoolkit \
  -lfrontend \
+ -lboost_system \
+ -lboost_filesystem-mt \
  -lgmp \
  -lgmpxx \
  -lgc 
