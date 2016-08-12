@@ -22,7 +22,8 @@ endinterface
 interface MainAPI;
   interface MainRequest request;
 endinterface
-module mkMainAPI #(MainIndication indication,HostChannel hostchan,Ingress ingress,TxChannel txchan) (MainAPI);
+//module mkMainAPI #(MainIndication indication,HostChannel hostchan,Ingress ingress,TxChannel txchan) (MainAPI);
+module mkMainAPI #(MainIndication indication,HostChannel hostchan, TxChannel txchan) (MainAPI);
   interface MainRequest request;
     method Action read_version ();
         let v = `NicVersion;
@@ -39,7 +40,7 @@ module mkMainAPI #(MainIndication indication,HostChannel hostchan,Ingress ingres
     method Action set_verbosity (Bit#(32) verbosity);
         hostchan.set_verbosity(unpack(verbosity));
         txchan.set_verbosity(unpack(verbosity));
-        ingress.set_verbosity(unpack(verbosity));
+        //ingress.set_verbosity(unpack(verbosity));
     endmethod
   endinterface
 

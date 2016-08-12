@@ -36,7 +36,7 @@ module mkSetEgressPort  (SetEgressPort);
   FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;
   Reg#(Bit#(64)) ing_metadata$egress_port <- mkReg(0);
   Reg#(Bit#(64)) runtime$egress_port <- mkReg(0);
-  CPU cpu <- mkCPU(cons(ing_metadata$egress_port, cons(runtime$egress_port, nil)));
+  CPU cpu <- mkCPU("set egress", cons(ing_metadata$egress_port, cons(runtime$egress_port, nil)));
   IMem imem <- mkIMem("set_egress_port.hex");
   mkConnection(cpu.imem_client, imem.cpu_server);
 

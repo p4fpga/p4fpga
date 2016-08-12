@@ -10,6 +10,9 @@ import PacketBuffer::*;
 import SharedBuff::*;
 import Sims::*;
 import TxChannel::*;
+import TxRx::*;
+import FIFOF::*;
+import PrintTrace::*;
 interface Main;
   interface MainRequest request;
 endinterface
@@ -29,18 +32,20 @@ module mkMain #(MainIndication indication,ConnectalMemory::MemServerIndication m
   Reset rxReset = txReset;
   `endif
   HostChannel hostchan <- mkHostChannel();
-  Ingress ingress <- mkIngress(vec(hostchan.next));
-  Egress egress <- mkEgress(vec(ingress.next));
+  //Ingress ingress <- mkIngress(vec(hostchan.next));
+  //Egress egress <- mkEgress(vec(ingress.next));
   TxChannel txchan <- mkTxChannel(txClock, txReset);
   SharedBuffer#(12, 128, 1) mem <- mkSharedBuffer(vec(txchan.readClient), vec(txchan.freeClient), vec(hostchan.writeClient), vec(hostchan.mallocClient), memServerInd);
-  mkConnection(egress.next, txchan.prev);
+
+  mkChan(printTimedTraceM("host to txchan", mkSizedFIFOF(6)), mkFIFOF, hostchan.next, txchan.prev);
   `ifdef SIMULATION
   rule drain_mac;
      let v <- toGet(txchan.macTx).get;
      if (verbose) $display("(%0d) tx data ", $time, fshow(v));
   endrule
   `endif
-  MainAPI api <- mkMainAPI(indication, hostchan, ingress, txchan);
+  //MainAPI api <- mkMainAPI(indication, hostchan, ingress, txchan);
+  MainAPI api <- mkMainAPI(indication, hostchan, txchan);
   interface request = api.request;
 endmodule
 // Copyright (c) 2016 P4FPGA Project

@@ -21,6 +21,7 @@ rule rl_deparse_ethernet_load if ((deparse_state_ff.first == StateDeparseEtherne
 endrule
 rule rl_deparse_ethernet_send if ((deparse_state_ff.first == StateDeparseEthernet) && (rg_buffered[0] >= 112));
   succeed_and_next(112);
+  w_deparse_ipv4.send();
   deparse_state_ff.deq;
 endrule
 rule rl_deparse_vlan_tag_next if (w_deparse_vlan_tag);
@@ -57,6 +58,7 @@ rule rl_deparse_ipv4_load if ((deparse_state_ff.first == StateDeparseIpv4) && (r
 endrule
 rule rl_deparse_ipv4_send if ((deparse_state_ff.first == StateDeparseIpv4) && (rg_buffered[0] >= 160));
   succeed_and_next(160);
+  w_deparse_udp.send();
   deparse_state_ff.deq;
 endrule
 rule rl_deparse_tcp_next if (w_deparse_tcp);
@@ -82,6 +84,7 @@ endrule
 rule rl_deparse_udp_send if ((deparse_state_ff.first == StateDeparseUdp) && (rg_buffered[0] >= 64));
   succeed_and_next(64);
   deparse_state_ff.deq;
+  w_deparse_udp_start.send();
 endrule
 rule rl_deparse_icmp_next if (w_deparse_icmp);
   deparse_state_ff.enq(StateDeparseIcmp);
@@ -95,6 +98,10 @@ rule rl_deparse_icmp_send if ((deparse_state_ff.first == StateDeparseIcmp) && (r
   succeed_and_next(32);
   deparse_state_ff.deq;
 endrule
+rule rl_deparse_udp_start if (w_deparse_udp_start);
+  fetch_next_header(0);
+  header_done[0] <= True;
+endrule
 `endif // DEPARSER_RULES
 `ifdef DEPARSER_STATE
 PulseWire w_deparse_ethernet <- mkPulseWire();
@@ -104,4 +111,5 @@ PulseWire w_deparse_ipv4 <- mkPulseWire();
 PulseWire w_deparse_tcp <- mkPulseWire();
 PulseWire w_deparse_udp <- mkPulseWire();
 PulseWire w_deparse_icmp <- mkPulseWire();
+PulseWire w_deparse_udp_start <- mkPulseWire();
 `endif // DEPARSER_STATE
