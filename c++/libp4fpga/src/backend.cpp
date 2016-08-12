@@ -7,8 +7,9 @@
 #include "fprogram.h"
 #include "ftest.h"
 #include "ftype.h"
-//#include "codegen.h"
 #include "bsvprogram.h"
+
+#include <boost/filesystem.hpp>
 
 namespace FPGA {
 void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
@@ -32,15 +33,19 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
         return;
     if (options.outputFile.isNullOrEmpty())
         return;
-    auto stream = openFile(options.outputFile, false);
-    if (stream == nullptr)
-        return;
 
+    boost::filesystem::path dir(options.outputFile);
+    boost::filesystem::create_directory(dir);
+      
     // TODO(rjs): start here to change to program
     BSVProgram bsv;
     fpgaprog.emit(bsv);
     LOG1("emit fpgaprog");
-    *stream << bsv.getParserBuilder().toString();
-    stream->flush();
+
+    boost::filesystem::path parserFile ("ParserGenerated.bsv");
+    boost::filesystem::path parserPath = dir / parserFile;
+        
+    std::ofstream(parserPath.native()) <<  bsv.getParserBuilder().toString();
+    
 }
 }  // namespace FPGA

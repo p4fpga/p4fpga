@@ -1,7 +1,9 @@
 
 bin_PROGRAMS += p4fpga
 
-p4fpga_LDADD = libfrontend.a libp4ctoolkit.a
+p4fpga_LDFLAGS = -lboost_system -lboost_filesystem-mt
+
+p4fpga_LDADD = libfrontend.a libp4ctoolkit.a 
 
 p4fpga_CPPFLAGS = -I$(srcdir)/extensions/c++/libp4fpga/include
 
