@@ -101,12 +101,27 @@ endfunction
 
 `ifdef PARSER_RULES
 (* mutually_exclusive="rl_parse_mdp_sbe_parse_mdp_refreshbook, rl_parse_ipv4_parse_udp, rl_start_parse_ethernet, rl_parse_udp_start, rl_parse_ipv4_start, rl_parse_mdp_group_parse_mdp_group, rl_parse_ethernet_start, rl_parse_mdp_msg_parse_mdp_sbe, rl_parse_udp_parse_mdp, rl_parse_mdp_refreshbook_parse_mdp_group, rl_parse_mdp_group_start, rl_parse_ethernet_parse_ipv4, rl_parse_mdp_refreshbook_start, rl_parse_mdp_parse_mdp_msg" *)
-rule rl_parse_done if ((w_parse_done));
+rule rl_parse_done if (delay_ff.notEmpty());
+  delay_ff.deq;
   MetadataT meta = defaultValue;
   let ethernet <- toGet(ethernet_out_ff).get;
   let udp <- toGet(udp_out_ff).get;
   let ipv4 <- toGet(ipv4_out_ff).get;
-  //let event_metadata <- toGet(event_metadata_out_ff).get;
+  if (isValid(ethernet)) begin
+    meta.ethernet = tagged Forward;
+  end
+  if (isValid(ipv4)) begin
+    meta.ipv4 = tagged Forward;
+  end
+  if (isValid(udp)) begin
+    meta.udp = tagged Forward;
+  end
+  for (Integer i = 0; i < 10; i=i+1) begin
+    let group <- toGet(mdp_refreshbook_group_out_ff[i]).get;
+    if (isValid(group)) begin
+      meta.group[i] = tagged Forward;
+    end
+  end
   dbprint(3, $format("parse_done"));
   meta_in_ff.enq(meta);
 endrule
@@ -338,9 +353,8 @@ rule rl_parse_mdp_refreshbook_extract if ((parse_state_ff.first == StateParseMdp
   compute_next_state_parse_mdp_refreshbook(extracted_data.noMDEntries);
   rg_tmp[0] <= zeroExtend(data >> 112);
   succeed_and_next(112);
-  dbprint(3, $format("extract %s", "parse_mdp_refreshbook", fshow(extracted_data)));
+  dbprint(3, $format("extract %s", "parse_mdp_refreshbook ", fshow(extracted_data)));
   parse_state_ff.deq;
-  //event_metadata_out_ff.enq(tagged Valid event_metadata);
   event_metadata$group_size[0] <= extracted_data.noMDEntries;
 endrule
 rule rl_parse_mdp_refreshbook_start if ((w_parse_mdp_refreshbook_start));
@@ -356,7 +370,6 @@ rule rl_parse_mdp_refreshbook_parse_mdp_group if ((w_parse_mdp_refreshbook_parse
 endrule
 (* fire_when_enabled *)
 rule rl_parse_mdp_group_load if ((parse_state_ff.first == StateParseMdpGroup) && (rg_buffered[0] < 256));
-  //report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
   if (isValid(data_ff.first)) begin
     data_ff.deq;
     let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
@@ -373,13 +386,14 @@ rule rl_parse_mdp_group_extract if ((parse_state_ff.first == StateParseMdpGroup)
   end
   report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
   let v = ( event_metadata$group_size[0] - 'h1 );
+  let extracted_data = extract_mdIncrementalRefreshBook32Group(truncate(data));
   event_metadata$group_size[0] <= v;
   compute_next_state_parse_mdp_group(v);
   rg_tmp[0] <= zeroExtend(data >> 256);
   succeed_and_next(256);
+  mdp_refreshbook_group_out_ff[v].enq(tagged Valid extracted_data);
   dbprint(3, $format("extract %s %h", "parse_mdp_group", v));
   parse_state_ff.deq;
-  //event_metadata_out_ff.enq(tagged Valid event_metadata);
 endrule
 rule rl_parse_mdp_group_start if ((w_parse_mdp_group_start));
   parse_done[0] <= True;
@@ -416,5 +430,6 @@ FIFOF#(Maybe#(MdpPacketT)) mdp_out_ff <- mkDFIFOF(tagged Invalid);
 FIFOF#(Maybe#(MdpMessageT)) mdp_msg_out_ff <- mkDFIFOF(tagged Invalid);
 FIFOF#(Maybe#(MdpSbeT)) mdp_sbe_out_ff <- mkDFIFOF(tagged Invalid);
 FIFOF#(Maybe#(Mdincrementalrefreshbook32)) mdp_refreshbook_out_ff <- mkDFIFOF(tagged Invalid);
+Vector#(10, FIFOF#(Maybe#(Mdincrementalrefreshbook32Group))) mdp_refreshbook_group_out_ff <- replicateM(mkDFIFOF(tagged Invalid));
 Reg#(Bit#(16)) event_metadata$group_size[2] <- mkCReg(2, 0);
 `endif

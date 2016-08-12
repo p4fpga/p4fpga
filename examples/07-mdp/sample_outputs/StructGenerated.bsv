@@ -1,6 +1,7 @@
 import DefaultValue::*;
 import Utils::*;
 import Ethernet::*;
+import Vector::*;
 typedef struct {
   Bit#(9) ingress_port;
   Bit#(32) packet_length;
@@ -207,7 +208,20 @@ typedef struct {
   PacketInstance pkt;
   MetadataT meta;
 } MetadataResponse deriving (Bits, Eq, FShow);
+
+typedef union tagged {
+  void NotPresent;
+  void Forward;
+  void Delete;
+  void Insert;
+  } HeaderState
+deriving (Bits, Eq, FShow);
+
 typedef struct {
+  HeaderState ethernet;
+  HeaderState ipv4;
+  HeaderState udp;
+  Vector#(10, HeaderState) group;
 } MetadataT deriving (Bits, Eq, FShow);
 instance DefaultValue#(MetadataT);
   defaultValue = unpack(0);
