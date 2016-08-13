@@ -63,6 +63,12 @@ header_type event_metadata_t {
 	}
 }
 
+header_type dedup_t {
+   fields {
+      notPresent : 1;
+   }
+}
+
 header_type mdIncrementalRefreshBook32 {
 	fields {
 		transactTime : 64;
@@ -86,10 +92,6 @@ header_type mdIncrementalRefreshBook32Group {
 	}
 }
 
-field_list bloom_hash_fields {
-	mdp.msgSeqNum;
-}
-
 header ethernet_t ethernet;
 header ipv4_t ipv4;
 header udp_t udp;
@@ -99,6 +101,7 @@ header mdp_sbe_t mdp_sbe;
 header mdIncrementalRefreshBook32 mdp_refreshbook;
 header mdIncrementalRefreshBook32Group group[10];
 metadata event_metadata_t event_metadata;
+metadata dedup_t dedup;
 
 parser start {
     return parse_ethernet;

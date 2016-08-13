@@ -1,8 +1,8 @@
 P4FILE=p4src/mdp.p4
+CONNECTALFLAGS += --bsvpath=$(CURDIR)/lib
 CONNECTALFLAGS += -D PARSER=Parser
 CONNECTALFLAGS += -D DEPARSER=Deparser
 CONNECTALFLAGS += -D MATCHTABLE=mdp
 CONNECTALFLAGS += -D TYPEDEF=StructGenerated
-
 
 include ../Makefile.common
