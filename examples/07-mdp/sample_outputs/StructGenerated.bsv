@@ -158,6 +158,23 @@ endfunction
 
 
 typedef struct {
+  Bit#(1) notPresent;
+  Bit#(7) _padding;
+} DedupT deriving (Bits, Eq, FShow);
+instance DefaultValue#(DedupT);
+  defaultValue = unpack(0);
+endinstance
+
+instance DefaultMask#(DedupT);
+  defaultMask = unpack(maxBound);
+endinstance
+
+function DedupT extract_dedup_t(Bit#(8) data);
+  return unpack(byteSwap(data));
+endfunction
+
+
+typedef struct {
   Bit#(64) transactTime;
   Bit#(16) matchEventIndicator;
   Bit#(16) blockLength;
@@ -214,13 +231,38 @@ typedef union tagged {
   void Forward;
   void Delete;
   void Insert;
+  void Processed;
   } HeaderState
 deriving (Bits, Eq, FShow);
 
+typedef union tagged {
+  struct {
+    PacketInstance pkt;
+    MetadataT meta;
+  } TblBloomfilterDedupRspT;
+} TblBloomfilterResponse deriving (Bits, Eq, FShow);
+typedef union tagged {
+  struct {
+    PacketInstance pkt;
+    MetadataT meta;
+  } TblDropDropRspT;
+} TblDropResponse deriving (Bits, Eq, FShow);
+typedef union tagged {
+  struct {
+    PacketInstance pkt;
+    MetadataT meta;
+  } TblForwardForwardRspT;
+} TblForwardResponse deriving (Bits, Eq, FShow);
 typedef struct {
+  Maybe#(Bit#(1)) dedup$notPresent;
+  Maybe#(Bit#(32)) mdp$msgSeqNum;
   HeaderState ethernet;
   HeaderState ipv4;
   HeaderState udp;
+  HeaderState mdp;
+  HeaderState mdp_msg;
+  HeaderState mdp_sbe;
+  HeaderState mdp_refreshbook;
   Vector#(10, HeaderState) group;
 } MetadataT deriving (Bits, Eq, FShow);
 instance DefaultValue#(MetadataT);
