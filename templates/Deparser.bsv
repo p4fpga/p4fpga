@@ -187,6 +187,11 @@ module mkDeparser (Deparser);
     dbprint(3, $format("Deparser rg_processed=%d rg_shift_amt=%d amt=%d", rg_processed[1], rg_shift_amt[1], amt, fshow(data)));
   endrule
 
+  rule rl_deparse_header_done if (w_deparse_header_done);
+    fetch_next_header(0);
+    header_done[0] <= True;
+  endrule
+
   // wait till all processed bits are sent, cont. to send payload.
   // some data are buffered not processed.
   rule rl_wait_till_processed_done if (header_done[1] && (rg_processed[1] == 0));
