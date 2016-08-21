@@ -7,6 +7,7 @@
 
   http://www.apache.org/licenses/LICENSE-2.0
 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -35,9 +36,9 @@ namespace FPGA {
 
     public:
       StateTranslationVisitor(const FPGAParserState* state, BSVProgram& bsv) :
-	CodeGenInspector(bsv, state->parser->program->typeMap),
-	bsv_(bsv),
-	hasDefault(false), p4lib(P4::P4CoreLibrary::instance), state(state) {}
+        CodeGenInspector(bsv, state->parser->program->typeMap),
+        bsv_(bsv),
+        hasDefault(false), p4lib(P4::P4CoreLibrary::instance), state(state) {}
       using CodeGenInspector::preorder;
       bool preorder(const IR::ParserState* state) override;
       //    bool preorder(const IR::SelectCase* selectCase) override;
@@ -53,7 +54,7 @@ namespace FPGA {
 
     public:
       ParserTranslationVisitor(const FPGAParser* parser, BSVProgram& bsv) :
-	CodeGenInspector(bsv, parser->program->typeMap), bsv_(bsv) {}
+        CodeGenInspector(bsv, parser->program->typeMap), bsv_(bsv) {}
       bool preorder(const IR::Type_Header* header) override;
     private:
       BSVProgram & bsv_;
@@ -92,7 +93,7 @@ namespace FPGA {
     } else {
       // must be a PathExpression which is a state name
       if (!parserState->selectExpression->is<IR::PathExpression>())
-	BUG("Expected a PathExpression, got a %1%", parserState->selectExpression);
+        BUG("Expected a PathExpression, got a %1%", parserState->selectExpression);
       visit(parserState->selectExpression);
     }
     return false;
@@ -104,8 +105,8 @@ namespace FPGA {
 
     for (auto e: expression->selectCases) {
       if (e->keyset->is<IR::Expression>()) {
-	// ExpressionTranlationVisitor
-	LOG1("select case " << e->keyset);
+        // ExpressionTranlationVisitor
+        LOG1("select case " << e->keyset);
       }
     }
     return false;
@@ -118,11 +119,11 @@ namespace FPGA {
     bsv_.getStructBuilder().increaseIndent();
     for (auto f: *hdr->fields) {
       if (f->type->is<IR::Type_Bits>()) {
-	auto width = f->type->to<IR::Type_Bits>()->size;
-	auto name = f->name;
-	bsv_.getStructBuilder().emitIndent();
-	bsv_.getStructBuilder().appendFormat("Bit#(%d) %s;", width, name.toString());
-	bsv_.getStructBuilder().newline();
+        auto width = f->type->to<IR::Type_Bits>()->size;
+        auto name = f->name;
+        bsv_.getStructBuilder().emitIndent();
+        bsv_.getStructBuilder().appendFormat("Bit#(%d) %s;", width, name.toString());
+        bsv_.getStructBuilder().newline();
       }
     }
     bsv_.getStructBuilder().decreaseIndent();
@@ -196,11 +197,11 @@ namespace FPGA {
     auto this_state_name = r->this_state->name.toString();
     auto next_state_name = r->next_state->name.toString();
     append_format(bsv_,"rule rl_%s_%s if (w_%s_%s);", this_state_name,
-		  next_state_name, this_state_name, next_state_name);
+                  next_state_name, this_state_name, next_state_name);
     incr_indent(bsv_);
     append_format(bsv_,"parse_state_ff.enq(State%s);", CamelCase(this_state_name));
     append_format(bsv_,"dbg3($format(\"%%s -> %%s\", \"%s\", \"%s\"));",
-		  this_state_name, next_state_name);
+                  this_state_name, next_state_name);
     append_format(bsv_,"fetch_next_headers(%d);", r->next_len);
     decr_indent(bsv_);
     append_line(bsv_,"endrule");
@@ -218,7 +219,7 @@ namespace FPGA {
   }
 
   FPGAParser::FPGAParser(const FPGAProgram* program,
-			 const IR::ParserBlock* block, const P4::TypeMap* typeMap) :
+                         const IR::ParserBlock* block, const P4::TypeMap* typeMap) :
     program(program), typeMap(typeMap), parserBlock(block), packet(nullptr),
     headers(nullptr), headerType(nullptr) {
   }
@@ -233,13 +234,13 @@ namespace FPGA {
     for (auto f : *htype->to<IR::Type_Struct>()->fields) {
       auto ftype = typeMap->getType(f);
       if (ftype->is<IR::Type_Header>()) {
-	ParserTranslationVisitor visitor(this, bsv);
-	ftype->apply(visitor);
+        ParserTranslationVisitor visitor(this, bsv);
+        ftype->apply(visitor);
       } else if (ftype->is<IR::Type_Stack>()) {
-	auto hstack = ftype->to<IR::Type_Stack>();
-	auto header = hstack->baseType->to<IR::Type_Header>();
-	ParserTranslationVisitor visitor(this, bsv);
-	header->apply(visitor);
+        auto hstack = ftype->to<IR::Type_Stack>();
+        auto header = hstack->baseType->to<IR::Type_Header>();
+        ParserTranslationVisitor visitor(this, bsv);
+       header->apply(visitor);
       }
     }
   }
@@ -327,14 +328,14 @@ namespace FPGA {
       rules.push_back(new IR::BSV::RuleParserShift(state, 0));
       rules.push_back(new IR::BSV::RuleParserExtract(state, 0));
       if (state->selectExpression != nullptr) {
-	if (state->selectExpression->is<IR::SelectExpression>()) {
-	  auto se = state->selectExpression->to<IR::SelectExpression>();
-	  for (auto sc: se->selectCases) {
-	    LOG1(sc->state->path);
-	    LOG1(sc->state);
-	    rules.push_back(new IR::BSV::RuleParserTransition(state, sc->state->path, 0));
-	  }
-	}
+        if (state->selectExpression->is<IR::SelectExpression>()) {
+          auto se = state->selectExpression->to<IR::SelectExpression>();
+          for (auto sc: se->selectCases) {
+            LOG1(sc->state->path);
+            LOG1(sc->state);
+            rules.push_back(new IR::BSV::RuleParserTransition(state, sc->state->path, 0));
+          }
+        }
       }
     }
 
