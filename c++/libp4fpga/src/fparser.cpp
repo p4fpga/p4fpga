@@ -22,6 +22,8 @@
 
 namespace FPGA {
 
+  // testing for format
+
   namespace {
     class StateTranslationVisitor : public CodeGenInspector {
       BSVProgram & bsv_;
