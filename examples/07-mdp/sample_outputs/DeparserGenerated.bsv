@@ -21,17 +21,24 @@ typedef enum {
 } DeparserState deriving (Bits, Eq, FShow);
 `endif // DEPARSER_STRUCT
 `ifdef DEPARSER_RULES
+(* mutually_exclusive="rl_deparse_ethernet_next, rl_deparse_ipv4_next, rl_deparse_udp_next, rl_deparse_mdp_next, rl_deparse_mdp_msg_next, rl_deparse_mdp_refreshbook_next, rl_deparse_mdp_sbe_next, rl_deparse_group0_next, rl_deparse_group1_next, rl_deparse_group2_next, rl_deparse_group3_next, rl_deparse_group4_next, rl_deparse_group5_next, rl_deparse_group6_next, rl_deparse_group7_next, rl_deparse_group8_next, rl_deparse_group9_next" *)
 rule rl_deparse_ethernet_next if (w_deparse_ethernet);
   deparse_state_ff.enq(StateDeparseEthernet);
   fetch_next_header(112);
 endrule
 rule rl_deparse_ethernet_load if ((deparse_state_ff.first == StateDeparseEthernet) && (rg_buffered[0] < 112));
   rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-  move_buffered_amt(128);
+  UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
+  UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
+  move_buffered_amt(cExtend(n_bits_used));
 endrule
 rule rl_deparse_ethernet_send if ((deparse_state_ff.first == StateDeparseEthernet) && (rg_buffered[0] >= 112));
   succeed_and_next(112);
   deparse_state_ff.deq;
+  let metadata = meta[0];
+  metadata.ethernet = tagged NotPresent;
+  transit_next_state(metadata);
+  meta[0] <= metadata;
 endrule
 rule rl_deparse_ipv4_next if (w_deparse_ipv4);
   deparse_state_ff.enq(StateDeparseIpv4);
@@ -39,11 +46,18 @@ rule rl_deparse_ipv4_next if (w_deparse_ipv4);
 endrule
 rule rl_deparse_ipv4_load if ((deparse_state_ff.first == StateDeparseIpv4) && (rg_buffered[0] < 160));
   rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-  move_buffered_amt(128);
+  UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
+  UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
+  move_buffered_amt(cExtend(n_bits_used));
 endrule
 rule rl_deparse_ipv4_send if ((deparse_state_ff.first == StateDeparseIpv4) && (rg_buffered[0] >= 160));
   succeed_and_next(160);
   deparse_state_ff.deq;
+  let metadata = meta[0];
+  metadata.ipv4 = tagged NotPresent;
+  transit_next_state(metadata);
+  meta[0] <= metadata;
+  dbprint(3, $format("***deparse ipv4 send %h", rg_tmp[0]));
 endrule
 rule rl_deparse_udp_next if (w_deparse_udp);
   deparse_state_ff.enq(StateDeparseUdp);
@@ -51,11 +65,19 @@ rule rl_deparse_udp_next if (w_deparse_udp);
 endrule
 rule rl_deparse_udp_load if ((deparse_state_ff.first == StateDeparseUdp) && (rg_buffered[0] < 64));
   rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-  move_buffered_amt(128);
+  UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
+  UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
+  move_buffered_amt(cExtend(n_bits_used));
+  dbprint(3, $format("***deparse udp load"));
 endrule
 rule rl_deparse_udp_send if ((deparse_state_ff.first == StateDeparseUdp) && (rg_buffered[0] >= 64));
   succeed_and_next(64);
   deparse_state_ff.deq;
+  let metadata = meta[0];
+  metadata.udp = tagged NotPresent;
+  transit_next_state(metadata);
+  meta[0] <= metadata;
+  dbprint(3, $format("***deparse udp send %h", rg_tmp[0]));
 endrule
 rule rl_deparse_mdp_next if (w_deparse_mdp);
   deparse_state_ff.enq(StateDeparseMdp);
@@ -63,11 +85,17 @@ rule rl_deparse_mdp_next if (w_deparse_mdp);
 endrule
 rule rl_deparse_mdp_load if ((deparse_state_ff.first == StateDeparseMdp) && (rg_buffered[0] < 96));
   rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-  move_buffered_amt(128);
+  UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
+  UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
+  move_buffered_amt(cExtend(n_bits_used));
 endrule
 rule rl_deparse_mdp_send if ((deparse_state_ff.first == StateDeparseMdp) && (rg_buffered[0] >= 96));
   succeed_and_next(96);
   deparse_state_ff.deq;
+  let metadata = meta[0];
+  metadata.mdp = tagged NotPresent;
+  transit_next_state(metadata);
+  meta[0] <= metadata;
 endrule
 rule rl_deparse_mdp_msg_next if (w_deparse_mdp_msg);
   deparse_state_ff.enq(StateDeparseMdpMsg);
@@ -75,11 +103,17 @@ rule rl_deparse_mdp_msg_next if (w_deparse_mdp_msg);
 endrule
 rule rl_deparse_mdp_msg_load if ((deparse_state_ff.first == StateDeparseMdpMsg) && (rg_buffered[0] < 16));
   rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-  move_buffered_amt(128);
+  UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
+  UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
+  move_buffered_amt(cExtend(n_bits_used));
 endrule
 rule rl_deparse_mdp_msg_send if ((deparse_state_ff.first == StateDeparseMdpMsg) && (rg_buffered[0] >= 16));
   succeed_and_next(16);
   deparse_state_ff.deq;
+  let metadata = meta[0];
+  metadata.mdp_msg = tagged NotPresent;
+  transit_next_state(metadata);
+  meta[0] <= metadata;
 endrule
 rule rl_deparse_mdp_sbe_next if (w_deparse_mdp_sbe);
   deparse_state_ff.enq(StateDeparseMdpSbe);
@@ -87,11 +121,17 @@ rule rl_deparse_mdp_sbe_next if (w_deparse_mdp_sbe);
 endrule
 rule rl_deparse_mdp_sbe_load if ((deparse_state_ff.first == StateDeparseMdpSbe) && (rg_buffered[0] < 64));
   rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-  move_buffered_amt(128);
+  UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
+  UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
+  move_buffered_amt(cExtend(n_bits_used));
 endrule
 rule rl_deparse_mdp_sbe_send if ((deparse_state_ff.first == StateDeparseMdpSbe) && (rg_buffered[0] >= 64));
   succeed_and_next(64);
   deparse_state_ff.deq;
+  let metadata = meta[0];
+  metadata.mdp_sbe = tagged NotPresent;
+  transit_next_state(metadata);
+  meta[0] <= metadata;
 endrule
 rule rl_deparse_mdp_refreshbook_next if (w_deparse_mdp_refreshbook);
   deparse_state_ff.enq(StateDeparseMdpRefreshbook);
@@ -99,11 +139,17 @@ rule rl_deparse_mdp_refreshbook_next if (w_deparse_mdp_refreshbook);
 endrule
 rule rl_deparse_mdp_refreshbook_load if ((deparse_state_ff.first == StateDeparseMdpRefreshbook) && (rg_buffered[0] < 112));
   rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-  move_buffered_amt(128);
+  UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
+  UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
+  move_buffered_amt(cExtend(n_bits_used));
 endrule
 rule rl_deparse_mdp_refreshbook_send if ((deparse_state_ff.first == StateDeparseMdpRefreshbook) && (rg_buffered[0] >= 112));
   succeed_and_next(112);
   deparse_state_ff.deq;
+  let metadata = meta[0];
+  metadata.mdp_refreshbook = tagged NotPresent;
+  transit_next_state(metadata);
+  meta[0] <= metadata;
 endrule
 rule rl_deparse_group0_next if (w_deparse_group0);
   deparse_state_ff.enq(StateDeparseGroup0);
@@ -111,11 +157,17 @@ rule rl_deparse_group0_next if (w_deparse_group0);
 endrule
 rule rl_deparse_group0_load if ((deparse_state_ff.first == StateDeparseGroup0) && (rg_buffered[0] < 256));
   rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-  move_buffered_amt(128);
+  UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
+  UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
+  move_buffered_amt(cExtend(n_bits_used));
 endrule
 rule rl_deparse_group0_send if ((deparse_state_ff.first == StateDeparseGroup0) && (rg_buffered[0] >= 256));
   succeed_and_next(256);
   deparse_state_ff.deq;
+  let metadata = meta[0];
+  metadata.group[0] = tagged NotPresent;
+  transit_next_state(metadata);
+  meta[0] <= metadata;
 endrule
 rule rl_deparse_group1_next if (w_deparse_group1);
   deparse_state_ff.enq(StateDeparseGroup1);
@@ -123,11 +175,17 @@ rule rl_deparse_group1_next if (w_deparse_group1);
 endrule
 rule rl_deparse_group1_load if ((deparse_state_ff.first == StateDeparseGroup1) && (rg_buffered[0] < 256));
   rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-  move_buffered_amt(128);
+  UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
+  UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
+  move_buffered_amt(cExtend(n_bits_used));
 endrule
 rule rl_deparse_group1_send if ((deparse_state_ff.first == StateDeparseGroup1) && (rg_buffered[0] >= 256));
   succeed_and_next(256);
   deparse_state_ff.deq;
+  let metadata = meta[0];
+  metadata.group[1] = tagged NotPresent;
+  transit_next_state(metadata);
+  meta[0] <= metadata;
 endrule
 rule rl_deparse_group2_next if (w_deparse_group2);
   deparse_state_ff.enq(StateDeparseGroup2);
@@ -135,11 +193,17 @@ rule rl_deparse_group2_next if (w_deparse_group2);
 endrule
 rule rl_deparse_group2_load if ((deparse_state_ff.first == StateDeparseGroup2) && (rg_buffered[0] < 256));
   rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-  move_buffered_amt(128);
+  UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
+  UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
+  move_buffered_amt(cExtend(n_bits_used));
 endrule
 rule rl_deparse_group2_send if ((deparse_state_ff.first == StateDeparseGroup2) && (rg_buffered[0] >= 256));
   succeed_and_next(256);
   deparse_state_ff.deq;
+  let metadata = meta[0];
+  metadata.group[2] = tagged NotPresent;
+  transit_next_state(metadata);
+  meta[0] <= metadata;
 endrule
 rule rl_deparse_group3_next if (w_deparse_group3);
   deparse_state_ff.enq(StateDeparseGroup3);
@@ -147,11 +211,17 @@ rule rl_deparse_group3_next if (w_deparse_group3);
 endrule
 rule rl_deparse_group3_load if ((deparse_state_ff.first == StateDeparseGroup3) && (rg_buffered[0] < 256));
   rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-  move_buffered_amt(128);
+  UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
+  UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
+  move_buffered_amt(cExtend(n_bits_used));
 endrule
 rule rl_deparse_group3_send if ((deparse_state_ff.first == StateDeparseGroup3) && (rg_buffered[0] >= 256));
   succeed_and_next(256);
   deparse_state_ff.deq;
+  let metadata = meta[0];
+  metadata.group[3] = tagged NotPresent;
+  transit_next_state(metadata);
+  meta[0] <= metadata;
 endrule
 rule rl_deparse_group4_next if (w_deparse_group4);
   deparse_state_ff.enq(StateDeparseGroup4);
@@ -159,11 +229,17 @@ rule rl_deparse_group4_next if (w_deparse_group4);
 endrule
 rule rl_deparse_group4_load if ((deparse_state_ff.first == StateDeparseGroup4) && (rg_buffered[0] < 256));
   rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-  move_buffered_amt(128);
+  UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
+  UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
+  move_buffered_amt(cExtend(n_bits_used));
 endrule
 rule rl_deparse_group4_send if ((deparse_state_ff.first == StateDeparseGroup4) && (rg_buffered[0] >= 256));
   succeed_and_next(256);
   deparse_state_ff.deq;
+  let metadata = meta[0];
+  metadata.group[4] = tagged NotPresent;
+  transit_next_state(metadata);
+  meta[0] <= metadata;
 endrule
 rule rl_deparse_group5_next if (w_deparse_group5);
   deparse_state_ff.enq(StateDeparseGroup5);
@@ -171,11 +247,17 @@ rule rl_deparse_group5_next if (w_deparse_group5);
 endrule
 rule rl_deparse_group5_load if ((deparse_state_ff.first == StateDeparseGroup5) && (rg_buffered[0] < 256));
   rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-  move_buffered_amt(128);
+  UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
+  UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
+  move_buffered_amt(cExtend(n_bits_used));
 endrule
 rule rl_deparse_group5_send if ((deparse_state_ff.first == StateDeparseGroup5) && (rg_buffered[0] >= 256));
   succeed_and_next(256);
   deparse_state_ff.deq;
+  let metadata = meta[0];
+  metadata.group[5] = tagged NotPresent;
+  transit_next_state(metadata);
+  meta[0] <= metadata;
 endrule
 rule rl_deparse_group6_next if (w_deparse_group6);
   deparse_state_ff.enq(StateDeparseGroup6);
@@ -183,11 +265,17 @@ rule rl_deparse_group6_next if (w_deparse_group6);
 endrule
 rule rl_deparse_group6_load if ((deparse_state_ff.first == StateDeparseGroup6) && (rg_buffered[0] < 256));
   rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-  move_buffered_amt(128);
+  UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
+  UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
+  move_buffered_amt(cExtend(n_bits_used));
 endrule
 rule rl_deparse_group6_send if ((deparse_state_ff.first == StateDeparseGroup6) && (rg_buffered[0] >= 256));
   succeed_and_next(256);
   deparse_state_ff.deq;
+  let metadata = meta[0];
+  metadata.group[6] = tagged NotPresent;
+  transit_next_state(metadata);
+  meta[0] <= metadata;
 endrule
 rule rl_deparse_group7_next if (w_deparse_group7);
   deparse_state_ff.enq(StateDeparseGroup7);
@@ -195,11 +283,17 @@ rule rl_deparse_group7_next if (w_deparse_group7);
 endrule
 rule rl_deparse_group7_load if ((deparse_state_ff.first == StateDeparseGroup7) && (rg_buffered[0] < 256));
   rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-  move_buffered_amt(128);
+  UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
+  UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
+  move_buffered_amt(cExtend(n_bits_used));
 endrule
 rule rl_deparse_group7_send if ((deparse_state_ff.first == StateDeparseGroup7) && (rg_buffered[0] >= 256));
   succeed_and_next(256);
   deparse_state_ff.deq;
+  let metadata = meta[0];
+  metadata.group[7] = tagged NotPresent;
+  transit_next_state(metadata);
+  meta[0] <= metadata;
 endrule
 rule rl_deparse_group8_next if (w_deparse_group8);
   deparse_state_ff.enq(StateDeparseGroup8);
@@ -207,23 +301,36 @@ rule rl_deparse_group8_next if (w_deparse_group8);
 endrule
 rule rl_deparse_group8_load if ((deparse_state_ff.first == StateDeparseGroup8) && (rg_buffered[0] < 256));
   rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-  move_buffered_amt(128);
+  UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
+  UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
+  move_buffered_amt(cExtend(n_bits_used));
 endrule
 rule rl_deparse_group8_send if ((deparse_state_ff.first == StateDeparseGroup8) && (rg_buffered[0] >= 256));
   succeed_and_next(256);
   deparse_state_ff.deq;
+  let metadata = meta[0];
+  metadata.group[8] = tagged NotPresent;
+  transit_next_state(metadata);
+  meta[0] <= metadata;
 endrule
 rule rl_deparse_group9_next if (w_deparse_group9);
   deparse_state_ff.enq(StateDeparseGroup9);
   fetch_next_header(256);
+  dbprint(3, fshow("deparse state 9??"));
 endrule
 rule rl_deparse_group9_load if ((deparse_state_ff.first == StateDeparseGroup9) && (rg_buffered[0] < 256));
   rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-  move_buffered_amt(128);
+  UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
+  UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
+  move_buffered_amt(cExtend(n_bits_used));
 endrule
 rule rl_deparse_group9_send if ((deparse_state_ff.first == StateDeparseGroup9) && (rg_buffered[0] >= 256));
   succeed_and_next(256);
   deparse_state_ff.deq;
+  let metadata = meta[0];
+  metadata.group[9] = tagged NotPresent;
+  transit_next_state(metadata);
+  meta[0] <= metadata;
 endrule
 `endif // DEPARSER_RULES
 `ifdef DEPARSER_STATE
@@ -244,4 +351,60 @@ PulseWire w_deparse_group6 <- mkPulseWire();
 PulseWire w_deparse_group7 <- mkPulseWire();
 PulseWire w_deparse_group8 <- mkPulseWire();
 PulseWire w_deparse_group9 <- mkPulseWire();
+
+function DeparserState nextDeparseState(MetadataT metadata);
+   Vector#(18, Bool) headerValid;
+   headerValid[0]  = False;
+   headerValid[1]  = metadata.ethernet         matches tagged Forward ? True : False;
+   headerValid[2]  = metadata.ipv4             matches tagged Forward ? True : False;
+   headerValid[3]  = metadata.udp              matches tagged Forward ? True : False;
+   headerValid[4]  = metadata.mdp              matches tagged Forward ? True : False;
+   headerValid[5]  = metadata.mdp_msg          matches tagged Forward ? True : False;
+   headerValid[6]  = metadata.mdp_sbe          matches tagged Forward ? True : False;
+   headerValid[7]  = metadata.mdp_refreshbook  matches tagged Forward ? True : False;
+   headerValid[8]  = metadata.group[0]         matches tagged Forward ? True : False;
+   headerValid[9]  = metadata.group[1]         matches tagged Forward ? True : False;
+   headerValid[10] = metadata.group[2]         matches tagged Forward ? True : False;
+   headerValid[11] = metadata.group[3]         matches tagged Forward ? True : False;
+   headerValid[12] = metadata.group[4]         matches tagged Forward ? True : False;
+   headerValid[13] = metadata.group[5]         matches tagged Forward ? True : False;
+   headerValid[14] = metadata.group[6]         matches tagged Forward ? True : False;
+   headerValid[15] = metadata.group[7]         matches tagged Forward ? True : False;
+   headerValid[16] = metadata.group[8]         matches tagged Forward ? True : False;
+   headerValid[17] = metadata.group[9]         matches tagged Forward ? True : False;
+   let vec = pack(headerValid);
+   let nextHeader = pack(countZerosLSB(vec));
+   return unpack(nextHeader);
+endfunction
+
+function Action transit_next_state(MetadataT metadata);
+  action
+  let nextState = nextDeparseState(metadata);
+  dbprint(3, $format(fshow(metadata)));
+  dbprint(3, $format("next parse state ", fshow(nextState)));
+  case (nextState) matches
+    StateDeparseIpv4: w_deparse_ipv4.send();
+    StateDeparseUdp:  w_deparse_udp.send();
+    StateDeparseMdp:  w_deparse_mdp.send();
+    StateDeparseMdpMsg: w_deparse_mdp_msg.send();
+    StateDeparseMdpSbe: w_deparse_mdp_sbe.send();
+    StateDeparseMdpRefreshbook: w_deparse_mdp_refreshbook.send();
+    StateDeparseGroup0: w_deparse_group0.send();
+    StateDeparseGroup1: w_deparse_group1.send();
+    StateDeparseGroup2: w_deparse_group2.send();
+    StateDeparseGroup3: w_deparse_group3.send();
+    StateDeparseGroup4: w_deparse_group4.send();
+    StateDeparseGroup5: w_deparse_group5.send();
+    StateDeparseGroup6: w_deparse_group6.send();
+    StateDeparseGroup7: w_deparse_group7.send();
+    StateDeparseGroup8: w_deparse_group8.send();
+    StateDeparseGroup9: w_deparse_group9.send();
+    default: begin
+       fetch_next_header(0);
+       header_done[0] <= True;
+    end
+  endcase
+  endaction
+endfunction
+
 `endif // DEPARSER_STATE

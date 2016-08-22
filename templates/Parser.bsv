@@ -153,6 +153,14 @@ module mkParser  (Parser);
       data_in_ff.deq;
    endrule
 
+   // One cycle delay to allow last extracted data to propagate through DFIFOF.
+   // TODO: We can remove this delay with a customized DFIFOF that
+   //       returns default value when empty AND allow deq/enq when empty.
+   FIFOF#(void) delay_ff <- mkFIFOF;
+   rule rl_delay if (w_parse_done);
+      delay_ff.enq(?);
+   endrule
+
    `define PARSER_RULES
    `include "ParserGenerated.bsv"
    `undef PARSER_RULES

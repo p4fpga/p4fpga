@@ -1,30 +1,38 @@
 #include "parser.p4"
 
-//action lookup_map () {
-//	modify_field(meta.hash, bloom_hash);
-//}
-//
-//table bloomhash {
-//	actions {
-//		bloomfilter;
-//	}
-//}
-//
-//table filter {
-//	read {
-//		meta.filter: exact;
-//	}
-//	action {
-//		nop;
-//		drop;
-//	}
-//}
+action dedup () {
+	modify_field(mdp.msgSeqNum, 0);
+}
+
+table tbl_bloomfilter {
+	actions {
+		dedup;
+	}
+}
+
+action drop() {
+}
+
+action forward() {
+}
+
+table tbl_forward {
+	actions {
+		forward;
+	}
+}
+
+table tbl_drop {
+	actions {
+		drop;
+	}
+}
 
 control ingress {
-//	apply(filter);
-//	if (meta.filter) {
-//		apply(forward);
-//	} else {
-//		apply(drop);
-//	}
+	apply(tbl_bloomfilter);
+	if (dedup.notPresent == 1) {
+		apply(tbl_forward);
+	} else {
+		apply(tbl_drop);
+	}
 }

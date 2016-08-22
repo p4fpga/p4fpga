@@ -90,18 +90,13 @@ module mkDeparser (Deparser);
    Array#(Reg#(Bit#(512))) rg_tmp <- mkCReg(2, 0);
    Array#(Reg#(Bool)) deparse_done <- mkCReg(2, True);
    Array#(Reg#(Bool)) header_done <- mkCReg(2, True);
+   Array#(Reg#(MetadataT)) meta <- mkCReg(2, defaultValue);
    PulseWire w_deparse_header_done <- mkPulseWire();
-
-   // app-specific states
-   `define DEPARSER_STATE
-   `include "DeparserGenerated.bsv"
-   `undef DEPARSER_STATE
 
    let mask_this_cycle = data_in_ff.first.mask;
    let sop_this_cycle = data_in_ff.first.sop;
    let eop_this_cycle = data_in_ff.first.eop;
    let data_this_cycle = data_in_ff.first.data;
-   let meta = meta_in_ff.first;
    function Action report_deparse_action(String msg, Bit#(32) buffered, Bit#(32) processed, Bit#(32) shift, Bit#(512) data);
     action
       if (cf_verbosity > 0) begin
@@ -131,6 +126,11 @@ module mkDeparser (Deparser);
     return v;
   endfunction
 
+  // app-specific states
+  `define DEPARSER_STATE
+  `include "DeparserGenerated.bsv"
+  `undef DEPARSER_STATE
+
   rule rl_start_state if (deparse_done[1] && sop_this_cycle);
     rg_tmp[1] <= 0;
     rg_buffered[2] <= 0;
@@ -138,6 +138,9 @@ module mkDeparser (Deparser);
     rg_processed[2] <= 0;
     deparse_done[1] <= False;
     header_done[1] <= False;
+    let metadata = meta_in_ff.first;
+    meta[1] <= metadata;
+    meta_in_ff.deq;
     deparse_state_ff.enq(StateDeparseEthernet);
     fetch_next_header(112);
     dbprint(3, $format("start deparse %d", valueOf(SizeOf#(DeparserState))));
@@ -182,6 +185,11 @@ module mkDeparser (Deparser);
     rg_shift_amt[1] <= rg_shift_amt[1] - amt;
     data_out_ff.enq(data);
     dbprint(3, $format("Deparser rg_processed=%d rg_shift_amt=%d amt=%d", rg_processed[1], rg_shift_amt[1], amt, fshow(data)));
+  endrule
+
+  rule rl_deparse_header_done if (w_deparse_header_done);
+    fetch_next_header(0);
+    header_done[0] <= True;
   endrule
 
   // wait till all processed bits are sent, cont. to send payload.

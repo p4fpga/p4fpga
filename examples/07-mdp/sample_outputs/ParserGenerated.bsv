@@ -101,12 +101,44 @@ endfunction
 
 `ifdef PARSER_RULES
 (* mutually_exclusive="rl_parse_mdp_sbe_parse_mdp_refreshbook, rl_parse_ipv4_parse_udp, rl_start_parse_ethernet, rl_parse_udp_start, rl_parse_ipv4_start, rl_parse_mdp_group_parse_mdp_group, rl_parse_ethernet_start, rl_parse_mdp_msg_parse_mdp_sbe, rl_parse_udp_parse_mdp, rl_parse_mdp_refreshbook_parse_mdp_group, rl_parse_mdp_group_start, rl_parse_ethernet_parse_ipv4, rl_parse_mdp_refreshbook_start, rl_parse_mdp_parse_mdp_msg" *)
-rule rl_parse_done if ((w_parse_done));
+rule rl_parse_done if (delay_ff.notEmpty());
+  delay_ff.deq;
   MetadataT meta = defaultValue;
   let ethernet <- toGet(ethernet_out_ff).get;
   let udp <- toGet(udp_out_ff).get;
   let ipv4 <- toGet(ipv4_out_ff).get;
-  //let event_metadata <- toGet(event_metadata_out_ff).get;
+  let mdp <- toGet(mdp_out_ff).get;
+  let mdp_msg <- toGet(mdp_msg_out_ff).get;
+  let mdp_sbe <- toGet(mdp_sbe_out_ff).get;
+  let mdp_refreshbook <- toGet(mdp_refreshbook_out_ff).get;
+  if (isValid(ethernet)) begin
+    meta.ethernet = tagged Forward;
+  end
+  if (isValid(ipv4)) begin
+    meta.ipv4 = tagged Forward;
+  end
+  if (isValid(udp)) begin
+    meta.udp = tagged Forward;
+  end
+  if (mdp matches tagged Valid .v) begin
+    meta.mdp = tagged Forward;
+    meta.mdp$msgSeqNum = tagged Valid v.msgSeqNum;
+  end
+  if (isValid(mdp_msg)) begin
+    meta.mdp_msg = tagged Forward;
+  end
+  if (isValid(mdp_sbe)) begin
+    meta.mdp_sbe = tagged Forward;
+  end
+  if (isValid(mdp_refreshbook)) begin
+    meta.mdp_refreshbook = tagged Forward;
+  end
+  for (Integer i = 0; i < 10; i=i+1) begin
+    let group <- toGet(mdp_refreshbook_group_out_ff[i]).get;
+    if (isValid(group)) begin
+      meta.group[i] = tagged Forward;
+    end
+  end
   dbprint(3, $format("parse_done"));
   meta_in_ff.enq(meta);
 endrule
@@ -248,10 +280,13 @@ rule rl_parse_mdp_extract if ((parse_state_ff.first == StateParseMdp) && (rg_buf
   end
   report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
   compute_next_state_parse_mdp();
+  let mdp = extract_mdp_packet_t(truncate(data));
   rg_tmp[0] <= zeroExtend(data >> 96);
   succeed_and_next(96);
   dbprint(3, $format("extract %s", "parse_mdp"));
+  dbprint(3, $format(fshow(mdp)));
   parse_state_ff.deq;
+  mdp_out_ff.enq(tagged Valid mdp);
 endrule
 rule rl_parse_mdp_parse_mdp_msg if ((w_parse_mdp_parse_mdp_msg));
   parse_state_ff.enq(StateParseMdpMsg);
@@ -277,10 +312,13 @@ rule rl_parse_mdp_msg_extract if ((parse_state_ff.first == StateParseMdpMsg) && 
   end
   report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
   compute_next_state_parse_mdp_msg();
+  let mdp_msg = extract_mdp_message_t(truncate(data));
   rg_tmp[0] <= zeroExtend(data >> 16);
   succeed_and_next(16);
   dbprint(3, $format("extract %s", "parse_mdp_msg"));
+  dbprint(3, $format(fshow(mdp_msg)));
   parse_state_ff.deq;
+  mdp_msg_out_ff.enq(tagged Valid mdp_msg);
 endrule
 rule rl_parse_mdp_msg_parse_mdp_sbe if ((w_parse_mdp_msg_parse_mdp_sbe));
   parse_state_ff.enq(StateParseMdpSbe);
@@ -306,10 +344,13 @@ rule rl_parse_mdp_sbe_extract if ((parse_state_ff.first == StateParseMdpSbe) && 
   end
   report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
   compute_next_state_parse_mdp_sbe();
+  let mdp_sbe = extract_mdp_sbe_t(truncate(data));
   rg_tmp[0] <= zeroExtend(data >> 64);
   succeed_and_next(64);
   dbprint(3, $format("extract %s", "parse_mdp_sbe"));
+  dbprint(3, $format(fshow(mdp_sbe)));
   parse_state_ff.deq;
+  mdp_sbe_out_ff.enq(tagged Valid mdp_sbe);
 endrule
 rule rl_parse_mdp_sbe_parse_mdp_refreshbook if ((w_parse_mdp_sbe_parse_mdp_refreshbook));
   parse_state_ff.enq(StateParseMdpRefreshbook);
@@ -338,10 +379,11 @@ rule rl_parse_mdp_refreshbook_extract if ((parse_state_ff.first == StateParseMdp
   compute_next_state_parse_mdp_refreshbook(extracted_data.noMDEntries);
   rg_tmp[0] <= zeroExtend(data >> 112);
   succeed_and_next(112);
-  dbprint(3, $format("extract %s", "parse_mdp_refreshbook", fshow(extracted_data)));
+  dbprint(3, $format("extract %s", "parse_mdp_refreshbook"));
+  dbprint(3, $format(fshow(extracted_data)));
   parse_state_ff.deq;
-  //event_metadata_out_ff.enq(tagged Valid event_metadata);
   event_metadata$group_size[0] <= extracted_data.noMDEntries;
+  mdp_refreshbook_out_ff.enq(tagged Valid extracted_data);
 endrule
 rule rl_parse_mdp_refreshbook_start if ((w_parse_mdp_refreshbook_start));
   parse_done[0] <= True;
@@ -356,7 +398,6 @@ rule rl_parse_mdp_refreshbook_parse_mdp_group if ((w_parse_mdp_refreshbook_parse
 endrule
 (* fire_when_enabled *)
 rule rl_parse_mdp_group_load if ((parse_state_ff.first == StateParseMdpGroup) && (rg_buffered[0] < 256));
-  //report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
   if (isValid(data_ff.first)) begin
     data_ff.deq;
     let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
@@ -373,13 +414,15 @@ rule rl_parse_mdp_group_extract if ((parse_state_ff.first == StateParseMdpGroup)
   end
   report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
   let v = ( event_metadata$group_size[0] - 'h1 );
+  let extracted_data = extract_mdIncrementalRefreshBook32Group(truncate(data));
   event_metadata$group_size[0] <= v;
   compute_next_state_parse_mdp_group(v);
   rg_tmp[0] <= zeroExtend(data >> 256);
   succeed_and_next(256);
+  mdp_refreshbook_group_out_ff[v].enq(tagged Valid extracted_data);
   dbprint(3, $format("extract %s %h", "parse_mdp_group", v));
+  dbprint(3, $format(fshow(extracted_data)));
   parse_state_ff.deq;
-  //event_metadata_out_ff.enq(tagged Valid event_metadata);
 endrule
 rule rl_parse_mdp_group_start if ((w_parse_mdp_group_start));
   parse_done[0] <= True;
@@ -416,5 +459,6 @@ FIFOF#(Maybe#(MdpPacketT)) mdp_out_ff <- mkDFIFOF(tagged Invalid);
 FIFOF#(Maybe#(MdpMessageT)) mdp_msg_out_ff <- mkDFIFOF(tagged Invalid);
 FIFOF#(Maybe#(MdpSbeT)) mdp_sbe_out_ff <- mkDFIFOF(tagged Invalid);
 FIFOF#(Maybe#(Mdincrementalrefreshbook32)) mdp_refreshbook_out_ff <- mkDFIFOF(tagged Invalid);
+Vector#(10, FIFOF#(Maybe#(Mdincrementalrefreshbook32Group))) mdp_refreshbook_group_out_ff <- replicateM(mkDFIFOF(tagged Invalid));
 Reg#(Bit#(16)) event_metadata$group_size[2] <- mkCReg(2, 0);
 `endif

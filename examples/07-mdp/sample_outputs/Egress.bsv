@@ -25,6 +25,12 @@ import StructGenerated::*;
 import TxRx::*;
 import Utils::*;
 import Vector::*;
+import Dedup::*;
+import Drop::*;
+import Forward::*;
+import TblBloomfilter::*;
+import TblDrop::*;
+import TblForward::*;
 import UnionGenerated::*;
 
 // ====== EGRESS ======
