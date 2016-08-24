@@ -27,8 +27,12 @@ bool FPGAProgram::build() {
               ->to<IR::ParserBlock>();
   BUG_CHECK(pb != nullptr, "No parser block found");
 
-  // assume only one target now
-  // other targets may have different implementation for parser, control, etc.
+  /*
+   * We assume a v1model: parser -> ingress -> egress -> deparser.
+   * As a result, FPGAParser, FPGAControl are created staticaly here.
+   * A better solution should be reading arch.p4 first, then create
+   * pipeline objects dynamically based on what's specified in arch.p4
+   */
   parser = new FPGAParser(this, pb, typeMap);
   bool success = parser->build();
   if (!success)
