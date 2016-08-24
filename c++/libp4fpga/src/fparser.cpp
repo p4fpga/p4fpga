@@ -203,8 +203,8 @@ bool BSVTranslationVisitor::preorder(const IR::BSV::RuleParserTransition* rule) 
                 next_state_name, this_state_name, next_state_name);
   incr_indent(bsv_);
   append_format(bsv_, "parse_state_ff.enq(State%s);", CamelCase(this_state_name));
-  append_format(bsv_, "dbg3($format(\"%%s -> %%s\", \"%s\", \"%s\"));",
-                this_state_name, next_state_name);
+  //LOG1("this state: " << this_state_name);
+  //LOG1("next state: " << next_state_name);
   append_format(bsv_, "fetch_next_headers(%d);", r->next_len);
   decr_indent(bsv_);
   append_line(bsv_, "endrule");
@@ -307,7 +307,7 @@ void FPGAParser::emit(BSVProgram & bsv) {
   emitTypes(bsv);
   emitParseState(bsv);
   emitInterface(bsv);
-  // emitModule(bsv);
+  emitModule(bsv);
 }
 
 // build IR::BSV from mid-end IR
@@ -335,7 +335,6 @@ bool FPGAParser::build() {
         auto se = state->selectExpression->to<IR::SelectExpression>();
         for (auto sc : se->selectCases) {
           LOG1(sc->state->path);
-          LOG1(sc->state);
           rules.push_back(new IR::BSV::RuleParserTransition(state, sc->state->path, 0));
         }
       }

@@ -21,38 +21,36 @@ limitations under the License.
 
 namespace FPGA {
 bool FPGAProgram::build() {
-    auto pack = toplevel->getMain();
+  auto pack = toplevel->getMain();
 
-    auto pb = pack->getParameterValue(v1model.sw.parser.name)
-                ->to<IR::ParserBlock>();
-    BUG_CHECK(pb != nullptr, "No parser block found");
+  auto pb = pack->getParameterValue(v1model.sw.parser.name)
+              ->to<IR::ParserBlock>();
+  BUG_CHECK(pb != nullptr, "No parser block found");
 
-    // assume only one target now
-    // other targets may have different implementation for parser, control, etc.
-    parser = new FPGAParser(this, pb, typeMap);
-    bool success = parser->build();
-    if (!success)
-        return success;
+  // assume only one target now
+  // other targets may have different implementation for parser, control, etc.
+  parser = new FPGAParser(this, pb, typeMap);
+  bool success = parser->build();
+  if (!success)
+      return success;
 
-    auto cb = pack->getParameterValue(v1model.sw.ingress.name)
-                      ->to<IR::ControlBlock>();
-    BUG_CHECK(cb != nullptr, "No control block found");
-    // control block
-    control = new FPGAControl(this, cb);
-    success = control->build();
-    if (!success)
-        return success;
+  auto cb = pack->getParameterValue(v1model.sw.ingress.name)
+                    ->to<IR::ControlBlock>();
+  BUG_CHECK(cb != nullptr, "No control block found");
+  // control block
+  control = new FPGAControl(this, cb);
+  success = control->build();
+  if (!success)
+      return success;
 
-    return true;
+  return true;
 }
 
 void FPGAProgram::emit(BSVProgram & bsv) {
-    // target->parser->emit(builder);
-    LOG1("emit\n");
-    parser->emit(bsv);
-    // emitIncludes
-    // emitPreamble
-    // ...
+  // target->parser->emit(builder);
+  parser->emit(bsv);
+  // emitIncludes
+  // emitPreamble
 }
 
 }  // namespace FPGA
