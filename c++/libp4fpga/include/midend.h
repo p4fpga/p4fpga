@@ -1,6 +1,6 @@
 
-#ifndef _BACKENDS_FPGA_MIDEND_H_
-#define _BACKENDS_FPGA_MIDEND_H_
+#ifndef EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_MIDEND_H_
+#define EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_MIDEND_H_
 
 #include "ir/ir.h"
 #include "options.h"
@@ -21,4 +21,4 @@ class MidEnd {
 
 }  // namespace FPGA
 
-#endif /* _BACKENDS_FPGA_MIDEND_H_ */
+#endif /* EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_MIDEND_H_ */

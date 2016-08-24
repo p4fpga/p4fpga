@@ -1,10 +1,9 @@
 
-#ifndef _BACKENDS_FPGA_FPGACONTROL_H_
-#define _BACKENDS_FPGA_FPGACONTROL_H_
+#ifndef EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FCONTROL_H_
+#define EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FCONTROL_H_
 
 #include "ir/ir.h"
 #include "fprogram.h"
-//#include "ftable.h"
 
 namespace FPGA {
 
@@ -23,8 +22,8 @@ class FPGAControl : public FPGAObject {
 
     virtual ~FPGAControl() {}
     void emit(BSVProgram & bsv);
-    //void emitDeclaration(const IR::Declaration* decl, CodeBuilder *builder);
-    //void emitTables(CodeBuilder* builder);
+    // void emitDeclaration(const IR::Declaration* decl, CodeBuilder *builder);
+    // void emitTables(CodeBuilder* builder);
     bool build();
 //    FPGATable* getTable(cstring name) const {
 //        auto result = get(tables, name);
@@ -34,4 +33,4 @@ class FPGAControl : public FPGAObject {
 
 }  // namespace FPGA
 
-#endif /* _BACKENDS_FPGA_FPGACONTROL_H_ */
+#endif /* EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FCONTROL_H_ */

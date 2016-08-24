@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#ifndef _BACKENDS_FPGA_FPGATEST_H_
-#define _BACKENDS_FPGA_FPGATEST_H_
+#ifndef EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FTEST_H_
+#define EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FTEST_H_
 
 #include "ir/ir.h"
 #include "frontends/p4/typeMap.h"
@@ -43,9 +43,8 @@ class Test {
     void ir_toplevel();
     void ir_metadata();
     void ir_parser_state();
-
 };
 
-} // namespace FPGA
+}  // namespace FPGA
 
-#endif /* _BACKENDS_FPGA_FPGATEST_H_ */
+#endif /* EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FTEST_H_ */

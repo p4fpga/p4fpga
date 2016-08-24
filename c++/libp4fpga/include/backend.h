@@ -1,6 +1,6 @@
 
-#ifndef _BACKENDS_FPGA_FPGABACKEND_H_
-#define _BACKENDS_FPGA_FPGABACKEND_H_
+#ifndef EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_BACKEND_H_
+#define EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_BACKEND_H_
 
 #include "options.h"
 #include "ir/ir.h"
@@ -13,4 +13,4 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
 
 }  // namespace FPGA
 
-#endif /* _BACKENDS_FPGA_FPGABACKEND_H_ */
+#endif /* EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_BACKEND_H_ */

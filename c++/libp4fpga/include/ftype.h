@@ -1,6 +1,6 @@
 
-#ifndef _BACKENDS_FPGA_FPGATYPE_H_
-#define _BACKENDS_FPGA_FPGATYPE_H_
+#ifndef EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FTYPE_H_
+#define EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FTYPE_H_
 
 #include "lib/algorithm.h"
 #include "lib/sourceCodeBuilder.h"
@@ -21,7 +21,7 @@ class FPGAType : public FPGAObject {
     virtual void declareArray(BSVProgram & bsv ,
                               const char* /*id*/, unsigned /*size*/)
     { BUG("Arrays of %1% not supported", type); }
-    //cstring toString(const Target* target);
+    // cstring toString(const Target* target);
 };
 
 class IHasWidth {
@@ -121,4 +121,4 @@ class FPGAStructType : public FPGAType, public IHasWidth {
 
 }  // namespace FPGA
 
-#endif /* _BACKENDS_FPGA_FPGATYPE_H_ */
+#endif /* EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FTYPE_H_ */

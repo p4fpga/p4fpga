@@ -14,8 +14,8 @@
   limitations under the License.
 */
 
-#ifndef _BACKENDS_FPGA_FPGAPARSER_H_
-#define _BACKENDS_FPGA_FPGAPARSER_H_
+#ifndef EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FPARSER_H_
+#define EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FPARSER_H_
 
 #include "ir/ir.h"
 #include "fprogram.h"
@@ -24,95 +24,86 @@
 
 namespace FPGA {
 
+inline static std::string format_string(boost::format& message) {
+  return message.str();
+}
+
+template <typename TValue, typename... TArgs>
+  std::string format_string(boost::format& message, TValue&& arg, TArgs&&... args) {
+  message % std::forward<TValue>(arg);
+  return format_string(message, std::forward<TArgs>(args)...);
+}
+
+template <typename... TArgs>
+  void append_format(BSVProgram & bsv, const char* fmt, TArgs&&... args) {
+  bsv.getParserBuilder().emitIndent();
+  boost::format msg(fmt);
+  std::string s = format_string(msg, std::forward<TArgs>(args)...);
+  bsv.getParserBuilder().appendFormat(s.c_str());
+  bsv.getParserBuilder().newline();
+}
 
 
-  inline static std::string format_string(boost::format& message)
-  {
-    return message.str();
-  }
-  
-  template <typename TValue, typename... TArgs>
-    std::string format_string(boost::format& message, TValue&& arg, TArgs&&... args)
-  {
-    message % std::forward<TValue>(arg);
-    return format_string(message, std::forward<TArgs>(args)...);
-  }
-
-  template <typename... TArgs>
-    void append_format(BSVProgram & bsv, const char* fmt, TArgs&&... args)
-  {
-    bsv.getParserBuilder().emitIndent();	
+template <typename... TArgs>
+  void append_line(BSVProgram & bsv, const char* fmt, TArgs&&... args) {
+    bsv.getParserBuilder().emitIndent();
     boost::format msg(fmt);
-    std::string s = format_string(msg, std::forward<TArgs>(args)...);         
-    bsv.getParserBuilder().appendFormat(s.c_str());	
-    bsv.getParserBuilder().newline();
+    std::string s = format_string(msg, std::forward<TArgs>(args)...);
+    bsv.getParserBuilder().appendLine(s.c_str());
   }
 
-  
-  template <typename... TArgs>
-    void append_line(BSVProgram & bsv, const char* fmt, TArgs&&... args)
-    {
-      bsv.getParserBuilder().emitIndent();	
-      boost::format msg(fmt);
-      std::string s = format_string(msg, std::forward<TArgs>(args)...);      
-      bsv.getParserBuilder().appendLine(s.c_str());	
-      
-    }
- 
-  inline void incr_indent(BSVProgram & bsv)
-  {
-    bsv.getParserBuilder().increaseIndent();
-  }
+inline void incr_indent(BSVProgram & bsv) {
+  bsv.getParserBuilder().increaseIndent();
+}
 
-  inline void decr_indent(BSVProgram & bsv)
-  {
-    bsv.getParserBuilder().decreaseIndent();
-  }
+inline void decr_indent(BSVProgram & bsv) {
+  bsv.getParserBuilder().decreaseIndent();
+}
 
-  
-  class FPGAParserState : public FPGAObject {
-  public:
-    const IR::ParserState* state;
-    const FPGAParser* parser;
 
-  FPGAParserState(const IR::ParserState* state, FPGAParser* parser) :
-    state(state), parser(parser) {}
-    void emit(BSVProgram & bsv) override;
-  };
+class FPGAParserState : public FPGAObject {
+ public:
+  const IR::ParserState* state;
+  const FPGAParser* parser;
 
-  class FPGAParser : public FPGAObject {
-  protected:
-    // TODO(rjs): I think these should be const
-    void emitTypes(BSVProgram & bsv);
-    void emitParseState(BSVProgram & bsv);
-    void emitInterface(BSVProgram & bsv);
-    void emitFunctVerbosity(BSVProgram & bsv);
-    void emitModule(BSVProgram & bsv);
+FPGAParserState(const IR::ParserState* state, FPGAParser* parser) :
+  state(state), parser(parser) {}
+  void emit(BSVProgram & bsv) override;
+};
 
-    std::vector<IR::BSV::Reg*>          reg;
-    std::vector<IR::BSV::CReg*>         creg;
-    std::vector<IR::BSV::PulseWireOR*>  wires;
-    std::vector<IR::BSV::Rule*>         rules;
+class FPGAParser : public FPGAObject {
+ protected:
+  // TODO(rjs): I think these should be const
+  void emitTypes(BSVProgram & bsv);
+  void emitParseState(BSVProgram & bsv);
+  void emitInterface(BSVProgram & bsv);
+  void emitFunctVerbosity(BSVProgram & bsv);
+  void emitModule(BSVProgram & bsv);
 
-  public:
-    const FPGAProgram*            program;
-    const P4::TypeMap*            typeMap;
-    const IR::ParserBlock*        parserBlock;
-    std::vector<FPGAParserState*> states;
-    const IR::Parameter*          packet;
-    const IR::Parameter*          headers;
-    const IR::Parameter*          userMetadata;
-    const IR::Parameter*          stdMetadata;
-    FPGAType*                     headerType;
+  std::vector<IR::BSV::Reg*>          reg;
+  std::vector<IR::BSV::CReg*>         creg;
+  std::vector<IR::BSV::PulseWireOR*>  wires;
+  std::vector<IR::BSV::Rule*>         rules;
 
-    explicit FPGAParser(const FPGAProgram* program,
-			const IR::ParserBlock* block,
-                        const P4::TypeMap* typeMap);
+ public:
+  const FPGAProgram*            program;
+  const P4::TypeMap*            typeMap;
+  const IR::ParserBlock*        parserBlock;
+  std::vector<FPGAParserState*> states;
+  const IR::Parameter*          packet;
+  const IR::Parameter*          headers;
+  const IR::Parameter*          userMetadata;
+  const IR::Parameter*          stdMetadata;
+  FPGAType*                     headerType;
 
-    void emit(BSVProgram & bsv) override;
-    bool build();
-  };
+  explicit FPGAParser(const FPGAProgram* program,
+                      const IR::ParserBlock* block,
+                      const P4::TypeMap* typeMap);
+
+  void emit(BSVProgram & bsv) override;
+  bool build();
+};
 
 }  // namespace FPGA
 
-#endif /* _BACKENDS_FPGA_FPGAPARSER_H_ */
+#endif /* EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FPARSER_H_ */

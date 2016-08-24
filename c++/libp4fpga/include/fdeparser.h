@@ -14,7 +14,24 @@
   limitations under the License.
 */
 
+#ifndef _BACKENDS_FPGA_FPGADEPARSER_H_
+#define _BACKENDS_FPGA_FPGADEPARSER_H_
+
 #include "ir/ir.h"
-#include "fdeparser.h"
+#include "fprogram.h"
 
+namespace FPGA {
 
+  class FPGADeparser : public FPGAObject {
+  public:
+    const FPGAProgram* program;
+    const IR::ParserBlock* parserBlock;
+    const IR::ControlBlock* deparserBlock;
+
+    explicit FPGADeparser(const FPGAProgram* program);
+    void emit(BSVProgram &bsv ) override;
+    bool build();
+  };
+}
+
+#endif

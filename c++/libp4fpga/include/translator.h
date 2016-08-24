@@ -1,5 +1,7 @@
 #include "ir/ir.h"
 
+#ifndef EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_TRANSLATOR_H_
+#define EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_TRANSLATOR_H_
 namespace FPGA {
 
 class FPGAProgram;
@@ -22,4 +24,6 @@ class ExpressionTranslator : public Inspector {
     }
 };
 
-}
+}  // namespace FPGA
+
+#endif /* EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_TRANSLATOR_H_ */

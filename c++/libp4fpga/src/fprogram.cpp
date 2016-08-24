@@ -47,8 +47,9 @@ bool FPGAProgram::build() {
 }
 
 void FPGAProgram::emit(BSVProgram & bsv) {
-    //target->parser->emit(builder);
-  parser->emit(bsv); 
+    // target->parser->emit(builder);
+    LOG1("emit\n");
+    parser->emit(bsv);
     // emitIncludes
     // emitPreamble
     // ...

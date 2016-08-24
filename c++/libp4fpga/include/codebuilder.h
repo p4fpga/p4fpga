@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#ifndef _BACKENDS_FPGA_CODEGEN_H_
-#define _BACKENDS_FPGA_CODEGEN_H_
+#ifndef EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_CODEBUILDER_H_
+#define EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_CODEBUILDER_H_
 
 #include "ir/ir.h"
 #include "lib/sourceCodeBuilder.h"
@@ -26,9 +26,9 @@ namespace FPGA {
 class CodeBuilder : public Util::SourceCodeBuilder {
  public:
     // target ?
-    explicit CodeBuilder() {}
+    CodeBuilder() {}
 };
 
 }
 
-#endif /* _BACKENDS_FPGA_CODEGEN_H_ */
+#endif /* EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_CODEBUILDER_H_ */

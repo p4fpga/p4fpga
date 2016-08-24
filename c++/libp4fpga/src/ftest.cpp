@@ -14,13 +14,13 @@ void Test::ir_toplevel() {
     auto parserBlock = package->getParameterValue(v1model.sw.parser.name);
     auto parser  = parserBlock->to<IR::ParserBlock>()->container;
     LOG1("sw.parser " << parserBlock);
-    //auto type = parser->type;
+    // auto type = parser->type;
     LOG1("header idx " << v1model.parser.headersParam.index);
     auto hdr = parser->type->applyParams->getParameter(v1model.parser.headersParam.index);
     LOG1("hdr " << hdr);
     auto headersType = typeMap->getType(hdr->getNode(), true);
     auto ht = headersType->to<IR::Type_Struct>();
-    for (auto f: *ht->fields) {
+    for (auto f : *ht->fields) {
         LOG1("f " << f);
         LOG1("ftype " << typeMap->getType(f->type, true));
     }
@@ -28,29 +28,29 @@ void Test::ir_toplevel() {
     // user metdata
     auto userMetadataParam = parser->type->applyParams->getParameter(
             v1model.parser.metadataParam.index);
-    LOG1("u " << userMetadataParam); //
+    LOG1("u " << userMetadataParam);
     auto mdType = typeMap->getType(userMetadataParam, true);
     LOG1("mdu " << mdType);
-    auto mt = mdType->to<IR::Type_Struct>(); //
-    for (auto m: *mt->fields) {
-        LOG1("m: " << m->type); // Struct Field
-        auto mdt = typeMap->getType(m->type, true); // Struct Type
+    auto mt = mdType->to<IR::Type_Struct>();
+    for (auto m : *mt->fields) {
+        LOG1("m: " << m->type);
+        auto mdt = typeMap->getType(m->type, true);
         LOG1("mdt " << mdt);
         auto m_field = mdt->to<IR::Type_Struct>();
         CHECK_NULL(m_field);
-        for (auto md: *m_field->fields) {
+        for (auto md : *m_field->fields) {
             LOG1("mdd: " << md);
         }
     }
 
-    for (auto s: *parser->states) {
+    for (auto s : *parser->states) {
         auto sType = s->selectExpression;
         auto aType = s->annotations;
         if (s->name == IR::ParserState::accept || s->name == IR::ParserState::reject) {
             LOG1("s: " << s->name << " " << sType);
         } else if (sType->is<IR::SelectExpression>()) {
             auto se = sType->to<IR::SelectExpression>();
-            for (auto sc: se->selectCases) {
+            for (auto sc : se->selectCases) {
                 LOG1("case: " << sc);
                 LOG1("keyset " << sc->keyset);
                 LOG1("path go: " << sc->state);
@@ -63,7 +63,7 @@ void Test::ir_toplevel() {
         }
 
         LOG1("annotation: " << aType);
-        for (auto c: *s->components) {
+        for (auto c : *s->components) {
             LOG1("c: " << c);
             if (c->is<IR::AssignmentStatement>()) {
                 const IR::Expression *l, *r;
@@ -76,11 +76,9 @@ void Test::ir_toplevel() {
             }
         }
     }
-
-
 }
 
 void Test::build() {
     ir_toplevel();
 }
-}
+}  // namespace FPGA

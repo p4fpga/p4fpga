@@ -25,4 +25,4 @@ void FPGAControl::emit(BSVProgram & bsv) {
     //
 }
 
-} // namespace FPGA
+}  // namespace FPGA

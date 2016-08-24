@@ -253,7 +253,7 @@ void CodeGenInspector::widthCheck(const IR::Node* node) const {
 bool CodeGenInspector::preorder(const IR::IndexedVector<IR::StatOrDecl> *v) {
     if (v == nullptr) return false;
     bool first = true;
-    return false; //FIXME: what does this do?
+    return false;  // FIXME: what does this do?
     VecPrint sep = getSep();
     for (auto a : *v) {
         if (!first) {

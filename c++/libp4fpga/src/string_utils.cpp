@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "string_utils.h"
 #include <assert.h>
 #include "lib/cstring.h"
-#include "string_utils.h"
 
 namespace FPGA {
 

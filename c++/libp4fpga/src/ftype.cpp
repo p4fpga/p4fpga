@@ -25,7 +25,7 @@ FPGAType* FPGATypeFactory::create(const IR::Type* type) {
         result = create(canon);
         result = new FPGATypeName(type->to<IR::Type_Name>(), result);
     } else {
-        //TODO: need to support header stack
+        // TODO: need to support header stack
         ::error("Type %1% unsupported by FPGA", type);
     }
 
@@ -40,13 +40,11 @@ FPGABoolType::declare(BSVProgram & bsv, cstring id, bool asPointer) {
     bsv.getParserBuilder().appendFormat(" %s", id.c_str());
 }
 
-//cstring FPGAType::toString(const Target* target) {
+// cstring FPGAType::toString(const Target* target) {
 //    CodeBuilder builder(target);
 //    emit(&builder);
 //    return builder.toString();
-//}
-
-/////////////////////////////////////////////////////////////
+// }
 
 unsigned FPGAScalarType::alignment() const {
     if (width <= 8)
