@@ -23,6 +23,8 @@
 
 namespace FPGA {
 
+using namespace Parser;
+
 class StateTranslationVisitor : public Inspector {
   BSVProgram & bsv_;
   bool hasDefault;

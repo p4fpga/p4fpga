@@ -24,6 +24,7 @@
 
 namespace FPGA {
 
+namespace Parser {
 inline static std::string format_string(boost::format& message) {
   return message.str();
 }
@@ -43,7 +44,6 @@ template <typename... TArgs>
   bsv.getParserBuilder().newline();
 }
 
-
 template <typename... TArgs>
   void append_line(BSVProgram & bsv, const char* fmt, TArgs&&... args) {
     bsv.getParserBuilder().emitIndent();
@@ -60,6 +60,7 @@ inline void decr_indent(BSVProgram & bsv) {
   bsv.getParserBuilder().decreaseIndent();
 }
 
+}  // namespace Parser
 
 class FPGAParserState : public FPGAObject {
  public:
