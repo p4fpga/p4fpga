@@ -9,6 +9,7 @@ namespace FPGA {
   public:
     BSVProgram() { }
     CodeBuilder& getParserBuilder() { return parserBuilder_; }
+    CodeBuilder& getDeparserBuilder() { return deparserBuilder_; }
     CodeBuilder& getHeaderBuilder() { return headerBuilder_; }
     CodeBuilder& getStructBuilder() { return structBuilder_; }
     CodeBuilder& getUnionBuilder()  { return unionBuilder_; }
@@ -16,9 +17,10 @@ namespace FPGA {
 
   private:
     CodeBuilder parserBuilder_;
+    CodeBuilder deparserBuilder_;
     CodeBuilder headerBuilder_;
     CodeBuilder structBuilder_;
     CodeBuilder unionBuilder_;
-    CodeBuilder stateBuilder_;    
-  };        
+    CodeBuilder stateBuilder_;
+  };
 } // namespace FPGA

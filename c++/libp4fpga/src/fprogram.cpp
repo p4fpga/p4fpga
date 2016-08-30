@@ -18,14 +18,11 @@ limitations under the License.
 #include "fprogram.h"
 #include "fparser.h"
 #include "fcontrol.h"
+#include "fdeparser.h"
 
 namespace FPGA {
 bool FPGAProgram::build() {
   auto pack = toplevel->getMain();
-
-  auto pb = pack->getParameterValue(v1model.sw.parser.name)
-              ->to<IR::ParserBlock>();
-  BUG_CHECK(pb != nullptr, "No parser block found");
 
   /*
    * We assume a v1model: parser -> ingress -> egress -> deparser.
@@ -33,28 +30,50 @@ bool FPGAProgram::build() {
    * A better solution should be reading arch.p4 first, then create
    * pipeline objects dynamically based on what's specified in arch.p4
    */
+  auto pb = pack->getParameterValue(v1model.sw.parser.name)
+                ->to<IR::ParserBlock>();
+  BUG_CHECK(pb != nullptr, "No parser block found");
   parser = new FPGAParser(this, pb, typeMap);
   bool success = parser->build();
   if (!success)
       return success;
 
   auto cb = pack->getParameterValue(v1model.sw.ingress.name)
-                    ->to<IR::ControlBlock>();
+                ->to<IR::ControlBlock>();
   BUG_CHECK(cb != nullptr, "No control block found");
   // control block
-  control = new FPGAControl(this, cb);
-  success = control->build();
+  ingress = new FPGAControl(this, cb);
+  success = ingress->build();
   if (!success)
       return success;
+
+  auto eb = pack->getParameterValue(v1model.sw.egress.name)
+                ->to<IR::ControlBlock>();
+  BUG_CHECK(eb != nullptr, "No egress block found");
+  egress = new FPGAControl(this, eb);
+  success = egress->build();
+  if (!success)
+    return success;
+
+  LOG1("deparser " << v1model.sw.deparser.name);
+  auto db = pack->getParameterValue(v1model.sw.deparser.name)
+                ->to<IR::ControlBlock>();
+  BUG_CHECK(db != nullptr, "No deparser block found");
+  deparser = new FPGADeparser(this, db);
+  success = deparser->build();
+  if (!success)
+    return success;
 
   return true;
 }
 
 void FPGAProgram::emit(BSVProgram & bsv) {
-  // target->parser->emit(builder);
   parser->emit(bsv);
-  // emitIncludes
-  // emitPreamble
+  ingress->emit(bsv);
+  egress->emit(bsv);
+  deparser->emit(bsv);
+
+  // TODO: emit main.bsv
 }
 
 }  // namespace FPGA

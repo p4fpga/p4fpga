@@ -30,6 +30,7 @@ namespace FPGA {
 class FPGAProgram;
 class FPGAParser;
 class FPGAControl;
+class FPGADeparser;
 
 // Base class for FPGA objects
 class FPGAObject {
@@ -49,9 +50,13 @@ class FPGAProgram : public FPGAObject {
     const IR::ToplevelBlock*  toplevel;
     P4::ReferenceMap*         refMap;
     const P4::TypeMap*        typeMap;
+    // FIXME: dependency on v1model
     P4V1::V1Model&            v1model;
     FPGAParser*               parser;
-    FPGAControl*              control;
+    FPGAControl*              ingress;
+    FPGAControl*              egress;
+    FPGADeparser*              deparser;
+    // TODO: flexible pipeline should have a map of these controlblocks
     ExpressionTranslator*     tr;
 
     // write program as bluespec source code

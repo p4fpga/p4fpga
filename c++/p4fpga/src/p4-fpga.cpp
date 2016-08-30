@@ -19,7 +19,7 @@ void compile(Options& options) {
     auto program = parseP4File(options);
     if (::errorCount() > 0)
         return;
-    FrontEnd frontend;
+    P4::FrontEnd frontend;
     frontend.addDebugHook(hook);
     program = frontend.run(options, program);
     if (::errorCount() > 0)

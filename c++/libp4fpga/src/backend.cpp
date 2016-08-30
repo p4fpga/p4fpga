@@ -25,9 +25,6 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
 
     FPGATypeFactory::createFactory(typeMap);
 
-    Test test(toplevel->getProgram(), refMap, typeMap, toplevel);
-    test.build();
-
     FPGAProgram fpgaprog(toplevel->getProgram(), refMap, typeMap, toplevel);
     if (!fpgaprog.build())
         return;
@@ -48,8 +45,14 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
     boost::filesystem::path structFile("StructGenerated.bsv");
     boost::filesystem::path structPath = dir / structFile;
 
-    std::ofstream(parserPath.native()) <<  bsv.getParserBuilder().toString();
-    std::ofstream(structPath.native()) <<  bsv.getStructBuilder().toString();
+    boost::filesystem::path deparserFile("DeparserGenerated.bsv");
+    boost::filesystem::path deparserPath = dir / deparserFile;
+
+    // ControlGenerated.bsv
+
+    std::ofstream(parserPath.native())   <<  bsv.getParserBuilder().toString();
+    std::ofstream(deparserPath.native()) <<  bsv.getDeparserBuilder().toString();
+    std::ofstream(structPath.native())   <<  bsv.getStructBuilder().toString();
 }
 
 }  // namespace FPGA

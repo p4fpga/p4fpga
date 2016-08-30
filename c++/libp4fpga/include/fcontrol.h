@@ -15,7 +15,8 @@ class FPGAControl : public FPGAObject {
     const IR::Parameter*          accept;
 
     std::set<const IR::Parameter*> toDereference;
-//    std::map<cstring, FPGATable*>  tables;
+//  std::map<cstring, FPGATable*>  tables;
+//  // map for std::map<cstring, FPGADataflow*> dataflow;
 
     explicit FPGAControl(const FPGAProgram* program, const IR::ControlBlock* block)
       : program(program), controlBlock(block), headers(nullptr), accept(nullptr) {}

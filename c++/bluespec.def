@@ -88,4 +88,9 @@ class ParseTransitionFunction : Function {
 #nodbprint
 }
 
+class DeparseState : IR::Type_Header {
+	int width_bits;
+#nodbprint
+}
+
 } // namespace BSV

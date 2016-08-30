@@ -23,8 +23,7 @@
 
 namespace FPGA {
 
-namespace {  // FIXME: anonymous namespace ??
-class StateTranslationVisitor : public CodeGenInspector {
+class StateTranslationVisitor : public Inspector {
   BSVProgram & bsv_;
   bool hasDefault;
   P4::P4CoreLibrary& p4lib;
@@ -36,10 +35,10 @@ class StateTranslationVisitor : public CodeGenInspector {
 
  public:
   StateTranslationVisitor(const FPGAParserState* state, BSVProgram& bsv) :
-    CodeGenInspector(bsv, state->parser->program->typeMap),
+    //CodeGenInspector(bsv, state->parser->program->typeMap),
     bsv_(bsv),
     hasDefault(false), p4lib(P4::P4CoreLibrary::instance), state(state) {}
-  using CodeGenInspector::preorder;
+  //using CodeGenInspector::preorder;
   bool preorder(const IR::ParserState* state) override;
   //    bool preorder(const IR::SelectCase* selectCase) override;
   bool preorder(const IR::SelectExpression* expression) override;
@@ -49,22 +48,11 @@ class StateTranslationVisitor : public CodeGenInspector {
   //    { visit(stat->methodCall); return false; }
 };
 
-class ParserTranslationVisitor : public CodeGenInspector {
-  using CodeGenInspector::preorder;
-
- public:
-  ParserTranslationVisitor(const FPGAParser* parser, BSVProgram& bsv) :
-    CodeGenInspector(bsv, parser->program->typeMap), bsv_(bsv) {}
-  bool preorder(const IR::Type_Header* header) override;
- private:
-  BSVProgram & bsv_;
-};
-
-class BSVTranslationVisitor : public CodeGenInspector {
-  using CodeGenInspector::preorder;
+class BSVTranslationVisitor : public Inspector {
  public:
   BSVTranslationVisitor(const FPGAParser* parser, BSVProgram& bsv, int x) :
-    CodeGenInspector(bsv, parser->program->typeMap), bsv_(bsv) {}
+    bsv_(bsv) {}
+  bool preorder(const IR::Type_Header* header) override;
   bool preorder(const IR::BSV::CReg* reg) override;
   bool preorder(const IR::BSV::Reg* reg) override;
   bool preorder(const IR::BSV::PulseWireOR* wire) override;
@@ -74,8 +62,6 @@ class BSVTranslationVisitor : public CodeGenInspector {
  private:
   BSVProgram & bsv_;
 };
-
-}  // namespace
 
 bool StateTranslationVisitor::preorder(const IR::ParserState* parserState) {
   if (parserState->isBuiltin()) return false;
@@ -112,7 +98,7 @@ bool StateTranslationVisitor::preorder(const IR::SelectExpression* expression) {
   return false;
 }
 
-bool ParserTranslationVisitor::preorder(const IR::Type_Header* type) {
+bool BSVTranslationVisitor::preorder(const IR::Type_Header* type) {
   auto hdr = type->to<IR::Type_Header>();
   bsv_.getStructBuilder().append("typedef struct {");
   bsv_.getStructBuilder().newline();
@@ -203,8 +189,6 @@ bool BSVTranslationVisitor::preorder(const IR::BSV::RuleParserTransition* rule) 
                 next_state_name, this_state_name, next_state_name);
   incr_indent(bsv_);
   append_format(bsv_, "parse_state_ff.enq(State%s);", CamelCase(this_state_name));
-  //LOG1("this state: " << this_state_name);
-  //LOG1("next state: " << next_state_name);
   append_format(bsv_, "fetch_next_headers(%d);", r->next_len);
   decr_indent(bsv_);
   append_line(bsv_, "endrule");
@@ -236,13 +220,13 @@ void FPGAParser::emitTypes(BSVProgram & bsv) {
   for (auto f : *htype->to<IR::Type_Struct>()->fields) {
     auto ftype = typeMap->getType(f);
     if (ftype->is<IR::Type_Header>()) {
-      ParserTranslationVisitor visitor(this, bsv);
+      BSVTranslationVisitor visitor(this, bsv, 1);
       ftype->apply(visitor);
     } else if (ftype->is<IR::Type_Stack>()) {
       auto hstack = ftype->to<IR::Type_Stack>();
       auto header = hstack->baseType->to<IR::Type_Header>();
-      ParserTranslationVisitor visitor(this, bsv);
-     header->apply(visitor);
+      BSVTranslationVisitor visitor(this, bsv, 1);
+      header->apply(visitor);
     }
   }
 }

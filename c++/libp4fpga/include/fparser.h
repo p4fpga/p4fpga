@@ -66,8 +66,8 @@ class FPGAParserState : public FPGAObject {
   const IR::ParserState* state;
   const FPGAParser* parser;
 
-FPGAParserState(const IR::ParserState* state, FPGAParser* parser) :
-  state(state), parser(parser) {}
+  FPGAParserState(const IR::ParserState* state, FPGAParser* parser) :
+    state(state), parser(parser) {}
   void emit(BSVProgram & bsv) override;
 };
 

@@ -7,6 +7,7 @@
 
   http://www.apache.org/licenses/LICENSE-2.0
 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,28 +15,18 @@
   limitations under the License.
 */
 
-#ifndef _BACKENDS_FPGA_FPGADEPARSER_H_
-#define _BACKENDS_FPGA_FPGADEPARSER_H_
+#include "table.h"
 
-#include "ir/ir.h"
-#include "fprogram.h"
+/*
+  info associated with a table
+  - key, value
+  - name
+  - actions
+
+  - Parent: FPGAControl*, stored in std::map<name, FPGATable*>
+ */
 
 namespace FPGA {
 
-class FPGADeparser : public FPGAObject {
- public:
-  const FPGAProgram* program;
-  const IR::ControlBlock* controlBlock;
-  std::vector<IR::BSV::DeparseState*> states;
-
-  void emitModule(BSVProgram & bsv);
-
-  explicit FPGADeparser(const FPGAProgram* program, const IR::ControlBlock* block)
-    : program(program), controlBlock(block) {};
-  void emit(BSVProgram &bsv ) override;
-  bool build();
-};
 
 }  // namespace FPGA
-
-#endif
