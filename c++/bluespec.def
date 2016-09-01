@@ -13,14 +13,6 @@ class Reg : Type {
 	toString{ return "Reg#(Bit#(" + cstring::to_cstring(size) + "))"; }
 }
 
-class CReg : Type {
-	cstring     name;
-	cstring     type;
-	int         size;
-#nodbprint
-	toString{ return "CReg#(" + type + ")"; }
-}
-
 class PulseWire : Type {
     cstring     name;
 #nodbprint
@@ -65,31 +57,15 @@ class Function : Type {
 #nodbprint
 }
 
-class RuleParserShift : Rule {
-    IR::ParserState state;
-    int len;
-#nodbprint
-}
-
-class RuleParserExtract : Rule {
-    IR::ParserState state;
-    int len;
-#nodbprint
-}
-
-class RuleParserTransition : Rule {
-    IR::ParserState this_state;
-    IR::Path next_state;
-    int next_len;
-#nodbprint
-}
-
-class ParseTransitionFunction : Function {
-#nodbprint
-}
-
 class DeparseState : IR::Type_Header {
 	int width_bits;
+#nodbprint
+}
+
+class ParseState : IR::Type_Header {
+	int width_bits;
+	NullOK ListExpression keys;
+	NullOK IndexedVector<IR::SelectCase> cases;
 #nodbprint
 }
 

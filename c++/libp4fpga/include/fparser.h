@@ -67,30 +67,28 @@ class FPGAParserState : public FPGAObject {
   const IR::ParserState* state;
   const FPGAParser* parser;
 
-  FPGAParserState(const IR::ParserState* state, FPGAParser* parser) :
-    state(state), parser(parser) {}
+  FPGAParserState(FPGAParser* parser, const IR::ParserState* state) :
+    parser(parser), state(state) {}
   void emit(BSVProgram & bsv) override;
 };
 
 class FPGAParser : public FPGAObject {
  protected:
   // TODO(rjs): I think these should be const
-  void emitTypes(BSVProgram & bsv);
-  void emitParseState(BSVProgram & bsv);
-  void emitInterface(BSVProgram & bsv);
-  void emitFunctVerbosity(BSVProgram & bsv);
-  void emitModule(BSVProgram & bsv);
+  void emitEnums(BSVProgram & bsv);
+  void emitStructs(BSVProgram & bsv);
+  void emitFunctions(BSVProgram & bsv);
+  void emitRules(BSVProgram & bsv);
+  void emitStates(BSVProgram & bsv);
 
-  std::vector<IR::BSV::Reg*>          reg;
-  std::vector<IR::BSV::CReg*>         creg;
-  std::vector<IR::BSV::PulseWireOR*>  wires;
   std::vector<IR::BSV::Rule*>         rules;
 
  public:
   const FPGAProgram*            program;
+  const P4::ReferenceMap*       refMap;
   const P4::TypeMap*            typeMap;
   const IR::ParserBlock*        parserBlock;
-  std::vector<FPGAParserState*> states;
+  std::vector<IR::BSV::ParseState*> states;
   const IR::Parameter*          packet;
   const IR::Parameter*          headers;
   const IR::Parameter*          userMetadata;
@@ -99,7 +97,8 @@ class FPGAParser : public FPGAObject {
 
   explicit FPGAParser(const FPGAProgram* program,
                       const IR::ParserBlock* block,
-                      const P4::TypeMap* typeMap);
+                      const P4::TypeMap* typeMap,
+                      const P4::ReferenceMap* refMap);
 
   void emit(BSVProgram & bsv) override;
   bool build();

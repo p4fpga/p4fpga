@@ -15,6 +15,10 @@
 #ifndef FPGA_STRING_UTILS_H
 #define FPGA_STRING_UTILS_H
 
+#include <string>
+#include <vector>
+#include <sstream>
+#include <string.h>
 #include "lib/cstring.h"
 
 namespace FPGA {
@@ -27,6 +31,19 @@ cstring SnakeCase(const cstring& source);
 /// https://en.wikipedia.org/wiki/CamelCase
 cstring CamelCase(const cstring& source);
 
-}  // namespace FPGA
+// join a vector of elements by a delimiter object.  ostream<< must be defined
+// for both class S and T and an ostream, as it is e.g. in the case of strings
+// and character arrays
+template<class S, class T>
+std::string join(std::vector<T>& elems, S& delim) {
+std::stringstream ss;
+typename std::vector<T>::iterator e = elems.begin();
+  ss << *e++;
+  for (; e != elems.end(); ++e) {
+    ss << delim << *e;
+  }
+  return ss.str();
+}
 
+}  // namespace FPGA
 #endif  // FPGA_STRING_UTILS_H
