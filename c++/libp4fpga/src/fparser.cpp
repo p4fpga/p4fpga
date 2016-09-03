@@ -113,7 +113,8 @@ bool ParserBuilder::preorder(const IR::MethodCallExpression* expression) {
     if (ext_count[state] == 0) {
       ext_count[state] += 1;
     } else {
-      BUG("ERROR: More than one 'extract' method in %s. TODO", state);
+      ::warning("More than one 'extract' method");
+      //BUG("ERROR: More than one 'extract' method in %s. TODO", state);
     }
     // implementing one-argument variant of 'extract' method
     for (auto h: MakeZipRange(*expression->typeArguments, *expression->arguments)) {
@@ -121,24 +122,30 @@ bool ParserBuilder::preorder(const IR::MethodCallExpression* expression) {
       auto instName = h.get<1>();
       auto header_type = program->typeMap->getType(typeName, true);
       auto header_width = header_type->width_bits();
-      auto name = instName->to<IR::Member>()->member;
+      if (instName->is<IR::ArrayIndex>()) {
+        auto name = instName->to<IR::ArrayIndex>();
+        // TODO: handle header stack
+        ::warning("unhandle extract method %1%", name);
+      } else if (instName->is<IR::Member>()) {
+        auto name = instName->to<IR::Member>()->member;
+        // keep track of current header
+        header = name;
 
-      // keep track of current header
-      header = name;
-
-      if (header_type->is<IR::Type_StructLike>()) {
-        auto header = header_type->to<IR::Type_StructLike>();
-        // create parse state
-        // leave fields related to next state selection empty
-        auto s = new IR::BSV::ParseState(name, header->fields, header_width, nullptr, nullptr);
-        parser->states.push_back(s);
-        smap[name] = s;
+        if (header_type->is<IR::Type_StructLike>()) {
+          auto header = header_type->to<IR::Type_StructLike>();
+          // create parse state
+          // leave fields related to next state selection empty
+          auto s = new IR::BSV::ParseState(name, header->fields, header_width, nullptr, nullptr);
+          parser->states.push_back(s);
+          smap[name] = s;
+        }
       }
     }
     // TODO: implement two-argument variant for extracting variable-size headers
   } else {
     // TODO: handle 'lookahead' method
-    ::error("%1%: unhandled method", e->member);
+    warning("unhandled method %1%.", e->member);
+    //::error("%1%: unhandled method", e->member);
   }
   return false;
 }
@@ -195,7 +202,7 @@ void FPGAParser::emitEnums(BSVProgram & bsv) {
       ftype->apply(visitor);
     } else if (ftype->is<IR::Type_Stack>()) {
       auto hstack = ftype->to<IR::Type_Stack>();
-      auto header = hstack->baseType->to<IR::Type_Header>();
+      auto header = hstack->elementType->to<IR::Type_Header>();
       ParserStateVisitor visitor(this, bsv);
       header->apply(visitor);
     }

@@ -23,4 +23,12 @@ namespace FPGA {
     CodeBuilder unionBuilder_;
     CodeBuilder stateBuilder_;
   };
+
+  class Graph {
+   public:
+    Graph() { }
+    CodeBuilder& getGraphBuilder() { return graphBuilder_; }
+   private:
+    CodeBuilder graphBuilder_;
+  };
 } // namespace FPGA

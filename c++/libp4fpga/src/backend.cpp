@@ -1,6 +1,7 @@
 
 #include "backend.h"
 #include <boost/filesystem.hpp>
+#include <fstream>
 
 #include "lib/error.h"
 #include "lib/nullstream.h"
@@ -37,7 +38,6 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
     // TODO(rjs): start here to change to program
     BSVProgram bsv;
     fpgaprog.emit(bsv);
-    LOG1("emit fpgaprog");
 
     boost::filesystem::path parserFile("ParserGenerated.bsv");
     boost::filesystem::path parserPath = dir / parserFile;
@@ -50,9 +50,17 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
 
     // ControlGenerated.bsv
 
+    Graph graph;
+    fpgaprog.generateGraph(graph);
+
+    boost::filesystem::path graphFile("graph.dot");
+    boost::filesystem::path graphPath = dir / graphFile;
+
     std::ofstream(parserPath.native())   <<  bsv.getParserBuilder().toString();
     std::ofstream(deparserPath.native()) <<  bsv.getDeparserBuilder().toString();
     std::ofstream(structPath.native())   <<  bsv.getStructBuilder().toString();
+
+    std::ofstream(graphPath.native()) << graph.getGraphBuilder().toString();
 }
 
 }  // namespace FPGA

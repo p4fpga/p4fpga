@@ -59,9 +59,9 @@ bool DeparserBuilder::preorder(const IR::MethodCallExpression* expression) {
     else if (type->is<IR::Type_Stack>()){
       auto stk = type->to<IR::Type_Stack>();
       for (int i = 0; i < stk->getSize(); i++) {
-        if (stk->baseType->is<IR::Type_StructLike>()) {
-          auto t = stk->baseType->to<IR::Type_StructLike>();
-          auto hdr_width = stk->baseType->width_bits();
+        if (stk->elementType->is<IR::Type_StructLike>()) {
+          auto t = stk->elementType->to<IR::Type_StructLike>();
+          auto hdr_width = stk->elementType->width_bits();
           if (instName->is<IR::Member>()) {
             auto member = instName->to<IR::Member>();
             auto name = member->member + std::to_string(i);
@@ -77,7 +77,7 @@ bool DeparserBuilder::preorder(const IR::MethodCallExpression* expression) {
 bool DeparserBuilder::preorder(const IR::Member* member) {
   if (member->expr->is<IR::PathExpression>()) {
     auto et = member->expr->to<IR::PathExpression>();
-    LOG1(et->path->name);
+    // LOG1(et->path->name);
   }
   return false;
 }
