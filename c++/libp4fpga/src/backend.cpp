@@ -6,11 +6,11 @@
 #include "lib/error.h"
 #include "lib/nullstream.h"
 #include "frontends/p4/evaluator/evaluator.h"
+#include "frontends/p4/toP4/toP4.h"
 #include "fprogram.h"
 #include "ftest.h"
 #include "ftype.h"
 #include "bsvprogram.h"
-
 
 namespace FPGA {
 void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
@@ -26,7 +26,9 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
 
     FPGATypeFactory::createFactory(typeMap);
 
-    FPGAProgram fpgaprog(toplevel->getProgram(), refMap, typeMap, toplevel);
+    const IR::P4Program* program = toplevel->getProgram();
+
+    FPGAProgram fpgaprog(program, refMap, typeMap, toplevel);
     if (!fpgaprog.build())
         return;
     if (options.outputFile.isNullOrEmpty())
@@ -38,6 +40,7 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
     // TODO(rjs): start here to change to program
     BSVProgram bsv;
     fpgaprog.emit(bsv);
+
 
     boost::filesystem::path parserFile("ParserGenerated.bsv");
     boost::filesystem::path parserPath = dir / parserFile;
@@ -61,6 +64,12 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
     std::ofstream(structPath.native())   <<  bsv.getStructBuilder().toString();
 
     std::ofstream(graphPath.native()) << graph.getGraphBuilder().toString();
+
+    boost::filesystem::path p4File("processed.p4");
+    boost::filesystem::path p4Path = dir / p4File;
+    auto stream = openFile(p4Path.c_str(), true);
+    P4::ToP4 toP4(stream, false, nullptr);
+    program->apply(toP4);
 }
 
 }  // namespace FPGA

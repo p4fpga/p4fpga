@@ -218,16 +218,23 @@ void FPGAParser::emitFunctions(BSVProgram & bsv) {
     std::vector<cstring> params;
     if (state->keys != nullptr) {
       // get type for 'select' keys
+      LOG1(state);
       auto type = typeMap->getType(state->keys, true);
-      auto tpl = type->to<IR::Type_Tuple>();
-      auto keys = state->keys->to<IR::ListExpression>();
-      for (auto h : MakeZipRange(*tpl->components, *keys->components)) {
-        auto w = h.get<0>();
-        auto k = h.get<1>();
-        auto name = k->to<IR::Member>();
-        auto width = w->width_bits();
-        params.push_back("Bit#(" + std::to_string(width) + ") " + name->member);
-        match.push_back(name->member);
+      if (type->is<IR::Type_Tuple>()) {
+        auto tpl = type->to<IR::Type_Tuple>();
+        if (state->keys->is<IR::ListExpression>()) {
+          auto keys = state->keys->to<IR::ListExpression>();
+          for (auto h : MakeZipRange(*tpl->components, *keys->components)) {
+            auto w = h.get<0>();
+            auto k = h.get<1>();
+            if (k->is<IR::Member>()) {
+              auto name = k->to<IR::Member>();
+              auto width = w->width_bits();
+              params.push_back("Bit#(" + std::to_string(width) + ") " + name->member);
+              match.push_back(name->member);
+            }
+          }
+        }
       }
     }
     if (params.size() != 0) {
@@ -245,20 +252,24 @@ void FPGAParser::emitFunctions(BSVProgram & bsv) {
     }
     append_line(bsv, "case(v) matches");
     incr_indent(bsv);
-    for (auto c : *state->cases) {
-      if (c->keyset->is<IR::Constant>()) {
-        append_format(bsv, "%d: begin", c->keyset->toString());
-        incr_indent(bsv);
-        append_line(bsv, "w_%s_%s.send();", name, c->state->toString());
-        decr_indent(bsv);
-        append_line(bsv, "end");
-      } else if (c->keyset->is<IR::DefaultExpression>()) {
-        append_line(bsv, "default: begin");
-        incr_indent(bsv);
-        append_line(bsv, "w_%s_%s.send();", name, c->state->toString());
-        decr_indent(bsv);
-        append_line(bsv, "end");
+    if (state->cases != nullptr) {
+      for (auto c : *state->cases) {
+        if (c->keyset->is<IR::Constant>()) {
+          append_format(bsv, "%d: begin", c->keyset->toString());
+          incr_indent(bsv);
+          append_line(bsv, "w_%s_%s.send();", name, c->state->toString());
+          decr_indent(bsv);
+          append_line(bsv, "end");
+        } else if (c->keyset->is<IR::DefaultExpression>()) {
+          append_line(bsv, "default: begin");
+          incr_indent(bsv);
+          append_line(bsv, "w_%s_%s.send();", name, c->state->toString());
+          decr_indent(bsv);
+          append_line(bsv, "end");
+        }
       }
+    } else {
+      //FIXME
     }
     decr_indent(bsv);
     append_line(bsv, "endcase");

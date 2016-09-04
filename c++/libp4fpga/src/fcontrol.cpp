@@ -205,9 +205,10 @@ for (auto r : V) {                               \
 }
 
 void FPGAControl::emit(BSVProgram & bsv) {
-  //LOG1("Name " << controlBlock->container->name << controlBlock->container->type);
-  auto cbody = controlBlock->container->body;
-  VECTOR_VISIT(*cbody->components);
+  if (controlBlock->container->body != nullptr) {
+    auto cbody = controlBlock->container->body;
+    VECTOR_VISIT(*cbody->components);
+  }
 }
 #undef VECTOR_VISIT
 
