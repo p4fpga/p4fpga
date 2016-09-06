@@ -41,7 +41,6 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
     BSVProgram bsv;
     fpgaprog.emit(bsv);
 
-
     boost::filesystem::path parserFile("ParserGenerated.bsv");
     boost::filesystem::path parserPath = dir / parserFile;
 
@@ -64,6 +63,11 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
     std::ofstream(structPath.native())   <<  bsv.getStructBuilder().toString();
 
     std::ofstream(graphPath.native()) << graph.getGraphBuilder().toString();
+}
+
+void run_partition_backend(const Options& options, const IR::P4Program* program) {
+    boost::filesystem::path dir(options.outputFile);
+    boost::filesystem::create_directory(dir);
 
     boost::filesystem::path p4File("processed.p4");
     boost::filesystem::path p4Path = dir / p4File;

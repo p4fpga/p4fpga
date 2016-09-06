@@ -16,7 +16,7 @@ class MidEnd {
     P4::TypeMap            typeMap;
 
     void addDebugHook(DebugHook hook) { hooks.push_back(hook); }
-    const IR::ToplevelBlock* run(Options& options, const IR::P4Program* program);
+    const IR::P4Program* run(Options& options, const IR::P4Program* program);
 };
 
 }  // namespace FPGA

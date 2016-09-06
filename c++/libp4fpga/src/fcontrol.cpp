@@ -79,7 +79,7 @@ class TableTranslationVisitor : public Inspector {
 };
 
 bool TableTranslationVisitor::preorder(const IR::TableBlock* table) {
-  //LOG1("Table " << table);
+  // LOG1("Table " << table);
   for (auto act : *table->container->getActionList()->actionList) {
     auto element = act->to<IR::ActionListElement>();
     if (element->expression->is<IR::PathExpression>()) {
@@ -127,7 +127,7 @@ bool ActionTranslationVisitor::preorder(const IR::AssignmentStatement* stmt) {
   //LOG1("assignment " << stmt->left << stmt->right);
   visit(stmt->left);
   //FIXME: only take care of metadata write
-  //visit(stmt->right);
+  // visit(stmt->right);
   return false;
 }
 
@@ -143,6 +143,22 @@ bool ActionTranslationVisitor::preorder(const IR::Expression* expression) {
     }
   }
   return false;
+}
+
+class PartitionVisitor : public Transform {
+ public:
+  PartitionVisitor(FPGAControl* control) {}
+  const IR::Node* preorder(IR::IfStatement* ifstmt) override;
+  const IR::Node* preorder(IR::BlockStatement* block) override;
+};
+
+const IR::Node* PartitionVisitor::preorder(IR::BlockStatement* block) {
+  return nullptr;
+}
+
+const IR::Node* PartitionVisitor::preorder(IR::IfStatement* ifstmt) {
+  LOG1("remove ifstmt" << ifstmt);
+  return nullptr;
 }
 
 bool FPGAControl::build() {
@@ -162,7 +178,7 @@ bool FPGAControl::build() {
     }
   }
 
-  // constainValue : compile-time allocated resource, such as table..
+  // constantValue : compile-time allocated resource, such as table..
   for (auto c : controlBlock->constantValue) {
     auto b = c.second;
     if (!b->is<IR::Block>()) continue;
@@ -177,6 +193,21 @@ bool FPGAControl::build() {
     } else {
       ::error("Unexpected block %s nested within control", b->toString());
     }
+  }
+
+  // control flow
+  if (controlBlock->container->body->is<IR::BlockStatement>()) {
+    auto stmt = controlBlock->container->body->to<IR::BlockStatement>();
+    PartitionVisitor visitor(this);
+    stmt->apply(visitor);
+
+    LOG1("block statement size " << stmt->components->size());
+    //for (auto b : *stmt->components) {
+    //  if (b->is<IR::IfStatement>()) {
+    //    auto ifs = b->to<IR::IfStatement>();
+    //    LOG1(ifs->condition);
+    //  }
+    //}
   }
 
   for (auto n : metadata_to_action) {

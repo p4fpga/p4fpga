@@ -27,7 +27,7 @@
 
 namespace FPGA {
 
-const IR::ToplevelBlock* MidEnd::run(Options& options, const IR::P4Program* program) {
+const IR::P4Program* MidEnd::run(Options& options, const IR::P4Program* program) {
     if (program == nullptr)
         return nullptr;
 
@@ -89,7 +89,7 @@ const IR::ToplevelBlock* MidEnd::run(Options& options, const IR::P4Program* prog
     if (::errorCount() > 0)
         return nullptr;
 
-    return evaluator->getToplevelBlock();
+    return program;
 }
 
 }  // namespace FPGA

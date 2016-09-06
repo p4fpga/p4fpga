@@ -74,7 +74,9 @@ bool ParserBuilder::preorder(const IR::ParserState* ps) {
     auto cases = new IR::IndexedVector<IR::SelectCase>();
     cases->push_back(nextState);
     auto s = smap[header];
-    s->cases = cases;
+    if (s != nullptr) {
+      s->cases = cases;
+    }
   }
   return false;
 }
@@ -218,7 +220,6 @@ void FPGAParser::emitFunctions(BSVProgram & bsv) {
     std::vector<cstring> params;
     if (state->keys != nullptr) {
       // get type for 'select' keys
-      LOG1(state);
       auto type = typeMap->getType(state->keys, true);
       if (type->is<IR::Type_Tuple>()) {
         auto tpl = type->to<IR::Type_Tuple>();
@@ -374,6 +375,7 @@ bool FPGAParser::build() {
   auto states = parserBlock->container->states;
   ParserBuilder visitor(this, program);
   for (auto state : *states) {
+    LOG1(state);
     state->apply(visitor);
   }
   return true;
