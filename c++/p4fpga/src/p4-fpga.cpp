@@ -17,6 +17,7 @@
 #include "frontends/common/parseInput.h"
 #include "frontends/p4/frontend.h"
 #include "frontends/p4/evaluator/evaluator.h"
+#include "frontends/p4/simplify.h"
 
 // generate bsv
 void compile(Options& options) {
@@ -72,19 +73,20 @@ void partition(Options& options) {
     profile.addDebugHook(hook);
     program = program->apply(profile);
 
-    //auto evaluator = new P4::EvaluatorPass(&midend.refMap, &midend.typeMap);
-    for (auto t : options.partitions) {
+    int tbegin = 0;
+    int tend = 0;
+    for (auto np : options.partitions) {
+      tend = std::stoi(np.c_str(), nullptr, 10);
       PassManager backend = {
-        new P4::Partition(&midend.refMap, &midend.typeMap),
-        //evaluator
+        new P4::Partition(&midend.refMap, &midend.typeMap, tbegin, tend),
+        new P4::SimplifyControlFlow(&midend.refMap, &midend.typeMap)
       };
       backend.setName("Partition");
       backend.addDebugHook(hook);
-
-      // iterate through all intervals
       auto p = program->apply(backend);
-      auto name = cstring("processed") + t + cstring(".p4");
+      auto name = cstring("processed_") + np + cstring(".p4");
       FPGA::run_partition_backend(options, p, profgen, name);
+      tbegin = tend;
     }
 }
 

@@ -9,15 +9,15 @@
 namespace P4 {
 
 class DoPartition : public Transform {
-    int table;
+    int n_table;
     bool start_partition;
     const ReferenceMap* refMap;
     const TypeMap*      typeMap;
-    cstring tbegin;
-    cstring tend;
+    int tbegin;
+    int tend;
  public:
-    DoPartition(const ReferenceMap* refMap, const TypeMap* typeMap) :
-            refMap(refMap), typeMap(typeMap)
+    DoPartition(const ReferenceMap* refMap, const TypeMap* typeMap, const int tbegin, const int tend) :
+            refMap(refMap), typeMap(typeMap), tbegin(tbegin), tend(tend)
     { CHECK_NULL(refMap); CHECK_NULL(typeMap); setName("DoPartition"); }
     const IR::Node* preorder(IR::BlockStatement* statement) override;
     const IR::Node* postorder(IR::BlockStatement* statement) override;
@@ -29,9 +29,9 @@ class DoPartition : public Transform {
 
 class Partition : public PassManager {
  public:
-  Partition(ReferenceMap* refMap, TypeMap* typeMap) {
+  Partition(ReferenceMap* refMap, TypeMap* typeMap, int tbegin, int tend) {
     passes.push_back(new TypeChecking(refMap, typeMap));
-    passes.push_back(new DoPartition(refMap, typeMap));
+    passes.push_back(new DoPartition(refMap, typeMap, tbegin, tend));
     setName("Partition");
   }
 };
