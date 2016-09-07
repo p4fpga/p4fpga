@@ -26,11 +26,17 @@
 #include "lutils.h"
 #include "lpcap.h"
 #include <pcap.h> 
+#include <pthread.h>
 
 #define DATA_WIDTH 128
 #define MAXBYTES2CAPTURE 2048 
+#define BUFFSIZE 4096
 
 static MainRequestProxy *device = 0;
+char* pktbuf=NULL;
+char* p=NULL;
+int size = 0;
+static bool tosend = false;
 
 void device_writePacketData(uint64_t* data, uint8_t* mask, int sop, int eop) {
     device->writePacketData(data, mask, sop, eop);
@@ -41,6 +47,20 @@ class MainIndication : public MainIndicationWrapper
 public:
     virtual void read_version_rsp(uint32_t a) {
         fprintf(stderr, "version %x\n", a);
+    }
+    virtual void readPacketData(const uint64_t data, const uint8_t mask, const uint8_t sop, const uint8_t eop) {
+        //fprintf(stderr, "Rdata %016lx, mask %02x, sop %x eop %x\n", data, mask, sop, eop);
+        if (sop == 1) {
+            pktbuf = (char *) malloc(4096);
+            p = pktbuf;
+        }
+        memcpy(p, &data, 8);
+        int bits = (mask * 01001001001ULL & 042104210421ULL) % 017;
+        p += bits;
+        size += bits;
+        if (eop == 1) {
+            tosend = true;
+        }
     }
     MainIndication(unsigned int id): MainIndicationWrapper(id) {}
 };
@@ -74,13 +94,14 @@ void usage (const char *program_name) {
 }
 
 static void 
-parse_options(int argc, char *argv[], char **pcap_file, char **intf, struct arg_info* info) {
+parse_options(int argc, char *argv[], char **pcap_file, char **intf, char **outf, struct arg_info* info) {
     int c, option_index;
 
     static struct option long_options [] = {
         {"help",                no_argument, 0, 'h'},
         {"pcap",                required_argument, 0, 'p'},
         {"intf",                required_argument, 0, 'I'},
+        {"outf",                required_argument, 0, 'O'},
         {0, 0, 0, 0}
     };
 
@@ -104,6 +125,10 @@ parse_options(int argc, char *argv[], char **pcap_file, char **intf, struct arg_
                 fprintf(stderr, "%s", optarg);
                 *intf = optarg;
                 break;
+            case 'O':
+                fprintf(stderr, "%s", optarg);
+                *outf = optarg;
+                break;
             default:
                 break;
         }
@@ -121,36 +146,74 @@ void processPacket(u_char *arg, const struct pcap_pkthdr* pkthdr, const u_char *
     return; 
 } 
 
+void *captureThread(void * pcapt) {
+    pcap_t * pt;
+    int count=0; 
+    pt = (pcap_t *)pcapt;
+    pcap_loop(pt, -1, processPacket, (u_char*)&count);
+    /* should not be reached */
+    pcap_close(pt);
+    return NULL;
+}
+
+void *sendThread(void *pcapt) {
+    pcap_t *pt;
+    pt = (pcap_t *)pcapt;
+    while (1) {
+        if (tosend) {
+            fprintf(stderr, "inject packet %d\n", size);
+            pcap_inject(pt, pktbuf, size);
+            tosend = false;
+            size = 0;
+        }
+        usleep(100);
+    }
+    return NULL;
+}
+
 int main(int argc, char **argv)
 {
     char *pcap_file=NULL;
-    int count=0; 
-    pcap_t *descr = NULL; 
-    char errbuf[PCAP_ERRBUF_SIZE], *intf=NULL; 
+    pcap_t *handle = NULL, *handle2=NULL; 
+    pthread_t t_cap, t_snd;
+    char errbuf[PCAP_ERRBUF_SIZE], *intf=NULL, *outf=NULL; 
     memset(errbuf,0,PCAP_ERRBUF_SIZE); 
 
     struct pcap_trace_info pcap_info = {0, 0};
     MainIndication echoindication(IfcNames_MainIndicationH2S);
     device = new MainRequestProxy(IfcNames_MainRequestS2H);
 
-    parse_options(argc, argv, &pcap_file, &intf, 0);
+    parse_options(argc, argv, &pcap_file, &intf, &outf, 0);
     device->set_verbosity(4);
     device->read_version();
 
     if (intf) {
         printf("Opening device %s\n", intf); 
         /* Open device in promiscuous mode */ 
-        if ((descr = pcap_open_live(intf, MAXBYTES2CAPTURE, 1,  512, errbuf)) == NULL){
+        if ((handle = pcap_open_live(intf, MAXBYTES2CAPTURE, 0,  512, errbuf)) == NULL){
            fprintf(stderr, "ERROR: %s\n", errbuf);
            exit(1);
         }
+        pthread_create(&t_cap, NULL, captureThread, (void*)handle);
 
-        /* Loop forever & call processPacket() for every received packet*/ 
-        if (pcap_loop(descr, -1, processPacket, (u_char *)&count) == -1){
-           fprintf(stderr, "ERROR: %s\n", pcap_geterr(descr) );
-           exit(1);
+        if (outf) {
+            printf("Opening device %s\n", outf); 
+            if ((handle2 = pcap_open_live(outf, MAXBYTES2CAPTURE, 0, 512, errbuf)) == NULL) {
+                fprintf(stderr, "ERROR: %s\n", errbuf);
+                exit(1);
+            }
+            pthread_create(&t_snd, NULL, sendThread, (void*)handle2);
         }
+
+        pthread_join(t_cap, NULL);
+        pthread_join(t_snd, NULL);
+        /* Loop forever & call processPacket() for every received packet */
+        //if (pcap_loop(pt, -1, processPacket, (u_char *)&count) == -1){
+        //   fprintf(stderr, "ERROR: %s\n", pcap_geterr(pt) );
+        //   exit(1);
+        //}
     }
+
 
     if (pcap_file) {
         fprintf(stderr, "Attempts to read pcap file %s\n", pcap_file);

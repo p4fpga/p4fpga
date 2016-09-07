@@ -65,8 +65,8 @@ module mkParser  (Parser);
    Reg#(Bool) parse_done[2] <- mkCReg(2, True);
    FIFO#(ParserState) parse_state_ff <- mkPipelineFIFO();
    FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
-   FIFOF#(EtherData) data_in_ff <- printTimedTraceM("parse_data_in_ff", mkFIFOF);
-   FIFOF#(MetadataT) meta_in_ff <- printTimedTraceM("parse_meta_in_ff", mkFIFOF);
+   FIFOF#(EtherData) data_in_ff <- mkFIFOF;
+   FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;
    PulseWire w_parse_done <- mkPulseWire();
    PulseWire w_parse_header_done <- mkPulseWireOR();
    PulseWire w_load_header <- mkPulseWireOR();
@@ -91,7 +91,7 @@ module mkParser  (Parser);
      action
        rg_buffered[0] <= rg_buffered[0] - offset;
        rg_shift_amt[0] <= rg_buffered[0] - offset;
-       dbprint(3,$format("succeed_and_next subtract offset = %d shift_amt/buffered = %d", offset, rg_buffered[0] - offset));
+       dbprint(4,$format("succeed_and_next subtract offset = %d shift_amt/buffered = %d", offset, rg_buffered[0] - offset));
      endaction
    endfunction
    function Action fetch_next_header0(Bit#(32) len);
@@ -137,7 +137,7 @@ module mkParser  (Parser);
       data_in_ff.deq;
       rg_buffered[2] <= rg_buffered[2] + 128;
       data_ff.enq(tagged Valid v);
-      dbprint(3, $format("dequeue data %d %d", rg_buffered[2], rg_next_header_len[2]));
+      dbprint(4, $format("dequeue data %d %d", rg_buffered[2], rg_next_header_len[2]));
    endrule
 
    rule rl_start_state_deq if (parse_done[1] && sop_this_cycle && !w_parse_header_done);
