@@ -18,7 +18,7 @@ H2S_INTERFACES=Main:MainIndication,MemServerIndication
 BSVFILES=generatedbsv/Main.bsv generatedbsv/MainAPI.bsv generatedbsv/MainDefs.bsv
 CPPFILES = $(P4FPGADIR)/templates/cpp/main.cpp $(SONICDIR)/sw/lpcap.c
 CONNECTALFLAGS += -I $(SONICDIR)/sw/
-CONNECTALFLAGS += -lpcap
+CONNECTALFLAGS += -lpcap -lpthread
 CONNECTALFLAGS += --bsvpath=$(P4EXAMPLEDIR)/bsv/AsymmetricBRAM
 CONNECTALFLAGS += --bsvpath=$(P4EXAMPLEDIR)/bsv/Bcam
 CONNECTALFLAGS += --bsvpath=$(SONICDIR)/hw/bsv
