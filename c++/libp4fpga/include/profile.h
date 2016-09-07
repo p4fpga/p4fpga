@@ -5,6 +5,7 @@
 #include "frontends/p4/typeChecking/typeChecker.h"
 #include "frontends/p4/methodInstance.h"
 #include "frontends/common/resolveReferences/resolveReferences.h"
+#include "bsvprogram.h"
 
 namespace P4 {
 
@@ -14,11 +15,12 @@ class DoResourceEstimation : public Inspector {
   cstring table_type;
   int width_bit;
   int table_size;
+  FPGA::Profiler*     profgen;
   const ReferenceMap* refMap;
   const TypeMap*      typeMap;
  public:
-  DoResourceEstimation(const ReferenceMap* refMap, const TypeMap* typeMap) :
-          refMap(refMap), typeMap(typeMap)
+  DoResourceEstimation(const ReferenceMap* refMap, const TypeMap* typeMap, FPGA::Profiler* profgen) :
+          refMap(refMap), typeMap(typeMap), profgen(profgen)
   { CHECK_NULL(refMap); CHECK_NULL(typeMap); setName("DoResourceEstimation"); }
   bool preorder(const IR::P4Table* table) override;
   bool preorder(const IR::P4Control* table) override;
@@ -28,9 +30,9 @@ class DoResourceEstimation : public Inspector {
 
 class ResourceEstimation: public PassManager {
  public:
-  ResourceEstimation(ReferenceMap* refMap, TypeMap* typeMap) {
+  ResourceEstimation(ReferenceMap* refMap, TypeMap* typeMap, FPGA::Profiler* profgen) {
     passes.push_back(new TypeChecking(refMap, typeMap));
-    passes.push_back(new DoResourceEstimation(refMap, typeMap));
+    passes.push_back(new DoResourceEstimation(refMap, typeMap, profgen));
     setName("Resource Estimation");
   }
 };

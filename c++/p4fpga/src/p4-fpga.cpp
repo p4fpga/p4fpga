@@ -12,7 +12,8 @@
 #include "options.h"
 #include "backend.h"
 #include "partition.h"
-#include "resource.h"
+#include "profile.h"
+#include "bsvprogram.h"
 #include "frontends/common/parseInput.h"
 #include "frontends/p4/frontend.h"
 #include "frontends/p4/evaluator/evaluator.h"
@@ -63,20 +64,28 @@ void partition(Options& options) {
     if (::errorCount() > 0)
         return;
 
-    // list of tables to split
-    // map : table -> resources
-    //
-    auto evaluator = new P4::EvaluatorPass(&midend.refMap, &midend.typeMap);
-    PassManager backend = {
-      new P4::ResourceEstimation(&midend.refMap, &midend.typeMap),
-      new P4::Partition(&midend.refMap, &midend.typeMap),
-      evaluator
+    auto profgen = new FPGA::Profiler();
+    PassManager profile = {
+      new P4::ResourceEstimation(&midend.refMap, &midend.typeMap, profgen),
     };
-    backend.setName("Backend");
-    backend.addDebugHook(hook);
-    program = program->apply(backend);
+    profile.setName("Profile");
+    profile.addDebugHook(hook);
+    program = program->apply(profile);
 
-    FPGA::run_partition_backend(options, program);
+    //auto evaluator = new P4::EvaluatorPass(&midend.refMap, &midend.typeMap);
+    for (auto t : options.partitions) {
+      PassManager backend = {
+        new P4::Partition(&midend.refMap, &midend.typeMap),
+        //evaluator
+      };
+      backend.setName("Partition");
+      backend.addDebugHook(hook);
+
+      // iterate through all intervals
+      auto p = program->apply(backend);
+      auto name = cstring("processed") + t + cstring(".p4");
+      FPGA::run_partition_backend(options, p, profgen, name);
+    }
 }
 
 int main(int argc, char *const argv[]) {

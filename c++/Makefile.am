@@ -32,8 +32,8 @@ p4fpga_SOURCES = \
 	extensions/c++/libp4fpga/src/midend.cpp \
 	extensions/c++/libp4fpga/include/partition.h \
 	extensions/c++/libp4fpga/src/partition.cpp \
-	extensions/c++/libp4fpga/include/resource.h \
-	extensions/c++/libp4fpga/src/resource.cpp
+	extensions/c++/libp4fpga/include/profile.h \
+	extensions/c++/libp4fpga/src/profile.cpp
 
 cpplint_FILES += $(p4fpga_SOURCES)
 

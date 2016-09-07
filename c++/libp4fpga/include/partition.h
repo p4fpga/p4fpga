@@ -11,9 +11,10 @@ namespace P4 {
 class DoPartition : public Transform {
     int table;
     bool start_partition;
-    int limit;
     const ReferenceMap* refMap;
     const TypeMap*      typeMap;
+    cstring tbegin;
+    cstring tend;
  public:
     DoPartition(const ReferenceMap* refMap, const TypeMap* typeMap) :
             refMap(refMap), typeMap(typeMap)
@@ -24,7 +25,6 @@ class DoPartition : public Transform {
     const IR::Node* postorder(IR::IfStatement* statement) override;
     const IR::Node* preorder(IR::MethodCallStatement* statement) override;
     const IR::Node* postorder(IR::MethodCallStatement* statement) override;
-    // const IR::Node* postorder(IR::EmptyStatement* statement) override;
 };
 
 class Partition : public PassManager {

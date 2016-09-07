@@ -1,4 +1,4 @@
-#include "resource.h"
+#include "profile.h"
 
 namespace P4 {
 
@@ -28,8 +28,9 @@ bool DoResourceEstimation::preorder(const IR::P4Table* table) {
       }
     }
   }
-  // collect action_size, key_size, table_size, table_name
-  LOG1("table : " << table->name << " " << size_ << " " << width_bit << " " << table_type);
+  // pretty print to file
+  profgen->getTableProfiler().appendFormat("%d %d %s %s", size_, width_bit, table_type, table->name.toString());
+  profgen->getTableProfiler().newline();
 
   // reset temporary variables
   width_bit = 0;
@@ -56,9 +57,9 @@ bool DoResourceEstimation::preorder(const IR::Key* key) {
       if (e->matchType->is<IR::PathExpression>()) {
         auto type = e->matchType->to<IR::PathExpression>();
         if (type->path->name == "ternary") {
-          table_type = "ternary";
+          type_ = "ternary";
         } else if (type->path->name == "lpm") {
-          table_type = "lpm";
+          type_ = "lpm";
         }
       }
     }
