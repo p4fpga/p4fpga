@@ -101,7 +101,6 @@ class CFGBuilder : public Inspector {
         CHECK_NULL(statement);
         if (value == nullptr) {
             // This can happen when an error is signaled
-            LOG1("ERROR is signaled");
             return;
         }
         after.emplace(statement, value);
@@ -109,7 +108,6 @@ class CFGBuilder : public Inspector {
     }
 
     const CFG::EdgeSet* get(const IR::Statement* statement) {
-      LOG1("look up statement " << statement);
       return ::get(after, statement);
     }
     bool preorder(const IR::Statement* statement) override {
@@ -169,22 +167,17 @@ class CFGBuilder : public Inspector {
           node->addPredecessors(current);
         }
         // If branch
-        LOG1("if branch " << statement->ifTrue);
         current = new CFG::EdgeSet(new CFG::Edge(node, true));
         visit(statement->ifTrue);
         auto ifTrue = get(statement->ifTrue);
-        LOG1(ifTrue);
         if (ifTrue == nullptr)
             return false;
-        LOG1("ttt" << ifTrue);
         auto result = new CFG::EdgeSet(ifTrue);
 
         // Else branch
-        LOG1("else branch " << statement->ifFalse);
         if (statement->ifFalse != nullptr) {
             current = new CFG::EdgeSet(new CFG::Edge(node, false));
             visit(statement->ifFalse);
-            LOG1("else seeking ");
             auto ifFalse = get(statement->ifFalse);
             if (ifFalse != nullptr) {
               result->mergeWith(ifFalse);
@@ -194,24 +187,19 @@ class CFGBuilder : public Inspector {
             result->mergeWith(new CFG::EdgeSet(new CFG::Edge(node, false)));
         }
         setAfter(statement, result);
-        LOG1("IFFFFFF " << statement);
         return false;
     }
     bool preorder(const IR::BlockStatement* statement) override {
-        LOG1(">>>>>>>>>>>>>>>");
         for (auto s : *statement->components) {
             auto stat = s->to<IR::Statement>();
             if (stat == nullptr) continue;
             visit(stat);
             current = get(stat);
-            LOG1("current " << current);
         }
         setAfter(statement, current);
-        LOG1("<<<<<<<<<<<<<<<<");
         return false;
     }
     bool preorder(const IR::SwitchStatement* statement) override {
-        LOG1("<<--------------------");
         auto tc = P4::TableApplySolver::isActionRun(statement->expression, refMap, typeMap);
         BUG_CHECK(tc != nullptr, "%1%: unexpected switch statement expression",
                   statement->expression);
@@ -241,7 +229,6 @@ class CFGBuilder : public Inspector {
             }
         }
         setAfter(statement, result);
-        LOG1(">>--------------------");
         return false;
     }
 

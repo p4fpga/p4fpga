@@ -66,7 +66,7 @@ class FPGAControl : public FPGAObject {
 
     virtual ~FPGAControl() {}
     void emit(BSVProgram & bsv);
-    void emitTableRule(BSVProgram & bsv, const IR::P4Table* table);
+    void emitTableRule(BSVProgram & bsv, const CFG::TableNode* node);
     void emitCondRule(BSVProgram & bsv, const CFG::IfNode* node);
     void emitEntryRule(BSVProgram & bsv, const CFG::Node* node);
     void emitExitRule(BSVProgram & bsv, const CFG::Node* node);

@@ -187,10 +187,9 @@ bool FPGAControl::build() {
   const IR::P4Control* cont = controlBlock->container;
   LOG1("Processing " << cont);
   cfg = new CFG();
-  LOG1("before build");
   cfg->build(cont, program->refMap, program->typeMap);
-  LOG1("after build");
 
+  cfg->dbprint(std::cout);
   if (cfg->entryPoint->successors.size() == 0) {
     LOG1("init table null");
   } else {
@@ -263,10 +262,11 @@ void FPGAControl::emitEntryRule(BSVProgram & bsv, const CFG::Node* node) {
   append_line(bsv, "let pkt = _req.pkt;");
   append_line(bsv, "MetadataRequest req = MetadataRequest {pkt: pkt, meta: meta};");
   if (tables.size() == 0) {
-    append_line(bsv, "next_req_ff.enq(req);");
+    append_line(bsv, "exit_req_ff.enq(req);");
   } else {
-    auto t = tables[0]->container->to<IR::P4Table>();
-    append_format(bsv, "%s_req_ff.enq(req);", t->name.toString());
+    BUG_CHECK(node->successors.size() == 1, "Expected 1 start node for %1%", node);
+    auto start = (*(node->successors.edges.begin()))->endpoint;
+    append_format(bsv, "%s_req_ff.enq(req);", start->name);
   }
   decr_indent(bsv);
   append_line(bsv, "endrule");
@@ -275,12 +275,13 @@ void FPGAControl::emitEntryRule(BSVProgram & bsv, const CFG::Node* node) {
 void FPGAControl::emitExitRule(BSVProgram & bsv, const CFG::Node* node) {
   append_format(bsv, "rule rl_exit if (exit_req_ff.notEmpty);");
   incr_indent(bsv);
-
+  append_line(bsv, "exit_req_ff.deq");
   decr_indent(bsv);
   append_line(bsv, "endrule");
 }
 
-void FPGAControl::emitTableRule(BSVProgram & bsv, const IR::P4Table* table) {
+void FPGAControl::emitTableRule(BSVProgram & bsv, const CFG::TableNode* node) {
+  auto table = node->table->to<IR::P4Table>();
   auto name = table->name.toString();
   auto type = CamelCase(name);
   append_format(bsv, "rule rl_%s if (%s_rsp_ff.notEmpty);", name, name);
@@ -290,8 +291,23 @@ void FPGAControl::emitTableRule(BSVProgram & bsv, const IR::P4Table* table) {
   // find next states
   append_line(bsv, "let meta = _req.meta;");
   append_line(bsv, "let pkt = _req.pkt;");
-  append_format(bsv, "let %s = fromMaybe(?, meta.);", "xxx");
-  append_format(bsv, "tagged %s {}", "xxx");
+  append_line(bsv, "case (_rsp) matches");
+  incr_indent(bsv);
+  for (auto s : node->successors.edges) {
+    if (s->label == nullptr) {
+      append_line(bsv, "default:");
+      incr_indent(bsv);
+      append_line(bsv, "%s_req_ff.enq(req);", s->endpoint->name);
+      decr_indent(bsv);
+    } else {
+      append_line(bsv, "%s:", s->label);
+      incr_indent(bsv);
+      append_line(bsv, "%s_req_ff.enq(req);", s->endpoint->name);
+      decr_indent(bsv);
+    }
+  }
+  decr_indent(bsv);
+  append_line(bsv, "endcase");
   decr_indent(bsv);
   append_line(bsv, "endrule");
 }
@@ -410,12 +426,9 @@ void FPGAControl::emit(BSVProgram & bsv) {
     for (auto node : cfg->allNodes) {
       if (node->is<CFG::TableNode>()) {
         auto t = node->to<CFG::TableNode>();
-        emitTableRule(bsv, t->table);
+        emitTableRule(bsv, t);
       } else if (node->is<CFG::IfNode>()) {
         auto n = node->to<CFG::IfNode>();
-        //for (auto e : node->successors.edges) {
-        //  LOG1(n->statement << " " << e->getBool() << ":" << e->endpoint);
-        //}
         emitCondRule(bsv, n);
       }
     }
