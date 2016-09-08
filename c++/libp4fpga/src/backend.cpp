@@ -5,6 +5,7 @@
 
 #include "lib/error.h"
 #include "lib/nullstream.h"
+#include "lib/path.h"
 #include "frontends/p4/evaluator/evaluator.h"
 #include "frontends/p4/toP4/toP4.h"
 #include "fprogram.h"
@@ -50,38 +51,44 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
     boost::filesystem::path deparserFile("DeparserGenerated.bsv");
     boost::filesystem::path deparserPath = dir / deparserFile;
 
-    Graph graph;
-    fpgaprog.generateGraph(graph);
-
-    boost::filesystem::path graphFile("graph.dot");
-    boost::filesystem::path graphPath = dir / graphFile;
-
-    std::ofstream(graphPath.native()) << graph.getGraphBuilder().toString();
+    boost::filesystem::path controlFile("Control.bsv");
+    boost::filesystem::path controlPath = dir / controlFile;
 
     // ControlGenerated.bsv
     std::ofstream(parserPath.native())   <<  bsv.getParserBuilder().toString();
     std::ofstream(deparserPath.native()) <<  bsv.getDeparserBuilder().toString();
     std::ofstream(structPath.native())   <<  bsv.getStructBuilder().toString();
+    std::ofstream(controlPath.native())  <<  bsv.getControlBuilder().toString();
 }
 
-void run_partition_backend(const Options& options, const IR::P4Program* program, FPGA::Profiler* profgen, const cstring p4name) {
+void generate_metadata_profile(const IR::P4Program* program) {
+    // Graph graph;
+    // fpgaprog.generateGraph(graph);
+
+    // boost::filesystem::path graphFile("graph.dot");
+    // boost::filesystem::path graphPath = dir / graphFile;
+
+    // std::ofstream(graphPath.native()) << graph.getGraphBuilder().toString();
+}
+
+void generate_table_profile(const Options& options, FPGA::Profiler* profgen) {
     boost::filesystem::path dir(options.outputFile);
     boost::filesystem::create_directory(dir);
-
-    // output table resource utilization profile
     boost::filesystem::path profileFile("table.prof");
     boost::filesystem::path profilePath = dir / profileFile;
     std::ofstream(profilePath.native()) << profgen->getTableProfiler().toString();
+}
 
-    // output partitioned p4 program to files
-    boost::filesystem::path p4File(p4name);
+void generate_partition(const Options& options, const IR::P4Program* program, cstring idx) {
+    Util::PathName pathname(options.file);
+    auto filename = pathname.getBasename() + idx + cstring(".p4");
+    boost::filesystem::path dir(options.outputFile);
+    boost::filesystem::create_directory(dir);
+    boost::filesystem::path p4File(filename);
     boost::filesystem::path p4Path = dir / p4File;
     auto stream = openFile(p4Path.c_str(), true);
     P4::ToP4 toP4(stream, false, nullptr);
     program->apply(toP4);
-}
-
-void run_metadata_graph_backend(const IR::P4Program* program) {
 }
 
 }  // namespace FPGA

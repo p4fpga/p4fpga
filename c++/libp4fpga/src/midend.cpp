@@ -81,7 +81,7 @@ const IR::P4Program* MidEnd::run(Options& options, const IR::P4Program* program)
         new P4::LocalCopyPropagation(&refMap, &typeMap),
         new P4::MoveDeclarations(),  // more may have been introduced
         new P4::SimplifyControlFlow(&refMap, &typeMap),
-        evaluator,
+        // evaluator,
     };
     midEnd.setName("MidEnd");
     midEnd.addDebugHooks(hooks);

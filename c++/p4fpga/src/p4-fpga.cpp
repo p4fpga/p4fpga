@@ -20,72 +20,70 @@
 #include "frontends/p4/simplify.h"
 
 // generate bsv
-void compile(Options& options) {
+void compile(Options& options, const IR::P4Program* program) {
     auto hook = options.getDebugHook();
-    auto program = parseP4File(options);
-    if (::errorCount() > 0)
-        return;
+
     P4::FrontEnd frontend;
     frontend.addDebugHook(hook);
-    program = frontend.run(options, program);
+    auto pf = frontend.run(options, program);
     if (::errorCount() > 0)
-        return;
+        exit(1);
 
     FPGA::MidEnd midend;
     midend.addDebugHook(hook);
-    program = midend.run(options, program);
+    pf = midend.run(options, pf);
     if (::errorCount() > 0)
-        return;
+        exit(1);
 
+    // TODO: why do we need an evaluator pass?
     auto evaluator = new P4::EvaluatorPass(&midend.refMap, &midend.typeMap);
     PassManager backend = {
       evaluator
     };
-    program->apply(backend);
+    pf->apply(backend);
     auto toplevel = evaluator->getToplevelBlock();
 
     FPGA::run_fpga_backend(options, toplevel, &midend.refMap, &midend.typeMap);
 }
 
 // partition p4 control flow
-void partition(Options& options) {
+void partition(Options& options, const IR::P4Program* program) {
     auto hook = options.getDebugHook();
-    auto program = parseP4File(options);
-    if (::errorCount() > 0)
-        return;
     P4::FrontEnd frontend;
     frontend.addDebugHook(hook);
-    program = frontend.run(options, program);
+    auto pf = frontend.run(options, program);
     if (::errorCount() > 0)
-        return;
+        exit(1);
 
     FPGA::MidEnd midend;
     midend.addDebugHook(hook);
-    program = midend.run(options, program);
+    pf = midend.run(options, pf);
     if (::errorCount() > 0)
-        return;
+        exit(1);
 
+    // pass: collect table statistics
     auto profgen = new FPGA::Profiler();
     PassManager profile = {
       new P4::ResourceEstimation(&midend.refMap, &midend.typeMap, profgen),
     };
     profile.setName("Profile");
     profile.addDebugHook(hook);
-    program = program->apply(profile);
+    pf = pf->apply(profile);
+    FPGA::generate_table_profile(options, profgen);
 
+    // pass: partition tables
     int tbegin = 0;
     int tend = 0;
     for (auto np : options.partitions) {
       tend = std::stoi(np.c_str(), nullptr, 10);
       PassManager backend = {
         new P4::Partition(&midend.refMap, &midend.typeMap, tbegin, tend),
-        new P4::SimplifyControlFlow(&midend.refMap, &midend.typeMap)
+        new P4::SimplifyControlFlow(&midend.refMap, &midend.typeMap),
       };
       backend.setName("Partition");
       backend.addDebugHook(hook);
-      auto p = program->apply(backend);
-      auto name = cstring("processed_") + np + cstring(".p4");
-      FPGA::run_partition_backend(options, p, profgen, name);
+      auto p = pf->apply(backend);
+      FPGA::generate_partition(options, p, np);
       tbegin = tend;
     }
 }
@@ -100,9 +98,15 @@ int main(int argc, char *const argv[]) {
     if (::errorCount() > 0)
         exit(1);
 
-    // compile(options);
+    // NOTE: reason that we do parseP4File here is because
+    // parseP4File() cannot be called twice in current impl
+    auto program = parseP4File(options);
+    if (::errorCount() > 0)
+        exit(1);
 
-    partition(options);
+    compile(options, program);
+
+    partition(options, program);
 
     if (options.verbosity > 0)
         std::cerr << "Done." << std::endl;

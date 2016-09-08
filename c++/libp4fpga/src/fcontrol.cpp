@@ -17,7 +17,8 @@
 
 #include "fcontrol.h"
 #include "codegeninspector.h"
-#include "ir/ir.h"
+#include "string_utils.h"
+#include "frontends/p4/methodInstance.h"
 
 /*
  * info associated with a pipeline stage, such as Ingress or Egress
@@ -30,9 +31,11 @@
 
 #include "vector_utils.h"
 
+
 namespace FPGA {
 
-namespace {
+using namespace Control;
+
 class ControlTranslationVisitor : public CodeGenInspector {
 
  public:
@@ -67,7 +70,6 @@ bool ControlTranslationVisitor::preorder(const IR::Method* method) {
   LOG1("IR::Method: " << method);
   return false;
 }
-}  // namespace
 
 class TableTranslationVisitor : public Inspector {
  public:
@@ -114,13 +116,14 @@ bool TableTranslationVisitor::preorder(const IR::TableBlock* table) {
 
 class ActionTranslationVisitor : public Inspector {
  public:
-  ActionTranslationVisitor(FPGAControl* control, cstring name) : 
-    control(control), name(name) {}
+  ActionTranslationVisitor(FPGAControl* control, BSVProgram& bsv) : 
+    control(control), bsv_(bsv) {}
   bool preorder(const IR::AssignmentStatement* stmt) override;
   bool preorder(const IR::Expression* expression) override;
+  bool preorder(const IR::MethodCallExpression* expression) override;
  private:
   FPGAControl* control;
-  cstring name;
+  BSVProgram & bsv_;
 };
 
 bool ActionTranslationVisitor::preorder(const IR::AssignmentStatement* stmt) {
@@ -139,42 +142,67 @@ bool ActionTranslationVisitor::preorder(const IR::Expression* expression) {
     if (type->is<IR::Type_Struct>()) {
       auto t = type->to<IR::Type_StructLike>();
       auto f = t->getField(m->member);
-      control->metadata_to_action[f] = name;
     }
   }
   return false;
 }
 
-class PartitionVisitor : public Transform {
- public:
-  PartitionVisitor(FPGAControl* control) {}
-  const IR::Node* preorder(IR::IfStatement* ifstmt) override;
-  const IR::Node* preorder(IR::BlockStatement* block) override;
-};
+bool ActionTranslationVisitor::preorder(const IR::MethodCallExpression* expression) {
+  auto mi = P4::MethodInstance::resolve(expression,
+                                        control->program->refMap,
+                                        control->program->typeMap);
+  auto apply = mi->to<P4::ApplyMethod>();
+  if (apply != nullptr) {
+    LOG1("handle apply");
+    return false;
+  }
 
-const IR::Node* PartitionVisitor::preorder(IR::BlockStatement* block) {
-  return nullptr;
-}
+  auto ext = mi->to<P4::ExternMethod>();
+  if (ext != nullptr) {
+    LOG1("handle extern");
+    return false;
+  }
 
-const IR::Node* PartitionVisitor::preorder(IR::IfStatement* ifstmt) {
-  LOG1("remove ifstmt" << ifstmt);
-  return nullptr;
+  auto actioncall = mi->to<P4::ActionCall>();
+  if (actioncall != nullptr) {
+    LOG1("action call");
+    append_line(bsv_, expression->toString());
+    return false;
+  }
+
+  auto extFunc = mi->to<P4::ExternFunction>();
+  if (extFunc != nullptr) {
+    if (extFunc->method->name == "mark_to_drop") {
+      // drop packet
+      //append_line(bsv_, "drop");
+    }
+    return false;
+  }
+
+  LOG1(mi->methodType);
+  return false;
 }
 
 bool FPGAControl::build() {
-  LOG1("Build " << controlBlock->container->toString());
+  const IR::P4Control* cont = controlBlock->container;
+  LOG1("Processing " << cont);
+  cfg = new CFG();
+  LOG1("before build");
+  cfg->build(cont, program->refMap, program->typeMap);
+  LOG1("after build");
+
+  if (cfg->entryPoint->successors.size() == 0) {
+    LOG1("init table null");
+  } else {
+    BUG_CHECK(cfg->entryPoint->successors.size() == 1, "Expected 1 start node for %1%", cont);
+    auto start = (*(cfg->entryPoint->successors.edges.begin()))->endpoint;
+    LOG1(start);
+  }
+
   for (auto s : *controlBlock->container->getDeclarations()) {
     if (s->is<IR::P4Action>()) {
       auto act = s->to<IR::P4Action>();
-      // LOG1("declare: " << act->name);
-      // build map from metadata to table
-      auto stmt = act->body->to<IR::BlockStatement>();
-      if (stmt == nullptr) continue;
-
-      ActionTranslationVisitor visitor(this, act->name);
-      for (auto path : *stmt->components) {
-        path->apply(visitor);
-      }
+      basicBlock.push_back(act);
     }
   }
 
@@ -184,9 +212,10 @@ bool FPGAControl::build() {
     if (!b->is<IR::Block>()) continue;
     if (b->is<IR::TableBlock>()) {
       auto tblblk = b->to<IR::TableBlock>();
-      TableTranslationVisitor visitor(this);
-      tblblk->apply(visitor);
+      tables.push_back(tblblk);
       LOG1("table: " << tblblk);
+      // TableTranslationVisitor visitor(this);
+      // tblblk->apply(visitor);
     } else if (b->is<IR::ExternBlock>()) {
       auto ctrblk = b->to<IR::ExternBlock>();
       LOG1("extern " << ctrblk);
@@ -198,16 +227,7 @@ bool FPGAControl::build() {
   // control flow
   if (controlBlock->container->body->is<IR::BlockStatement>()) {
     auto stmt = controlBlock->container->body->to<IR::BlockStatement>();
-    PartitionVisitor visitor(this);
-    stmt->apply(visitor);
-
     LOG1("block statement size " << stmt->components->size());
-    //for (auto b : *stmt->components) {
-    //  if (b->is<IR::IfStatement>()) {
-    //    auto ifs = b->to<IR::IfStatement>();
-    //    LOG1(ifs->condition);
-    //  }
-    //}
   }
 
   for (auto n : metadata_to_action) {
@@ -225,67 +245,186 @@ bool FPGAControl::build() {
       }
     }
   }
-
   return true;
 }
 
 #define VECTOR_VISIT(V)                         \
-for (auto r : V) {                               \
-  ControlTranslationVisitor visitor(this, bsv);  \
+for (auto r : V) {                              \
+  ControlTranslationVisitor visitor(this, bsv); \
   r->apply(visitor);                            \
 }
 
+void FPGAControl::emitEntryRule(BSVProgram & bsv, const CFG::Node* node) {
+  append_format(bsv, "rule rl_entry if (entry_req_ff.notEmpty);");
+  incr_indent(bsv);
+  append_line(bsv, "entry_req_ff.deq;");
+  append_line(bsv, "let _req = entry_req_ff.first;");
+  append_line(bsv, "let meta = _req.meta;");
+  append_line(bsv, "let pkt = _req.pkt;");
+  append_line(bsv, "MetadataRequest req = MetadataRequest {pkt: pkt, meta: meta};");
+  if (tables.size() == 0) {
+    append_line(bsv, "next_req_ff.enq(req);");
+  } else {
+    auto t = tables[0]->container->to<IR::P4Table>();
+    append_format(bsv, "%s_req_ff.enq(req);", t->name.toString());
+  }
+  decr_indent(bsv);
+  append_line(bsv, "endrule");
+}
+
+void FPGAControl::emitExitRule(BSVProgram & bsv, const CFG::Node* node) {
+  append_format(bsv, "rule rl_exit if (exit_req_ff.notEmpty);");
+  incr_indent(bsv);
+
+  decr_indent(bsv);
+  append_line(bsv, "endrule");
+}
+
+void FPGAControl::emitTableRule(BSVProgram & bsv, const IR::P4Table* table) {
+  auto name = table->name.toString();
+  auto type = CamelCase(name);
+  append_format(bsv, "rule rl_%s if (%s_rsp_ff.notEmpty);", name, name);
+  incr_indent(bsv);
+  append_format(bsv, "%s_rsp_ff.deq;", name);
+  append_format(bsv, "let _rsp = %s_rsp_ff.first;", name);
+  // find next states
+  append_line(bsv, "let meta = _req.meta;");
+  append_line(bsv, "let pkt = _req.pkt;");
+  append_format(bsv, "let %s = fromMaybe(?, meta.);", "xxx");
+  append_format(bsv, "tagged %s {}", "xxx");
+  decr_indent(bsv);
+  append_line(bsv, "endrule");
+}
+
+void FPGAControl::emitCondRule(BSVProgram & bsv, const CFG::IfNode* node) {
+  auto sig = cstring("w_") + node->name;
+  LOG1(sig);
+  append_format(bsv, "rule rl_%s if (%s);", node->name, sig);
+  incr_indent(bsv);
+  auto stmt = node->statement->to<IR::IfStatement>();
+  LOG1(node << " succ " << node->successors);
+  LOG1(node << " pred " << node->predecessors);
+  if (stmt != nullptr) {
+    LOG1(stmt->condition);
+    append_line(bsv, "%s", stmt->condition);
+    if (stmt->ifTrue != nullptr) {
+      LOG1(stmt->ifTrue);
+    }
+    if (stmt->ifFalse != nullptr) {
+      LOG1(stmt->ifFalse);
+    }
+  }
+  decr_indent(bsv);
+  append_line(bsv, "endrule");
+}
+
+void FPGAControl::emitBasicBlocks(BSVProgram & bsv) {
+  for (auto b : basicBlock) {
+    // implementation for basic block
+    auto stmt = b->body->to<IR::BlockStatement>();
+    if (stmt == nullptr) continue;
+    ActionTranslationVisitor visitor(this, bsv);
+    for (auto path : *stmt->components) {
+      path->apply(visitor);
+    }
+  }
+}
+
+void FPGAControl::emitDeclaration(BSVProgram & bsv) {
+  // basic block instances
+  for (auto b : basicBlock) {
+    LOG1("basic block" << b);
+    auto name = b->name.toString();
+    auto type = CamelCase(name);
+    append_format(bsv, "%s %s <- mk%s();", type, name, type);
+  }
+  for (auto t : tables) {
+    auto table = t->container->to<IR::P4Table>();
+    if (table == nullptr)
+      continue;
+    auto name = table->name.toString();
+    auto type = CamelCase(name);
+    append_format(bsv, "%s %s <- mk%s();", type, name, type);
+  }
+}
+
+void FPGAControl::emitFifo(BSVProgram & bsv) {
+  append_line(bsv, "FIFOF#(MetadataRequest) entry_req_ff <- mkFIFOF;");
+  append_line(bsv, "FIFOF#(MetadataResponse) entry_rsp_ff <- mkFIFOF;");
+  for (auto t : tables) {
+    auto table = t->container->to<IR::P4Table>();
+    auto name = table->name.toString();
+    auto type = CamelCase(name);
+    append_line(bsv, "FIFOF#(MetadataRequest) %s_req_ff <- mkFIFOF;", name);
+    append_line(bsv, "FIFOF#(%sResponse) %s_rsp_ff <- mkFIFOF;", type, name);
+  }
+  append_line(bsv, "FIFOF#(MetadataRequest) exit_req_ff <- mkFIFOF;");
+  append_line(bsv, "FIFOF#(MetadataResponse) exit_rsp_ff <- mkFIFOF;");
+}
+
+void FPGAControl::emitConnection(BSVProgram & bsv) {
+  // table to fifo
+  for (auto t : tables) {
+    auto table = t->container->to<IR::P4Table>();
+    auto name = table->name.toString();
+    auto type = CamelCase(name);
+    append_format(bsv, "mkConnection(toClient(%s_req_ff, %s_rsp_ff), %s.prev_control_state);", name, name, name);
+  }
+  // table to action
+}
+
+void FPGAControl::emitDebugPrint(BSVProgram & bsv) {
+  append_line(bsv, "Reg#(int) cf_verbosity <- mkConfigRegU;");
+  append_line(bsv, "function Action dbprint(Integer level, Fmt msg);");
+  incr_indent(bsv);
+  append_line(bsv, "action");
+  append_line(bsv, "if (cf_verbosity > fromInteger(level)) begin");
+  incr_indent(bsv);
+  append_line(bsv, "$display(\"(%%0d) \" , $time, msg);");
+  decr_indent(bsv);
+  append_line(bsv, "end");
+  append_line(bsv, "endaction");
+  decr_indent(bsv);
+  append_line(bsv, "endfunction");
+}
+
+// control block module
 void FPGAControl::emit(BSVProgram & bsv) {
-  if (controlBlock->container->body != nullptr) {
-    auto cbody = controlBlock->container->body;
-    VECTOR_VISIT(*cbody->components);
-  }
-}
-#undef VECTOR_VISIT
+  auto cbname = controlBlock->container->name.toString();
+  auto cbtype = CamelCase(cbname);
+  // TODO: synthesize boundary
+  append_line(bsv, "module mk%s #(Vector#(numClients, Client#(MetadataRequest, MetadataResponse)) mdc) (%s);", cbtype, cbtype);
+  incr_indent(bsv);
+  emitBasicBlocks(bsv);
+  emitDebugPrint(bsv);
+  emitDeclaration(bsv);
+  emitFifo(bsv);
+  append_line(bsv, "Vector#(numClients, Server#(MetadataRequest, MetadataResponse)) mds = replicate(toServer(default_req_ff, default_rsp_ff));");
+  append_line(bsv, "mkConnection(mds, mdc);");
+  emitConnection(bsv);
 
-// table as vertex, metadata as edge
-void FPGAControl::plot_v_table_e_meta(Graph & graph) {
-  Dot::append_line(graph, "graph g {");
-  Dot::append_line(graph, "concentrate=true;");
-  Dot::incr_indent(graph);
-  for (auto n : adj_list) {
-    for (auto m : n.second) {
-      Dot::append_format(graph, "%s -- %s [ label = \"%s\"];", n.first->name.toString(), m.second->name.toString(), m.first);
-      //Dot::append_format(graph, "%s -- %s;", n.first->name.toString(), m.second->name.toString());
+  if (cfg != nullptr) {
+    if (cfg->entryPoint != nullptr) {
+      emitEntryRule(bsv, cfg->entryPoint);
     }
-  }
-  Dot::decr_indent(graph);
-  Dot::append_line(graph, "}");
-}
-
-// metadata as vertex, table as edge
-void FPGAControl::plot_v_meta_e_table(Graph & graph) {
-  std::map<const IR::StructField*, int> weight;
-  int metadata_total_width = 0;
-  Dot::append_line(graph, "graph g {");
-  Dot::append_line(graph, "concentrate=true;");
-  Dot::incr_indent(graph);
-  for (auto n : metadata_to_table) {
-    if (n.first->type->is<IR::Type_Bits>()) {
-      auto width = n.first->type->to<IR::Type_Bits>()->size;
-      // LOG1(n.first << " " << width);
-      metadata_total_width += width;
-    }
-    for (auto m : metadata_to_table) {
-      if (m == n) continue;
-      for (auto t : n.second) {
-        std::set<const IR::P4Table*>::iterator it;
-        it = m.second.find(t);
-        if (it != m.second.end()) {
-          //Dot::append_format(graph, "%s -- %s [ label = \"%s\"];", n.first->name.toString(), m.first->name.toString(), t->name.toString());
-          weight[n.first]++;
-        }
+    for (auto node : cfg->allNodes) {
+      if (node->is<CFG::TableNode>()) {
+        auto t = node->to<CFG::TableNode>();
+        emitTableRule(bsv, t->table);
+      } else if (node->is<CFG::IfNode>()) {
+        auto n = node->to<CFG::IfNode>();
+        //for (auto e : node->successors.edges) {
+        //  LOG1(n->statement << " " << e->getBool() << ":" << e->endpoint);
+        //}
+        emitCondRule(bsv, n);
       }
     }
+    if (cfg->exitPoint != nullptr) {
+      emitExitRule(bsv, cfg->exitPoint);
+    }
   }
-  LOG1("Total metadata width " << metadata_total_width);
-  Dot::decr_indent(graph);
-  Dot::append_line(graph, "}");
+  decr_indent(bsv);
+  append_line(bsv, "endmodule");
 }
-
+#undef VECTOR_VISIT
 }  // namespace FPGA

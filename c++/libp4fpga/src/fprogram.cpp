@@ -75,11 +75,11 @@ void FPGAProgram::emit(BSVProgram & bsv) {
   // TODO: emit main.bsv
 }
 
-void FPGAProgram::generateGraph(Graph & graph) {
-  ingress->plot_v_table_e_meta(graph);
-  egress->plot_v_table_e_meta(graph);
-  ingress->plot_v_meta_e_table(graph);
-  egress->plot_v_meta_e_table(graph);
-}
+//void FPGAProgram::generateGraph(Graph & graph) {
+//  ingress->plot_v_table_e_meta(graph);
+//  egress->plot_v_table_e_meta(graph);
+//  ingress->plot_v_meta_e_table(graph);
+//  egress->plot_v_meta_e_table(graph);
+//}
 
 }  // namespace FPGA

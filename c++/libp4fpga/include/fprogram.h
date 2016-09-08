@@ -61,7 +61,7 @@ class FPGAProgram : public FPGAObject {
 
     // write program as bluespec source code
     void emit(BSVProgram & bsv) override;
-    void generateGraph(Graph & graph);
+    // void generateGraph(Graph & graph);
     bool build();  // return 'true' on success
 
     FPGAProgram(const IR::P4Program* program, P4::ReferenceMap* refMap,

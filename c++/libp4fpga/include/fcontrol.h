@@ -4,10 +4,11 @@
 
 #include "ir/ir.h"
 #include "fprogram.h"
+#include "analyzer.h"
 
 namespace FPGA {
 
-namespace Dot {
+namespace Control {
 inline static std::string format_string(boost::format& message) {
   return message.str();
 }
@@ -19,39 +20,42 @@ template <typename TValue, typename... TArgs>
 }
 
 template <typename... TArgs>
-  void append_format(Graph & graph, const char* fmt, TArgs&&... args) {
-  graph.getGraphBuilder().emitIndent();
+  void append_format(BSVProgram & bsv, const char* fmt, TArgs&&... args) {
+  bsv.getControlBuilder().emitIndent();
   boost::format msg(fmt);
   std::string s = format_string(msg, std::forward<TArgs>(args)...);
-  graph.getGraphBuilder().appendFormat(s.c_str());
-  graph.getGraphBuilder().newline();
+  bsv.getControlBuilder().appendFormat(s.c_str());
+  bsv.getControlBuilder().newline();
 }
 
 template <typename... TArgs>
-  void append_line(Graph & graph, const char* fmt, TArgs&&... args) {
-    graph.getGraphBuilder().emitIndent();
+  void append_line(BSVProgram & bsv, const char* fmt, TArgs&&... args) {
+    bsv.getControlBuilder().emitIndent();
     boost::format msg(fmt);
     std::string s = format_string(msg, std::forward<TArgs>(args)...);
-    graph.getGraphBuilder().appendLine(s.c_str());
+    bsv.getControlBuilder().appendLine(s.c_str());
   }
 
-inline void incr_indent(Graph & graph) {
-  graph.getGraphBuilder().increaseIndent();
+inline void incr_indent(BSVProgram & bsv) {
+  bsv.getControlBuilder().increaseIndent();
 }
 
-inline void decr_indent(Graph & graph) {
-  graph.getGraphBuilder().decreaseIndent();
+inline void decr_indent(BSVProgram & bsv) {
+  bsv.getControlBuilder().decreaseIndent();
 }
 
-}  // namespace Graph
-
+}  // namespace Control
 
 class FPGAControl : public FPGAObject {
  public:
     const FPGAProgram*            program;
     const IR::ControlBlock*       controlBlock;
+    FPGA::CFG*                    cfg;
 
-    std::map<cstring, IR::P4Action*>   actions;
+    std::vector<const IR::P4Action*>    basicBlock;
+    std::vector<const IR::TableBlock*>  tables;
+    std::vector<const IR::ExternBlock*> externs;
+
     std::map<const IR::StructField*, std::set<const IR::P4Table*>> metadata_to_table;
     std::map<const IR::StructField*, cstring> metadata_to_action;
     std::map<cstring, const IR::P4Table*> action_to_table;
@@ -62,10 +66,15 @@ class FPGAControl : public FPGAObject {
 
     virtual ~FPGAControl() {}
     void emit(BSVProgram & bsv);
-    void plot_v_table_e_meta(Graph & graph);
-    void plot_v_meta_e_table(Graph & graph);
-    // void emitDeclaration(const IR::Declaration* decl, CodeBuilder *builder);
-    // void emitTables(CodeBuilder* builder);
+    void emitTableRule(BSVProgram & bsv, const IR::P4Table* table);
+    void emitCondRule(BSVProgram & bsv, const CFG::IfNode* node);
+    void emitEntryRule(BSVProgram & bsv, const CFG::Node* node);
+    void emitExitRule(BSVProgram & bsv, const CFG::Node* node);
+    void emitBasicBlocks(BSVProgram & bsv);
+    void emitDeclaration(BSVProgram & bsv);
+    void emitConnection(BSVProgram & bsv);
+    void emitDebugPrint(BSVProgram & bsv);
+    void emitFifo(BSVProgram & bsv);
     bool build();
 };
 

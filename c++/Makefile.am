@@ -9,6 +9,8 @@ p4fpga_CPPFLAGS = -I$(srcdir)/extensions/c++/libp4fpga/include
 
 p4fpga_SOURCES = \
 	extensions/c++/p4fpga/src/p4-fpga.cpp \
+	extensions/c++/libp4fpga/include/analyzer.h \
+	extensions/c++/libp4fpga/src/analyzer.cpp \
 	extensions/c++/libp4fpga/include/backend.h \
 	extensions/c++/libp4fpga/src/backend.cpp \
 	extensions/c++/libp4fpga/include/codebuilder.h \
@@ -33,7 +35,9 @@ p4fpga_SOURCES = \
 	extensions/c++/libp4fpga/include/partition.h \
 	extensions/c++/libp4fpga/src/partition.cpp \
 	extensions/c++/libp4fpga/include/profile.h \
-	extensions/c++/libp4fpga/src/profile.cpp
+	extensions/c++/libp4fpga/src/profile.cpp \
+	extensions/c++/libp4fpga/include/metadata-analysis.h \
+	extensions/c++/libp4fpga/src/metadata-analysis.cpp
 
 cpplint_FILES += $(p4fpga_SOURCES)
 

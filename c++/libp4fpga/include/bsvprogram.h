@@ -13,6 +13,7 @@ class BSVProgram {
   CodeBuilder& getStructBuilder() { return structBuilder_; }
   CodeBuilder& getUnionBuilder()  { return unionBuilder_; }
   CodeBuilder& getStateBuilder()  { return stateBuilder_; }
+  CodeBuilder& getControlBuilder() { return controlBuilder_; }
 
  private:
   CodeBuilder parserBuilder_;
@@ -21,14 +22,7 @@ class BSVProgram {
   CodeBuilder structBuilder_;
   CodeBuilder unionBuilder_;
   CodeBuilder stateBuilder_;
-};
-
-class Graph {
- public:
-  Graph() { }
-  CodeBuilder& getGraphBuilder() { return graphBuilder_; }
- private:
-  CodeBuilder graphBuilder_;
+  CodeBuilder controlBuilder_;
 };
 
 class Profiler {
