@@ -40,12 +40,20 @@ bool StructCodeGen::preorder(const IR::Type_Header* type) {
   auto name = hdr->name.toString();
   auto header_type = CamelCase(name);
   append_format(bsv, "} %s deriving (Bits, Eq);", header_type);
-  append_format(bsv, "function %s extract_%s(Bit#(%d) data)", header_type, name, header_width);
+  append_format(bsv, "function %s extract_%s(Bit#(%d) data);", header_type, name, header_width);
   incr_indent(bsv);
   append_line(bsv, "return unpack(byteSwap(data));");
   decr_indent(bsv);
   append_line(bsv, "endfunction");
   return false;
 }
+
+// TODO need to generate MetadataT
+
+// bool StructCodeGen::preorder(const IR::TableBlock* table) {
+//
+// }
+// collect all metadata used by table..
+// collect all header and assign HeaderState
 
 }  // namespace FPGA

@@ -116,8 +116,8 @@ bool ParserBuilder::preorder(const IR::MethodCallExpression* expression) {
     if (ext_count[state] == 0) {
       ext_count[state] += 1;
     } else {
-      ::warning("More than one 'extract' method");
-      //BUG("ERROR: More than one 'extract' method in %s. TODO", state);
+      //::warning("More than one 'extract' method");
+      BUG("ERROR: More than one 'extract' method in %s. TODO", state);
     }
     // implementing one-argument variant of 'extract' method
     for (auto h: MakeZipRange(*expression->typeArguments, *expression->arguments)) {
@@ -133,12 +133,12 @@ bool ParserBuilder::preorder(const IR::MethodCallExpression* expression) {
         auto name = instName->to<IR::Member>()->member;
         // keep track of current header
         header = name;
-
         if (header_type->is<IR::Type_StructLike>()) {
-          auto header = header_type->to<IR::Type_StructLike>();
+          auto hh = header_type->to<IR::Type_StructLike>();
+          auto tn = typeName->to<IR::Type_Name>();
           // create parse state
           // leave fields related to next state selection empty
-          auto s = new IR::BSV::ParseState(name, header->fields, header_width, nullptr, nullptr);
+          auto s = new IR::BSV::ParseState(name, hh->fields, header_width, tn, nullptr, nullptr);
           parser->states.push_back(s);
           smap[name] = s;
         }
@@ -249,6 +249,9 @@ void FPGAParser::emitFunctions(BSVProgram & bsv) {
     decr_indent(bsv);
     append_line(bsv, "endfunction");
   }
+
+  append_line(bsv, "let initState = State%s;", CamelCase(states[0]->name.toString()));
+
   append_line(bsv, "`endif");
 }
 
@@ -271,6 +274,7 @@ void FPGAParser::emitRules(BSVProgram & bsv) {
   append_line(bsv, "`ifdef PARSER_RULES");
   for (auto s : states) {
     auto name = s->name.toString();
+    auto type = s->type->toString();
     // Rule: load data
     append_format(bsv, "rule rl_%s_load if ((parse_state_ff.first == State%s) && rg_buffered[0] < %d);", name, CamelCase(name), s->width_bits);
     incr_indent(bsv);
@@ -298,7 +302,8 @@ void FPGAParser::emitRules(BSVProgram & bsv) {
     decr_indent(bsv);
     append_line(bsv, "end");
     append_line(bsv, "report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);");
-    append_line(bsv, "let %s = extract_%s(truncate(data));", name, name);
+    append_line(bsv, "let %s = extract_%s(truncate(data));", name, type);
+    //TODO:
     append_line(bsv, "compute_next_state_%s();", name);
     append_format(bsv, "rg_tmp[0] <= zeroExtend(data >> %d);", s->width_bits);
     append_format(bsv, "succeed_and_next(%d);", 0);
