@@ -14,6 +14,7 @@ class BSVProgram {
   CodeBuilder& getUnionBuilder()  { return unionBuilder_; }
   CodeBuilder& getStateBuilder()  { return stateBuilder_; }
   CodeBuilder& getControlBuilder() { return controlBuilder_; }
+  CodeBuilder& getTableBuilder() { return tableBuilder_; }
 
  private:
   CodeBuilder parserBuilder_;
@@ -23,6 +24,7 @@ class BSVProgram {
   CodeBuilder unionBuilder_;
   CodeBuilder stateBuilder_;
   CodeBuilder controlBuilder_;
+  CodeBuilder tableBuilder_;
 };
 
 class Profiler {

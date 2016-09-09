@@ -59,7 +59,8 @@ bitgen: codegen
 	make build.nfsume
 
 clean:
-	rm *.yml *.json
+	rm -r generatedbsv
+	rm -r generatedcpp
 ###########################################
 # Default Rules
 ###########################################

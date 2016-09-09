@@ -37,7 +37,11 @@ p4fpga_SOURCES = \
 	extensions/c++/libp4fpga/include/profile.h \
 	extensions/c++/libp4fpga/src/profile.cpp \
 	extensions/c++/libp4fpga/include/metadata-analysis.h \
-	extensions/c++/libp4fpga/src/metadata-analysis.cpp
+	extensions/c++/libp4fpga/src/metadata-analysis.cpp \
+	extensions/c++/libp4fpga/include/table.h \
+	extensions/c++/libp4fpga/src/table.cpp \
+	extensions/c++/libp4fpga/include/action.h \
+	extensions/c++/libp4fpga/src/action.cpp
 
 cpplint_FILES += $(p4fpga_SOURCES)
 

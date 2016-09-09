@@ -72,7 +72,6 @@ void FPGAProgram::emit(BSVProgram & bsv) {
   ingress->emit(bsv);
   egress->emit(bsv);
   deparser->emit(bsv);
-  // TODO: emit main.bsv
 }
 
 //void FPGAProgram::generateGraph(Graph & graph) {

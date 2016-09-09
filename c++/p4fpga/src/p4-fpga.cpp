@@ -106,7 +106,7 @@ int main(int argc, char *const argv[]) {
 
     compile(options, program);
 
-    partition(options, program);
+    // partition(options, program);
 
     if (options.verbosity > 0)
         std::cerr << "Done." << std::endl;

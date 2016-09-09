@@ -16,172 +16,15 @@
 */
 
 #include "fcontrol.h"
+#include "table.h"
+#include "action.h"
 #include "codegeninspector.h"
 #include "string_utils.h"
-#include "frontends/p4/methodInstance.h"
-
-/*
- * info associated with a pipeline stage, such as Ingress or Egress
- * - table/control flow nodes
- * - action engines
- *
- * parent: FPGAProgram, stored as individual members
- *
- */
-
 #include "vector_utils.h"
-
 
 namespace FPGA {
 
 using namespace Control;
-
-class ControlTranslationVisitor : public CodeGenInspector {
-
- public:
-  ControlTranslationVisitor(const FPGAControl* control, BSVProgram& bsv) :
-    CodeGenInspector(bsv, control->program->typeMap), bsv_(bsv) {}
-
-    std::vector<cstring> saveAction;
-
-    using CodeGenInspector::preorder;
-    bool preorder(const IR::MethodCallStatement* stat) override
-    { saveAction.push_back(nullptr); visit(stat->methodCall); saveAction.pop_back(); return false; }
-    bool preorder(const IR::MethodCallExpression* expression) override;
-    bool preorder(const IR::Method* method) override;
- private:
-  BSVProgram & bsv_;
-};
-
-bool ControlTranslationVisitor::preorder(const IR::MethodCallExpression* expression) {
-  LOG1("Context " << getContext()->parent);
-  LOG1("CodeGen: " << expression);
-  LOG1("IR::MethodCallExpression: " << expression->method);
-  for (auto s: *expression->typeArguments) {
-    LOG1("ArgType: " << s);
-  }
-  for (auto s : *expression->arguments) {
-    LOG1("Arg: " << s);
-  }
-  return false;
-}
-
-bool ControlTranslationVisitor::preorder(const IR::Method* method) {
-  LOG1("IR::Method: " << method);
-  return false;
-}
-
-class TableTranslationVisitor : public Inspector {
- public:
-  TableTranslationVisitor(FPGAControl* control) :
-    control(control) {}
-  bool preorder(const IR::TableBlock* table) override;
- private:
-  FPGAControl* control;
-};
-
-bool TableTranslationVisitor::preorder(const IR::TableBlock* table) {
-  // LOG1("Table " << table);
-  for (auto act : *table->container->getActionList()->actionList) {
-    auto element = act->to<IR::ActionListElement>();
-    if (element->expression->is<IR::PathExpression>()) {
-      //LOG1("Path " << element->expression->to<IR::PathExpression>());
-    } else if (element->expression->is<IR::MethodCallExpression>()) {
-      auto expression = element->expression->to<IR::MethodCallExpression>();
-      auto type = control->program->typeMap->getType(expression->method, true);
-      auto action = expression->method->toString();
-      control->action_to_table[action] = table->container;
-    }
-  }
-
-  // visit keys
-  auto keys = table->container->getKey();
-  if (keys == nullptr) return false;
-
-  for (auto key : *keys->keyElements) {
-    auto element = key->to<IR::KeyElement>();
-    if (element->expression->is<IR::Member>()) {
-      auto m = element->expression->to<IR::Member>();
-      auto type = control->program->typeMap->getType(m->expr, true);
-      if (type->is<IR::Type_Struct>()) {
-        auto t = type->to<IR::Type_StructLike>();
-        //LOG1("header meta " << t->getField(m->member) << " " << table);
-        auto f = t->getField(m->member);
-        control->metadata_to_table[f].insert(table->container);
-      }
-    }
-  }
-  return false;
-}
-
-class ActionTranslationVisitor : public Inspector {
- public:
-  ActionTranslationVisitor(FPGAControl* control, BSVProgram& bsv) : 
-    control(control), bsv_(bsv) {}
-  bool preorder(const IR::AssignmentStatement* stmt) override;
-  bool preorder(const IR::Expression* expression) override;
-  bool preorder(const IR::MethodCallExpression* expression) override;
- private:
-  FPGAControl* control;
-  BSVProgram & bsv_;
-};
-
-bool ActionTranslationVisitor::preorder(const IR::AssignmentStatement* stmt) {
-  //LOG1("assignment " << stmt->left << stmt->right);
-  visit(stmt->left);
-  //FIXME: only take care of metadata write
-  // visit(stmt->right);
-  return false;
-}
-
-bool ActionTranslationVisitor::preorder(const IR::Expression* expression) {
-  // accessing part of metadata struct, thus member type
-  if (expression->is<IR::Member>()) {
-    auto m = expression->to<IR::Member>();
-    auto type = control->program->typeMap->getType(m->expr, true);
-    if (type->is<IR::Type_Struct>()) {
-      auto t = type->to<IR::Type_StructLike>();
-      auto f = t->getField(m->member);
-    }
-  }
-  return false;
-}
-
-bool ActionTranslationVisitor::preorder(const IR::MethodCallExpression* expression) {
-  auto mi = P4::MethodInstance::resolve(expression,
-                                        control->program->refMap,
-                                        control->program->typeMap);
-  auto apply = mi->to<P4::ApplyMethod>();
-  if (apply != nullptr) {
-    LOG1("handle apply");
-    return false;
-  }
-
-  auto ext = mi->to<P4::ExternMethod>();
-  if (ext != nullptr) {
-    LOG1("handle extern");
-    return false;
-  }
-
-  auto actioncall = mi->to<P4::ActionCall>();
-  if (actioncall != nullptr) {
-    LOG1("action call");
-    append_line(bsv_, expression->toString());
-    return false;
-  }
-
-  auto extFunc = mi->to<P4::ExternFunction>();
-  if (extFunc != nullptr) {
-    if (extFunc->method->name == "mark_to_drop") {
-      // drop packet
-      //append_line(bsv_, "drop");
-    }
-    return false;
-  }
-
-  LOG1(mi->methodType);
-  return false;
-}
 
 bool FPGAControl::build() {
   const IR::P4Control* cont = controlBlock->container;
@@ -212,9 +55,6 @@ bool FPGAControl::build() {
     if (b->is<IR::TableBlock>()) {
       auto tblblk = b->to<IR::TableBlock>();
       tables.push_back(tblblk);
-      LOG1("table: " << tblblk);
-      // TableTranslationVisitor visitor(this);
-      // tblblk->apply(visitor);
     } else if (b->is<IR::ExternBlock>()) {
       auto ctrblk = b->to<IR::ExternBlock>();
       LOG1("extern " << ctrblk);
@@ -245,12 +85,6 @@ bool FPGAControl::build() {
     }
   }
   return true;
-}
-
-#define VECTOR_VISIT(V)                         \
-for (auto r : V) {                              \
-  ControlTranslationVisitor visitor(this, bsv); \
-  r->apply(visitor);                            \
 }
 
 void FPGAControl::emitEntryRule(BSVProgram & bsv, const CFG::Node* node) {
@@ -334,18 +168,6 @@ void FPGAControl::emitCondRule(BSVProgram & bsv, const CFG::IfNode* node) {
   append_line(bsv, "endrule");
 }
 
-void FPGAControl::emitBasicBlocks(BSVProgram & bsv) {
-  for (auto b : basicBlock) {
-    // implementation for basic block
-    auto stmt = b->body->to<IR::BlockStatement>();
-    if (stmt == nullptr) continue;
-    ActionTranslationVisitor visitor(this, bsv);
-    for (auto path : *stmt->components) {
-      path->apply(visitor);
-    }
-  }
-}
-
 void FPGAControl::emitDeclaration(BSVProgram & bsv) {
   // basic block instances
   for (auto b : basicBlock) {
@@ -404,14 +226,37 @@ void FPGAControl::emitDebugPrint(BSVProgram & bsv) {
   append_line(bsv, "endfunction");
 }
 
+void FPGAControl::emitTables(BSVProgram & bsv) {
+  for (auto t : tables) {
+    LOG1("emit Tables");
+    TableCodeGen visitor(this, bsv);
+    t->apply(visitor);
+  }
+}
+
+void FPGAControl::emitActions(BSVProgram & bsv) {
+  for (auto b : basicBlock) {
+    ActionCodeGen visitor(this, bsv);
+    b->apply(visitor);
+    auto stmt = b->body->to<IR::BlockStatement>();
+    if (stmt == nullptr) continue;
+    //for (auto path : *stmt->components) {
+    //  path->apply(visitor);
+    //}
+  }
+}
+
 // control block module
 void FPGAControl::emit(BSVProgram & bsv) {
   auto cbname = controlBlock->container->name.toString();
   auto cbtype = CamelCase(cbname);
+
+  emitTables(bsv);
+  emitActions(bsv);
+
   // TODO: synthesize boundary
   append_line(bsv, "module mk%s #(Vector#(numClients, Client#(MetadataRequest, MetadataResponse)) mdc) (%s);", cbtype, cbtype);
   incr_indent(bsv);
-  emitBasicBlocks(bsv);
   emitDebugPrint(bsv);
   emitDeclaration(bsv);
   emitFifo(bsv);
@@ -439,5 +284,5 @@ void FPGAControl::emit(BSVProgram & bsv) {
   decr_indent(bsv);
   append_line(bsv, "endmodule");
 }
-#undef VECTOR_VISIT
+
 }  // namespace FPGA

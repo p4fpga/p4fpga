@@ -54,11 +54,14 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
     boost::filesystem::path controlFile("Control.bsv");
     boost::filesystem::path controlPath = dir / controlFile;
 
-    // ControlGenerated.bsv
+    boost::filesystem::path tableFile("Table.bsv");
+    boost::filesystem::path tablePath = dir / tableFile;
+
     std::ofstream(parserPath.native())   <<  bsv.getParserBuilder().toString();
     std::ofstream(deparserPath.native()) <<  bsv.getDeparserBuilder().toString();
     std::ofstream(structPath.native())   <<  bsv.getStructBuilder().toString();
     std::ofstream(controlPath.native())  <<  bsv.getControlBuilder().toString();
+    std::ofstream(tablePath.native())    <<  bsv.getTableBuilder().toString();
 }
 
 void generate_metadata_profile(const IR::P4Program* program) {
