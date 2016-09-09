@@ -98,9 +98,9 @@ bool DeparserRuleVisitor::preorder(const IR::BSV::DeparseState* state) {
   auto name = hdr->name.name;
 
   // Rule: next deparse state
-  append_format(bsv_, "rule rl_deparse_%s_next if (w_%s)", name, name);
+  append_format(bsv_, "rule rl_deparse_%s_next if (w_%s);", name, name);
   incr_indent(bsv_);
-  append_format(bsv_, "deparse_state_ff.enq(StateDeparse%s)", CamelCase(name));
+  append_format(bsv_, "deparse_state_ff.enq(StateDeparse%s);", CamelCase(name));
   append_format(bsv_, "fetch_next_header(%d);", width);
   decr_indent(bsv_);
   append_line(bsv_, "endrule");
@@ -224,7 +224,7 @@ void FPGADeparser::emitStates(BSVProgram & bsv) {
   incr_indent(bsv);
   append_line(bsv, "let nextHeader = pack(countZerosLSB(vec));");
   append_line(bsv, "DeparserState nextState = unpack(nextHeader);");
-  append_line(bsv, "case (nextState) begin");
+  append_line(bsv, "case (nextState) matches");
   incr_indent(bsv);
   for (int i = 0; i < states.size(); i++) {
     auto name = states.at(i)->name.name;

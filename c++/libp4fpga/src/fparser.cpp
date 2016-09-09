@@ -304,7 +304,6 @@ void FPGAParser::emitRules(BSVProgram & bsv) {
     append_line(bsv, "report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);");
     append_line(bsv, "let %s = extract_%s(truncate(data));", name, type);
     //TODO: handle more than one key
-    LOG1("keys " << s->keys);
     auto params = cstring("");
     if (s->keys != nullptr) {
       auto lk = s->keys->to<IR::ListExpression>();
@@ -313,7 +312,6 @@ void FPGAParser::emitRules(BSVProgram & bsv) {
           auto field = key->to<IR::Member>();
           auto header = field->expr->to<IR::Member>();
           // NOTE: what if header has a nested struture, i.e. header inside header?
-          LOG1(header->member << field->member);
           params += header->member.toString() + "." + field->member.toString();
         }
       }
@@ -332,12 +330,32 @@ void FPGAParser::emitRules(BSVProgram & bsv) {
   append_line(bsv, "`endif");
 }
 
+void FPGAParser::emitStateElements(BSVProgram & bsv) {
+  append_line(bsv, "`ifdef PARSER_STATE");
+  // pulsewire to communicate between different parse states
+  for (auto state : states) {
+    if (state->cases == nullptr) continue;
+    auto name = state->name.toString();
+    for (auto c : *state->cases) {
+      append_line(bsv, "PulseWire w_%s_%s <- mkPulseWire;", name, c->state->toString());
+    }
+  }
+  // dfifo to output parsed header
+  for (auto state : states) {
+    auto name = state->name.toString();
+    auto type = CamelCase(state->type->toString());
+    append_line(bsv, "FIFOF#(Maybe#(%s)) %s_out_ff <- mkDFIFOF(tagged Invalid);", type, name);
+  }
+  append_line(bsv, "`endif");
+}
+
 // emit BSV_IR with BSV-specific CodeGenInspector
 void FPGAParser::emit(BSVProgram & bsv) {
   emitEnums(bsv);
   emitStructs(bsv);
   emitFunctions(bsv);
   emitRules(bsv);
+  emitStateElements(bsv);
 }
 
 // build IR::BSV from mid-end IR
