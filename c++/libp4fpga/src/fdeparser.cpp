@@ -145,7 +145,7 @@ class DeparserStateVisitor : public Inspector {
 bool DeparserStateVisitor::preorder(const IR::BSV::DeparseState* state) {
   auto hdr = state->to<IR::Type_Header>();
   auto name = hdr->name.name;
-  append_format(bsv_, "PulseWire w_deparse_%s <- mkPulseWire();", name);
+  append_format(bsv_, "PulseWire w_%s <- mkPulseWire();", name);
   return false;
 }
 
@@ -162,6 +162,7 @@ void FPGADeparser::emitEnums(BSVProgram & bsv) {
   append_line(bsv, "`ifdef DEPARSER_STRUCT");
   append_line(bsv, "typedef enum {");
   incr_indent(bsv);
+  append_line(bsv, "StateDeparseStart");
   for (auto r : states) {
     auto name = r->name.name;
     if (r != states.back()) {
@@ -197,12 +198,15 @@ void FPGADeparser::emitStates(BSVProgram & bsv) {
 
   // Function: next_parse_state
   auto len = states.size();
-  append_format(bsv, "function Bit#(%d) nextDeparseState(MetadataT metadata);", len);
+  // bit0 is by default 0.
+  auto lenp1 = len + 1;
+  append_format(bsv, "function Bit#(%d) nextDeparseState(MetadataT metadata);", lenp1);
   incr_indent(bsv);
-  append_format(bsv, "Vector#(%d, Bool) headerValid;", len);
+  append_format(bsv, "Vector#(%d, Bool) headerValid;", lenp1);
+  append_line(bsv, "headerValid[0] = False;");
   for (int i = 0; i < states.size(); i++) {
     auto name = states.at(i)->name.name;
-    append_format(bsv, "headerValid[%d] = metadata.%s matches tagged Forward ? True : False;", i, name);
+    append_format(bsv, "headerValid[%d] = metadata.%s matches tagged Forward ? True : False;", i+1, name);
   }
   append_line(bsv, "let vec = pack(headerValid);");
   append_line(bsv, "return vec;");
@@ -228,7 +232,7 @@ void FPGADeparser::emitStates(BSVProgram & bsv) {
   incr_indent(bsv);
   for (int i = 0; i < states.size(); i++) {
     auto name = states.at(i)->name.name;
-    append_format(bsv, "StateDeparse%s: w_deparse_%s.send();", CamelCase(name), name);
+    append_format(bsv, "StateDeparse%s: w_%s.send();", CamelCase(name), name);
   }
   append_line(bsv, "default: $display(\"ERROR: unknown states.\");");
   decr_indent(bsv);

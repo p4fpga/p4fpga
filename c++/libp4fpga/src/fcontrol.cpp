@@ -44,7 +44,8 @@ bool FPGAControl::build() {
   for (auto s : *controlBlock->container->getDeclarations()) {
     if (s->is<IR::P4Action>()) {
       auto act = s->to<IR::P4Action>();
-      basicBlock.push_back(act);
+      auto name = act->name.toString();
+      basicBlock.emplace(name, act);
     }
   }
 
@@ -54,7 +55,9 @@ bool FPGAControl::build() {
     if (!b->is<IR::Block>()) continue;
     if (b->is<IR::TableBlock>()) {
       auto tblblk = b->to<IR::TableBlock>();
-      tables.push_back(tblblk);
+      auto p4tbl = tblblk->container;
+      auto name = p4tbl->name.toString();
+      tables.emplace(name, p4tbl);
     } else if (b->is<IR::ExternBlock>()) {
       auto ctrblk = b->to<IR::ExternBlock>();
       LOG1("extern " << ctrblk);
@@ -171,13 +174,13 @@ void FPGAControl::emitCondRule(BSVProgram & bsv, const CFG::IfNode* node) {
 void FPGAControl::emitDeclaration(BSVProgram & bsv) {
   // basic block instances
   for (auto b : basicBlock) {
-    LOG1("basic block" << b);
-    auto name = b->name.toString();
+    LOG1("basic block" << b.second);
+    auto name = b.second->name.toString();
     auto type = CamelCase(name);
     append_format(bsv, "%s %s <- mk%s();", type, name, type);
   }
   for (auto t : tables) {
-    auto table = t->container->to<IR::P4Table>();
+    auto table = t.second->to<IR::P4Table>();
     if (table == nullptr)
       continue;
     auto name = table->name.toString();
@@ -190,7 +193,7 @@ void FPGAControl::emitFifo(BSVProgram & bsv) {
   append_line(bsv, "FIFOF#(MetadataRequest) entry_req_ff <- mkFIFOF;");
   append_line(bsv, "FIFOF#(MetadataResponse) entry_rsp_ff <- mkFIFOF;");
   for (auto t : tables) {
-    auto table = t->container->to<IR::P4Table>();
+    auto table = t.second->to<IR::P4Table>();
     auto name = table->name.toString();
     auto type = CamelCase(name);
     append_line(bsv, "FIFOF#(MetadataRequest) %s_req_ff <- mkFIFOF;", name);
@@ -203,7 +206,7 @@ void FPGAControl::emitFifo(BSVProgram & bsv) {
 void FPGAControl::emitConnection(BSVProgram & bsv) {
   // table to fifo
   for (auto t : tables) {
-    auto table = t->container->to<IR::P4Table>();
+    auto table = t.second->to<IR::P4Table>();
     auto name = table->name.toString();
     auto type = CamelCase(name);
     append_format(bsv, "mkConnection(toClient(%s_req_ff, %s_rsp_ff), %s.prev_control_state);", name, name, name);
@@ -230,15 +233,15 @@ void FPGAControl::emitTables(BSVProgram & bsv) {
   for (auto t : tables) {
     LOG1("emit Tables");
     TableCodeGen visitor(this, bsv);
-    t->apply(visitor);
+    t.second->apply(visitor);
   }
 }
 
 void FPGAControl::emitActions(BSVProgram & bsv) {
   for (auto b : basicBlock) {
     ActionCodeGen visitor(this, bsv);
-    b->apply(visitor);
-    auto stmt = b->body->to<IR::BlockStatement>();
+    b.second->apply(visitor);
+    auto stmt = b.second->body->to<IR::BlockStatement>();
     if (stmt == nullptr) continue;
     //for (auto path : *stmt->components) {
     //  path->apply(visitor);
@@ -255,6 +258,8 @@ void FPGAControl::emit(BSVProgram & bsv) {
   emitActions(bsv);
 
   // TODO: synthesize boundary
+  append_format(bsv, "// =============== control %s ==============", cbname);
+
   append_line(bsv, "module mk%s #(Vector#(numClients, Client#(MetadataRequest, MetadataResponse)) mdc) (%s);", cbtype, cbtype);
   incr_indent(bsv);
   emitDebugPrint(bsv);

@@ -68,9 +68,12 @@ class FPGAControl : public FPGAObject {
     const IR::ControlBlock*       controlBlock;
     FPGA::CFG*                    cfg;
 
-    std::vector<const IR::P4Action*>    basicBlock;
-    std::vector<const IR::TableBlock*>  tables;
-    std::vector<const IR::ExternBlock*> externs;
+    // map from action name to P4Action
+    std::map<cstring, const IR::P4Action*>    basicBlock;
+    // map from table name to TableBlock
+    std::map<cstring, const IR::P4Table*>  tables;
+    // map from extern name to ExternBlock
+    std::map<cstring, const IR::ExternBlock*> externs;
 
     std::map<const IR::StructField*, std::set<const IR::P4Table*>> metadata_to_table;
     std::map<const IR::StructField*, cstring> metadata_to_action;

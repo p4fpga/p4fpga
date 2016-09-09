@@ -20,18 +20,25 @@
 
 #include "ir/ir.h"
 #include "fcontrol.h"
+#include "lib/ordered_map.h"
 
 namespace FPGA {
 
+// per table code generator
 class TableCodeGen : public Inspector {
  public:
   TableCodeGen(FPGAControl* control, BSVProgram & bsv) :
     control(control), bsv(bsv) {}
-  bool preorder(const IR::TableBlock* table) override;
-  void emit(const IR::TableBlock* table);
+  bool preorder(const IR::P4Table* table) override;
  private:
   FPGAControl* control;
   BSVProgram & bsv;
+  int key_width = 0;
+  std::vector<std::pair<const IR::StructField*, int>> key_vec;
+  std::vector<cstring> action_vec;
+  cstring defaultActionName;
+  void emit(const IR::P4Table* table);
+  void emitTypedefs(const IR::P4Table* table);
 };
 
 }  // namespace FPGA

@@ -31,6 +31,9 @@ cstring SnakeCase(const cstring& source);
 /// https://en.wikipedia.org/wiki/CamelCase
 cstring CamelCase(const cstring& source);
 
+/// Return `source` as ASTRINGINUPPERCASE.
+cstring UpperCase(const cstring& source);
+
 // join a vector of elements by a delimiter object.  ostream<< must be defined
 // for both class S and T and an ostream, as it is e.g. in the case of strings
 // and character arrays

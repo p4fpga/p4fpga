@@ -120,6 +120,7 @@ void ActionCodeGen::postorder(const IR::P4Action* action) {
     return;
   }
 
+  append_format(bsv, "// =============== action %s ==============", name);
   // drop action, mark_to_drop;
 
   // generate instruction for cpu;
