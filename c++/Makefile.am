@@ -1,7 +1,7 @@
 
 bin_PROGRAMS += p4fpga
 
-p4fpga_LDFLAGS = -lboost_system -lboost_filesystem-mt
+p4fpga_LDFLAGS = -lboost_system -lboost_filesystem#-mt
 
 p4fpga_LDADD = libfrontend.a libp4ctoolkit.a 
 
@@ -22,6 +22,8 @@ p4fpga_SOURCES = \
 	extensions/c++/libp4fpga/src/ftype.cpp \
 	extensions/c++/libp4fpga/include/fparser.h \
 	extensions/c++/libp4fpga/src/fparser.cpp \
+	extensions/c++/libp4fpga/include/fstruct.h \
+	extensions/c++/libp4fpga/src/fstruct.cpp \
 	extensions/c++/libp4fpga/src/fdeparser.cpp \
 	extensions/c++/libp4fpga/include/fcontrol.h \
 	extensions/c++/libp4fpga/src/fcontrol.cpp \

@@ -15,6 +15,7 @@
 */
 
 #include "fparser.h"
+#include "fstruct.h"
 #include <algorithm>
 #include "ir/ir.h"
 #include "codegeninspector.h"
@@ -152,36 +153,6 @@ bool ParserBuilder::preorder(const IR::MethodCallExpression* expression) {
   return false;
 }
 
-class ParserStateVisitor : public Inspector {
- public:
-  ParserStateVisitor(const FPGAParser* parser, BSVProgram& bsv) :
-    bsv_(bsv) {}
-  bool preorder(const IR::Type_Header* header) override;
- private:
-  BSVProgram & bsv_;
-};
-
-bool ParserStateVisitor::preorder(const IR::Type_Header* type) {
-  auto hdr = type->to<IR::Type_Header>();
-  bsv_.getStructBuilder().append("typedef struct {");
-  bsv_.getStructBuilder().newline();
-  bsv_.getStructBuilder().increaseIndent();
-  for (auto f : *hdr->fields) {
-    if (f->type->is<IR::Type_Bits>()) {
-      auto width = f->type->to<IR::Type_Bits>()->size;
-      auto name = f->name;
-      bsv_.getStructBuilder().emitIndent();
-      bsv_.getStructBuilder().appendFormat("Bit#(%d) %s;", width, name.toString());
-      bsv_.getStructBuilder().newline();
-    }
-  }
-  bsv_.getStructBuilder().decreaseIndent();
-  auto name = hdr->name;
-  bsv_.getStructBuilder().appendFormat("} %s deriving (Bits, Eq);", CamelCase(name.toString()));
-  bsv_.getStructBuilder().newline();
-  return false;
-}
-
 FPGAParser::FPGAParser(const FPGAProgram* program,
                        const IR::ParserBlock* block,
                        const P4::TypeMap* typeMap,
@@ -200,12 +171,12 @@ void FPGAParser::emitEnums(BSVProgram & bsv) {
   for (auto f : *htype->to<IR::Type_Struct>()->fields) {
     auto ftype = typeMap->getType(f);
     if (ftype->is<IR::Type_Header>()) {
-      ParserStateVisitor visitor(this, bsv);
+      StructCodeGen visitor(bsv);
       ftype->apply(visitor);
     } else if (ftype->is<IR::Type_Stack>()) {
       auto hstack = ftype->to<IR::Type_Stack>();
       auto header = hstack->elementType->to<IR::Type_Header>();
-      ParserStateVisitor visitor(this, bsv);
+      StructCodeGen visitor(bsv);
       header->apply(visitor);
     }
   }
@@ -283,10 +254,13 @@ void FPGAParser::emitFunctions(BSVProgram & bsv) {
 
 void FPGAParser::emitStructs(BSVProgram & bsv) {
   append_line(bsv, "`ifdef PARSER_STRUCT");
-  append_line(bsv, "typedef struct {");
+  append_line(bsv, "typedef enum {");
   incr_indent(bsv);
   for (auto s : states) {
-    append_format(bsv, "State%s;", CamelCase(s->name));
+    if (s == states.back())
+      append_format(bsv, "State%s", CamelCase(s->name));
+    else
+      append_format(bsv, "State%s,", CamelCase(s->name));
   }
   decr_indent(bsv);
   append_line(bsv, "} ParserState deriving (Bits, Eq);");
@@ -294,6 +268,7 @@ void FPGAParser::emitStructs(BSVProgram & bsv) {
 }
 
 void FPGAParser::emitRules(BSVProgram & bsv) {
+  append_line(bsv, "`ifdef PARSER_RULES");
   for (auto s : states) {
     auto name = s->name.toString();
     // Rule: load data
@@ -328,26 +303,15 @@ void FPGAParser::emitRules(BSVProgram & bsv) {
     append_format(bsv, "rg_tmp[0] <= zeroExtend(data >> %d);", s->width_bits);
     append_format(bsv, "succeed_and_next(%d);", 0);
     append_line(bsv, "parse_state_ff.deq;");
-    append_format(bsv, "%s_out_ff.enq(tagged Valid %s)", name, name);
+    append_format(bsv, "%s_out_ff.enq(tagged Valid %s);", name, name);
     decr_indent(bsv);
     append_line(bsv, "endrule");
     append_line(bsv, "");
 
     // Rule: transition rules
-
   }
+  append_line(bsv, "`endif");
 }
-
-#define VECTOR_VISIT(V)                         \
-for (auto r : V) {                               \
-  ParserStateVisitor visitor(this, bsv);  \
-  r->apply(visitor);                            \
-}
-
-void FPGAParser::emitStates(BSVProgram & bsv) {
-  VECTOR_VISIT(rules);
-}
-#undef VECTOR_VISIT
 
 // emit BSV_IR with BSV-specific CodeGenInspector
 void FPGAParser::emit(BSVProgram & bsv) {
