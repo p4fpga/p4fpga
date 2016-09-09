@@ -303,8 +303,22 @@ void FPGAParser::emitRules(BSVProgram & bsv) {
     append_line(bsv, "end");
     append_line(bsv, "report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);");
     append_line(bsv, "let %s = extract_%s(truncate(data));", name, type);
-    //TODO:
-    append_line(bsv, "compute_next_state_%s();", name);
+    //TODO: handle more than one key
+    LOG1("keys " << s->keys);
+    auto params = cstring("");
+    if (s->keys != nullptr) {
+      auto lk = s->keys->to<IR::ListExpression>();
+      if (lk != nullptr) {
+        for (auto key : *lk->components) {
+          auto field = key->to<IR::Member>();
+          auto header = field->expr->to<IR::Member>();
+          // NOTE: what if header has a nested struture, i.e. header inside header?
+          LOG1(header->member << field->member);
+          params += header->member.toString() + "." + field->member.toString();
+        }
+      }
+    }
+    append_line(bsv, "compute_next_state_%s(%s);", name, params);
     append_format(bsv, "rg_tmp[0] <= zeroExtend(data >> %d);", s->width_bits);
     append_format(bsv, "succeed_and_next(%d);", 0);
     append_line(bsv, "parse_state_ff.deq;");
