@@ -28,6 +28,43 @@ namespace FPGA {
 
 using namespace Control;
 
+class ExpressionConverter : public Inspector {
+ public:
+  cstring bsv = "";
+  explicit ExpressionConverter () {}
+  bool preorder(const IR::MethodCallExpression* expr){
+    auto m = expr->method->to<IR::Member>();
+    if (m->member == "isValid") {
+      bsv += cstring("isValid(") + m->expr->toString() + cstring(")");
+    }
+    return false;
+  }
+  bool preorder(const IR::Grt* expr) {
+    bsv += cstring("(");
+    visit(expr->left);
+    bsv += cstring(" > ");
+    visit(expr->right);
+    bsv += cstring(")");
+    return false;
+  }
+  bool preorder(const IR::LAnd* expr) {
+    bsv += cstring("(");
+    visit(expr->left);
+    bsv += cstring(" && ");
+    visit(expr->right);
+    bsv += cstring(")");
+    return false;
+  }
+  bool preorder(const IR::Constant* cst) {
+    bsv += cstring(cst->toString());
+    return false;
+  }
+  bool preorder(const IR::Member* expr) {
+    bsv += expr->toString();
+    return false;
+  }
+};
+
 bool FPGAControl::build() {
   const IR::P4Control* cont = controlBlock->container;
   LOG1("Processing " << cont);
@@ -46,9 +83,9 @@ bool FPGAControl::build() {
   // build map <cstring, IR::P4Action*>
   for (auto s : *controlBlock->container->getDeclarations()) {
     if (s->is<IR::P4Action>()) {
-      auto act = s->to<IR::P4Action>();
-      auto name = act->name.toString();
-      basicBlock.emplace(name, act);
+      auto action = s->to<IR::P4Action>();
+      auto name = nameFromAnnotation(action->annotations, action->name);
+      basicBlock.emplace(name, action);
     }
   }
 
@@ -59,9 +96,9 @@ bool FPGAControl::build() {
     if (!b->is<IR::Block>()) continue;
     if (b->is<IR::TableBlock>()) {
       auto tblblk = b->to<IR::TableBlock>();
-      auto p4tbl = tblblk->container;
-      auto name = p4tbl->name.toString();
-      tables.emplace(name, p4tbl);
+      auto table = tblblk->container;
+      auto name = nameFromAnnotation(table->annotations, table->name);
+      tables.emplace(name, table);
     } else if (b->is<IR::ExternBlock>()) {
       auto ctrblk = b->to<IR::ExternBlock>();
       LOG1("extern " << ctrblk);
@@ -117,7 +154,7 @@ void FPGAControl::emitExitRule(BSVProgram & bsv, const CFG::Node* node) {
 
 void FPGAControl::emitTableRule(BSVProgram & bsv, const CFG::TableNode* node) {
   auto table = node->table->to<IR::P4Table>();
-  auto name = table->name.toString();
+  auto name = nameFromAnnotation(table->annotations, table->name);
   auto type = CamelCase(name);
   append_format(bsv, "rule rl_%s if (%s_rsp_ff.notEmpty);", name, name);
   incr_indent(bsv);
@@ -153,19 +190,24 @@ void FPGAControl::emitCondRule(BSVProgram & bsv, const CFG::IfNode* node) {
   append_format(bsv, "rule rl_%s if (%s);", node->name, sig);
   incr_indent(bsv);
   auto stmt = node->statement->to<IR::IfStatement>();
-  LOG1(node << " succ " << node->successors.edges);
+  // LOG1(node << " succ " << node->successors.edges);
   append_format(bsv, "%s_req_ff.deq;", name);
   append_format(bsv, "let _req = %s_req_ff.first;", name);
   for (auto e : node->successors.edges) {
     if (e->isBool()) {
       if (e->getBool()) {
-        // TODO: expression converter
-        append_format(bsv, "if (%s) {", stmt->condition);
-        append_format(bsv, "%s.enq(_req);", e->getNode()->name);
+        ExpressionConverter visitor;
+        stmt->condition->apply(visitor);
+        append_format(bsv, "if (%s) {", visitor.bsv);
+        incr_indent(bsv);
+        append_format(bsv, "%s_req_ff.enq(_req);", e->getNode()->name);
+        decr_indent(bsv);
         append_line(bsv, "}");
       } else {
         append_line(bsv, "else {");
-        append_format(bsv, "%s.enq(_req);", e->getNode()->name);
+        incr_indent(bsv);
+        append_format(bsv, "%s_req_ff.enq(_req);", e->getNode()->name);
+        decr_indent(bsv);
         append_line(bsv, "}");
       }
     }
@@ -186,7 +228,7 @@ void FPGAControl::emitDeclaration(BSVProgram & bsv) {
     auto table = t.second->to<IR::P4Table>();
     if (table == nullptr)
       continue;
-    auto name = table->name.toString();
+    auto name = nameFromAnnotation(table->annotations, table->name);
     auto type = CamelCase(name);
     append_format(bsv, "%s %s <- mk%s();", type, name, type);
   }
@@ -197,7 +239,7 @@ void FPGAControl::emitFifo(BSVProgram & bsv) {
   append_line(bsv, "FIFOF#(MetadataResponse) entry_rsp_ff <- mkFIFOF;");
   for (auto t : tables) {
     auto table = t.second->to<IR::P4Table>();
-    auto name = table->name.toString();
+    auto name = nameFromAnnotation(table->annotations, table->name);
     auto type = CamelCase(name);
     append_line(bsv, "FIFOF#(MetadataRequest) %s_req_ff <- mkFIFOF;", name);
     append_line(bsv, "FIFOF#(%sResponse) %s_rsp_ff <- mkFIFOF;", type, name);
@@ -210,7 +252,7 @@ void FPGAControl::emitConnection(BSVProgram & bsv) {
   // table to fifo
   for (auto t : tables) {
     auto table = t.second->to<IR::P4Table>();
-    auto name = table->name.toString();
+    auto name = nameFromAnnotation(table->annotations, table->name);
     auto type = CamelCase(name);
     append_format(bsv, "mkConnection(toClient(%s_req_ff, %s_rsp_ff), %s.prev_control_state);", name, name, name);
 

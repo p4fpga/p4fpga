@@ -144,6 +144,7 @@ class CFGBuilder : public Inspector {
             return false;
         }
         auto tc = am->object->to<IR::P4Table>();
+        LOG1("table << " << tc);
         auto node = cfg->makeNode(tc, statement->methodCall);
         if (current != nullptr) {
           node->addPredecessors(current);
@@ -159,6 +160,7 @@ class CFGBuilder : public Inspector {
         CFG::Node* node;
         if (tc != nullptr) {
             // hit-miss case.
+            LOG1("if << " << tc);
             node = cfg->makeNode(tc, statement->condition);
         } else {
             node = cfg->makeNode(statement);
@@ -192,7 +194,10 @@ class CFGBuilder : public Inspector {
     }
     bool preorder(const IR::BlockStatement* statement) override {
         for (auto s : *statement->components) {
-            if (s->is<IR::AssignmentStatement>()) continue; // ignore PathExpression
+            // NOTE: ignore AssignmentStatement, insert it to 'after' map will
+            // break cfg.
+            if (s->is<IR::AssignmentStatement>())
+              continue;
             auto stat = s->to<IR::Statement>();
             if (stat == nullptr) continue;
             visit(stat);
@@ -205,6 +210,7 @@ class CFGBuilder : public Inspector {
         auto tc = P4::TableApplySolver::isActionRun(statement->expression, refMap, typeMap);
         BUG_CHECK(tc != nullptr, "%1%: unexpected switch statement expression",
                   statement->expression);
+        LOG1("switch << " << tc);
         auto node = cfg->makeNode(tc, statement->expression);
         if (current != nullptr) {
           node->addPredecessors(current);
@@ -251,8 +257,8 @@ class CFGBuilder : public Inspector {
 void CFG::build(const IR::P4Control* cc,
                 const P4::ReferenceMap* refMap, const P4::TypeMap* typeMap) {
     container = cc;
-    entryPoint = makeNode(cc->name + ".entry");
-    exitPoint = makeNode(cc->name + ".exit");
+    entryPoint = makeNode("entry");
+    exitPoint = makeNode("exit");
 
     CFGBuilder builder(this, refMap, typeMap);
     auto startValue = new CFG::EdgeSet(new CFG::Edge(entryPoint));

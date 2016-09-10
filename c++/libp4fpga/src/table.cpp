@@ -36,7 +36,7 @@ using namespace Control;
 
 void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
   // generate request typedef
-  auto name = table->name.toString();
+  auto name = nameFromAnnotation(table->annotations, table->name);
   auto type = CamelCase(name);
   append_line(bsv, "typedef struct {");
   incr_indent(bsv);
@@ -122,7 +122,7 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
 }
 
 void TableCodeGen::emitSimulation(const IR::P4Table* table) {
-  auto name = table->name.toString();
+  auto name = nameFromAnnotation(table->annotations, table->name);
   auto id = table->declid;
   append_line(bsv, "`ifndef SVDPI");
   append_format(bsv, "import \"BDPI\" function ActionValue#(Bit#(%d)) matchtable_read_%s(Bit#(%d) msgtype);", key_width, name, action_size);
@@ -152,7 +152,7 @@ void TableCodeGen::emitSimulation(const IR::P4Table* table) {
 }
 
 void TableCodeGen::emitRuleHandleRequest(const IR::P4Table* table) {
-  auto name = table->name.toString();
+  auto name = nameFromAnnotation(table->annotations, table->name);
   auto type = CamelCase(name);
   // handle table request
   append_line(bsv, "Vector#(2, FIFOF#(MetadataT)) metadata_ff <- replicateM(mkFIFOF);");
@@ -182,7 +182,7 @@ void TableCodeGen::emitRuleHandleRequest(const IR::P4Table* table) {
 }
 
 void TableCodeGen::emitRuleHandleExecution(const IR::P4Table* table) {
-  auto name = table->name.toString();
+  auto name = nameFromAnnotation(table->annotations, table->name);
   auto type = CamelCase(name);
   // handle action execution
   append_line(bsv, "rule rl_execute;");
@@ -236,7 +236,7 @@ void TableCodeGen::emitRuleHandleExecution(const IR::P4Table* table) {
 }
 
 void TableCodeGen::emitRuleHandleResponse(const IR::P4Table *table) {
-  auto name = table->name.toString();
+  auto name = nameFromAnnotation(table->annotations, table->name);
   auto type = CamelCase(name);
   auto actionList = table->getActionList()->actionList;
   // handle table response
@@ -300,7 +300,7 @@ void TableCodeGen::emitRspFifoMux(const IR::P4Table *table) {
 }
 
 void TableCodeGen::emit(const IR::P4Table* table) {
-  auto name = table->name.toString();
+  auto name = nameFromAnnotation(table->annotations, table->name);
   auto type = CamelCase(name);
   auto actionList = table->getActionList()->actionList;
   auto nActions = actionList->size();
