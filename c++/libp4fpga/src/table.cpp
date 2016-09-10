@@ -42,9 +42,9 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
   incr_indent(bsv);
   if ((key_width % 9) != 0) {
     auto pad = 9 - (key_width % 9);
-    append_line(bsv, "`ifndef SIMULATION");
+    //append_line(bsv, "`ifndef SIMULATION");
     append_line(bsv, "Bit#(%d) padding;", pad);
-    append_line(bsv, "`endif");
+    //append_line(bsv, "`endif");
   }
   for (auto k : key_vec) {
     auto f = k.first;
@@ -117,6 +117,7 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
       ::warning("unhandled action type", action);
     }
   }
+  action_size += ceil(log2(actionList->size()));
   decr_indent(bsv);
   append_line(bsv, "} %sRspT deriving (Bits, Eq, FShow);", type);
 }
@@ -124,14 +125,18 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
 void TableCodeGen::emitSimulation(const IR::P4Table* table) {
   auto name = nameFromAnnotation(table->annotations, table->name);
   auto id = table->declid;
+  auto remainder = key_width % 9;
+  if (remainder != 0) {
+    key_width = key_width + 9 - remainder;
+  }
   append_line(bsv, "`ifndef SVDPI");
   append_format(bsv, "import \"BDPI\" function ActionValue#(Bit#(%d)) matchtable_read_%s(Bit#(%d) msgtype);", action_size, name, key_width);
   append_format(bsv, "import \"BDPI\" function Action matchtable_write_%s(Bit#(%d) msgtype, Bit#(%d) data);", name, key_width, action_size);
   append_line(bsv, "`endif");
 
-  append_line(bsv, "instance MatchTableSim#(32, %d, %d);", key_width, action_size);
+  append_line(bsv, "instance MatchTableSim#(%d, %d, %d);", table->declid, key_width, action_size);
   incr_indent(bsv);
-  append_format(bsv, "function ActionValue#(Bit#(%d)) matchtable_read(Bit#(32) id, Bit#(%d) key);", action_size, key_width);
+  append_format(bsv, "function ActionValue#(Bit#(%d)) matchtable_read(%d, Bit#(%d) key);", table->declid, action_size, key_width);
   append_line(bsv, "actionvalue");
   incr_indent(bsv);
   append_format(bsv, "let v <- matchtable_read_%s(key);", name);
@@ -140,7 +145,7 @@ void TableCodeGen::emitSimulation(const IR::P4Table* table) {
   append_line(bsv, "endactionvalue");
   append_line(bsv, "endfunction");
 
-  append_format(bsv, "function Action matchtable_write(Bit#(32) id, Bit#(%d) key, Bit#(%d) data);", key_width, action_size);
+  append_format(bsv, "function Action matchtable_write(%d, Bit#(%d) key, Bit#(%d) data);", table->declid, key_width, action_size);
   append_line(bsv, "action");
   incr_indent(bsv);
   append_format(bsv, "matchtable_write_%s(key, data);", name);
@@ -175,7 +180,7 @@ void TableCodeGen::emitRuleHandleRequest(const IR::P4Table* table) {
   }
   append_format(bsv, "%sReqT req = %sReqT{%s};", type, type, fields);
   append_line(bsv, "matchTable.lookupPort.request.put(pack(req));");
-  append_line(bsv, "packet_ff.enq(pkt);");
+  append_line(bsv, "packet_ff[0].enq(pkt);");
   append_line(bsv, "metadata_ff[0].enq(meta);");
   decr_indent(bsv);
   append_line(bsv, "endrule");
@@ -188,8 +193,8 @@ void TableCodeGen::emitRuleHandleExecution(const IR::P4Table* table) {
   append_line(bsv, "rule rl_execute;");
   incr_indent(bsv);
   append_line(bsv, "let rsp <- matchTable.lookupPort.response.get;");
-  append_line(bsv, "let pkt <- toGet(packet_ff).get;");
-  append_line(bsv, "let meta <- toGet(meta_ff[0]).get;");
+  append_line(bsv, "let pkt <- toGet(packet_ff[0]).get;");
+  append_line(bsv, "let meta <- toGet(metadata_ff[0]).get;");
   append_line(bsv, "if (rsp matches tagged Valid .data) begin");
   incr_indent(bsv);
   append_format(bsv, "%sRspT resp = unpack(data);", type);
@@ -228,6 +233,7 @@ void TableCodeGen::emitRuleHandleExecution(const IR::P4Table* table) {
   }
   decr_indent(bsv);
   append_line(bsv, "endcase");
+  append_line(bsv, "packet_ff[1].enq(pkt);");
   append_line(bsv, "metadata_ff[1].enq(meta);");
   decr_indent(bsv);
   append_line(bsv, "end");
@@ -243,6 +249,7 @@ void TableCodeGen::emitRuleHandleResponse(const IR::P4Table *table) {
   append_line(bsv, "rule rl_handle_response;");
   incr_indent(bsv);
   append_line(bsv, "let v <- toGet(bbRspFifo[readyChannel]).get;");
+  append_line(bsv, "let pkt <- toGet(packet_ff[1]).get;");
   append_line(bsv, "let meta <- toGet(metadata_ff[1]).get;");
   append_line(bsv, "case (v) matches");
   incr_indent(bsv);
@@ -306,6 +313,16 @@ void TableCodeGen::emit(const IR::P4Table* table) {
   auto type = CamelCase(name);
   auto actionList = table->getActionList()->actionList;
   auto nActions = actionList->size();
+
+  append_line(bsv, "(* synthesize *)");
+  append_format(bsv, "module mkMatchTable_256_%s(MatchTable#(%d, 256, SizeOf#(%sReqT), SizeOf#(%sRspT)));", type, table->declid, type, type);
+  incr_indent(bsv);
+  append_line(bsv, "(* hide *)");
+  append_format(bsv, "MatchTable#(%d, 256, SizeOf#(%sReqT), SizeOf#(%sRspT)) ifc <- mkMatchTable(\"%s\");", table->declid, type, type, name);
+  append_line(bsv, "return ifc;");
+  decr_indent(bsv);
+  append_line(bsv, "endmodule");
+
   append_format(bsv, "// =============== table %s ==============", name);
   append_line(bsv, "interface %s;", type);
   incr_indent(bsv);
@@ -331,13 +348,13 @@ void TableCodeGen::emit(const IR::P4Table* table) {
 
   append_format(bsv, "Vector#(%d, FIFOF#(%sActionReq)) bbReqFifo <- replicateM(mkFIFOF);", nActions, type);
   append_format(bsv, "Vector#(%d, FIFOF#(%sActionRsp)) bbRspFifo <- replicateM(mkFIFOF);", nActions, type);
-  append_line(bsv, "FIFOF#(PacketInstance) packet_ff <- mkFIFOF;");
+  append_line(bsv, "Vector#(2, FIFOF#(PacketInstance)) packet_ff <- replicateM(mkFIFOF);");
+  append_line(bsv, "MatchTable#(%d, 256, SizeOf#(%sReqT), SizeOf#(%sRspT)) matchTable <- mkMatchTable_256_%s;", table->declid, type, type, type);
 
   emitRspFifoMux(table);
   emitRuleHandleRequest(table);
   emitRuleHandleExecution(table);
   emitRuleHandleResponse(table);
-
 
   append_line(bsv, "interface prev_control_state = toServer(rx_metadata.e, tx_metadata.e);");
   idx = 0;
