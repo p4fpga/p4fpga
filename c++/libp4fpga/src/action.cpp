@@ -131,7 +131,7 @@ void ActionCodeGen::postorder(const IR::P4Action* action) {
   decr_indent(bsv);
   append_line(bsv, "endinterface");
   append_line(bsv, "(* synthesize *)");
-  append_line(bsv, "module %s ", type);
+  append_line(bsv, "module mk%s (%s);", type, type);
   incr_indent(bsv);
   control->emitDebugPrint(bsv);
   append_line(bsv, "RX #(BBRequest) rx_prev_control_state <- mkRX;");

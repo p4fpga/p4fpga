@@ -193,11 +193,11 @@ void TableCodeGen::emitRuleHandleExecution(const IR::P4Table* table) {
   append_line(bsv, "if (rsp matches tagged Valid .data) begin");
   incr_indent(bsv);
   append_format(bsv, "%sReqT resp = unpack(data);", type);
-  append_line(bsv, "case (resp._action) begin");
+  append_line(bsv, "case (resp._action) matches");
   auto actionList = table->getActionList()->actionList;
   int idx = 0;
+  incr_indent(bsv);
   for (auto action : *actionList) {
-    auto fields = cstring("");
     auto elem = action->to<IR::ActionListElement>();
     if (elem->expression->is<IR::MethodCallExpression>()) {
       auto e = elem->expression->to<IR::MethodCallExpression>();
@@ -206,20 +206,27 @@ void TableCodeGen::emitRuleHandleExecution(const IR::P4Table* table) {
       // from action name to actual action declaration
       auto k = control->basicBlock.find(n);
       if (k != control->basicBlock.end()) {
+        auto fields = cstring("");
         auto params = k->second->parameters;
-        for (auto p : *params->parameters) {
-          auto type = p->type->to<IR::Type_Bits>();
-          append_format(bsv, "%s:", p->name.toString());
-          incr_indent(bsv);
-          fields += p->name.toString();
-          append_format(bsv, "%sActionReq req = tagged %sReqT {%s};", t, t, fields);
-          append_format(bsv, "bbReqFifo[%d].enq(req);", idx);
-          decr_indent(bsv);
+        for (auto param : *params->parameters) {
+          auto p = param->to<IR::Parameter>();
+          auto name = p->name.toString();
+          fields += name + cstring(": ") + name;
+          if (p != params->parameters->back()) {
+            fields += cstring(", ");
+          }
         }
+        append_format(bsv, "%s: begin", UpperCase(t));
+        incr_indent(bsv);
+        append_format(bsv, "%sActionReq req = tagged %sReqT {%s};", type, t, fields);
+        append_format(bsv, "bbReqFifo[%d].enq(req);", idx);
+        decr_indent(bsv);
+        append_line(bsv, "end");
       }
       idx += 1;
     }
   }
+  decr_indent(bsv);
   append_line(bsv, "endcase");
   append_line(bsv, "metadata_ff[1].enq(meta);");
   decr_indent(bsv);
@@ -250,11 +257,15 @@ void TableCodeGen::emitRuleHandleResponse(const IR::P4Table *table) {
       auto k = control->basicBlock.find(n);
       if (k != control->basicBlock.end()) {
         auto params = k->second->parameters;
-        for (auto p : *params->parameters) {
+        for (auto param : *params->parameters) {
+          auto p = param->to<IR::Parameter>();
           auto type = p->type->to<IR::Type_Bits>();
-          fields += p->name.toString();
+          fields += p->name.toString() + cstring(": .") + p->name.toString();
+          if (p != params->parameters->back()) {
+            fields += cstring(", ");
+          }
         }
-        append_format(bsv, "tagged %sRspT: {%s}", t, fields);
+        append_format(bsv, "tagged %sRspT {%s} : begin", t, fields);
         incr_indent(bsv);
         append_format(bsv, "%sResponse rsp = tagged %s%sRspT {pkt: pkt, meta: meta};", type, type, t);
         append_line(bsv, "tx_info_metadata.enq(rsp);");
