@@ -43,6 +43,7 @@ bool FPGAControl::build() {
     LOG1(start);
   }
 
+  // build map <cstring, IR::P4Action*>
   for (auto s : *controlBlock->container->getDeclarations()) {
     if (s->is<IR::P4Action>()) {
       auto act = s->to<IR::P4Action>();
@@ -52,6 +53,7 @@ bool FPGAControl::build() {
   }
 
   // constantValue : compile-time allocated resource, such as table..
+  // build map <cstring, IR::P4Table*>
   for (auto c : controlBlock->constantValue) {
     auto b = c.second;
     if (!b->is<IR::Block>()) continue;
@@ -66,12 +68,6 @@ bool FPGAControl::build() {
     } else {
       ::error("Unexpected block %s nested within control", b->toString());
     }
-  }
-
-  // control flow
-  if (controlBlock->container->body->is<IR::BlockStatement>()) {
-    auto stmt = controlBlock->container->body->to<IR::BlockStatement>();
-    LOG1("block statement size " << stmt->components->size());
   }
 
   for (auto n : metadata_to_action) {
@@ -163,7 +159,7 @@ void FPGAControl::emitCondRule(BSVProgram & bsv, const CFG::IfNode* node) {
   for (auto e : node->successors.edges) {
     if (e->isBool()) {
       if (e->getBool()) {
-        LOG1(e->label);
+        // TODO: expression converter
         append_format(bsv, "if (%s) {", stmt->condition);
         append_format(bsv, "%s.enq(_req);", e->getNode()->name);
         append_line(bsv, "}");
@@ -181,7 +177,7 @@ void FPGAControl::emitCondRule(BSVProgram & bsv, const CFG::IfNode* node) {
 void FPGAControl::emitDeclaration(BSVProgram & bsv) {
   // basic block instances
   for (auto b : basicBlock) {
-    LOG1("basic block" << b.second);
+    // LOG1("basic block" << b.second);
     auto name = camelCase(b.second->name.toString());
     auto type = CamelCase(name);
     append_format(bsv, "%s %s <- mk%s();", type, name, type);
@@ -250,7 +246,7 @@ void FPGAControl::emitDebugPrint(BSVProgram & bsv) {
 
 void FPGAControl::emitTables(BSVProgram & bsv) {
   for (auto t : tables) {
-    LOG1("emit Tables");
+    // LOG1("emit Tables");
     TableCodeGen visitor(this, bsv);
     t.second->apply(visitor);
   }

@@ -101,6 +101,7 @@ class CFGBuilder : public Inspector {
         CHECK_NULL(statement);
         if (value == nullptr) {
             // This can happen when an error is signaled
+            // one cause is assignmentStatement
             return;
         }
         after.emplace(statement, value);
@@ -191,6 +192,7 @@ class CFGBuilder : public Inspector {
     }
     bool preorder(const IR::BlockStatement* statement) override {
         for (auto s : *statement->components) {
+            if (s->is<IR::AssignmentStatement>()) continue; // ignore PathExpression
             auto stat = s->to<IR::Statement>();
             if (stat == nullptr) continue;
             visit(stat);
@@ -238,6 +240,8 @@ class CFGBuilder : public Inspector {
     const CFG::EdgeSet* run(const IR::Statement* startNode, const CFG::EdgeSet* predecessors) {
         CHECK_NULL(startNode); CHECK_NULL(predecessors);
         current = predecessors;
+        LOG1("start " << startNode->node_type_name());
+        LOG1("pred " << predecessors);
         startNode->apply(*this);
         return current;
     }
