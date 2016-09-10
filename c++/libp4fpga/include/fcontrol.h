@@ -95,6 +95,7 @@ class FPGAControl : public FPGAObject {
     void emitFifo(BSVProgram & bsv);
     void emitTables(BSVProgram & bsv);
     void emitActions(BSVProgram & bsv);
+    void emitActionTypes(BSVProgram & bsv);
     bool build();
 };
 

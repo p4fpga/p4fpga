@@ -162,7 +162,7 @@ void FPGADeparser::emitEnums(BSVProgram & bsv) {
   append_line(bsv, "`ifdef DEPARSER_STRUCT");
   append_line(bsv, "typedef enum {");
   incr_indent(bsv);
-  append_line(bsv, "StateDeparseStart");
+  append_line(bsv, "StateDeparseStart,");
   for (auto r : states) {
     auto name = r->name.name;
     if (r != states.back()) {

@@ -43,12 +43,13 @@ import Pipe::*;
 import PrintTrace::*;
 import Register::*;
 import SpecialFIFOs::*;
+import SharedBuff::*;
 import StmtFSM::*;
 import TxRx::*;
 import Utils::*;
 import Vector::*;
-
-import StructGenerated::*;
+import StructDefines::*;
+import UnionDefines::*;
 
 // app-specific structs
 `define DEPARSER_STRUCT

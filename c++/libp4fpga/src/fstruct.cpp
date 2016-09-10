@@ -48,12 +48,25 @@ bool StructCodeGen::preorder(const IR::Type_Header* type) {
   return false;
 }
 
+void StructCodeGen::emit() {
+  LOG1("print");
+  append_line(bsv, "typedef struct {");
+  incr_indent(bsv);
+  for (auto s : parser->states) {
+    append_format(bsv, "HeaderState %s;", s->name.toString());
+  }
+  decr_indent(bsv);
+  append_line(bsv, "} MetadataT deriving (Bits, Eq, FShow);");
+  append_line(bsv, "instance DefaultValue#(MetadataT);");
+  incr_indent(bsv);
+  append_line(bsv, "defaultValue = unpack(0);");
+  decr_indent(bsv);
+  append_line(bsv, "endinstance");
+}
 // TODO need to generate MetadataT
 
-// bool StructCodeGen::preorder(const IR::TableBlock* table) {
-//
-// }
 // collect all metadata used by table..
 // collect all header and assign HeaderState
 
 }  // namespace FPGA
+

@@ -43,12 +43,14 @@ import Pipe::*;
 import PrintTrace::*;
 import Register::*;
 import SpecialFIFOs::*;
+import SharedBuff::*;
 import StmtFSM::*;
 import TxRx::*;
 import Utils::*;
 import Vector::*;
-
-import StructGenerated::*;
+import StructDefines::*;
+import UnionDefines::*;
+`include "ConnectalProjectConfig.bsv"
 
 `define PARSER_STRUCT
 `include "ParserGenerated.bsv"
@@ -146,7 +148,7 @@ module mkParser  (Parser);
       rg_buffered[2] <= 128;
       rg_shift_amt[2] <= 0;
       parse_done[1] <= False;
-      parse_state_ff.enq(StateParseEthernet);
+      parse_state_ff.enq(initState);
    endrule
 
    rule rl_start_state_idle if (parse_done[1] && (!sop_this_cycle || w_parse_header_done));

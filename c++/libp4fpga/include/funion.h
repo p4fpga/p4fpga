@@ -14,17 +14,17 @@
   limitations under the License.
 */
 
-#ifndef EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FSTRUCT_H_
-#define EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FSTRUCT_H_
+#ifndef EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FUNION_H_
+#define EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FUNION_H_
 
 #include "ir/ir.h"
-#include "fparser.h"
+#include "fcontrol.h"
 #include "bsvprogram.h"
 #include "string_utils.h"
 
 namespace FPGA {
 
-namespace Struct {
+namespace Union {
 inline static std::string format_string(boost::format& message) {
   return message.str();
 }
@@ -37,42 +37,41 @@ template <typename TValue, typename... TArgs>
 
 template <typename... TArgs>
   void append_format(BSVProgram & bsv, const char* fmt, TArgs&&... args) {
-  bsv.getStructBuilder().emitIndent();
+  bsv.getUnionBuilder().emitIndent();
   boost::format msg(fmt);
   std::string s = format_string(msg, std::forward<TArgs>(args)...);
-  bsv.getStructBuilder().appendFormat(s.c_str());
-  bsv.getStructBuilder().newline();
+  bsv.getUnionBuilder().appendFormat(s.c_str());
+  bsv.getUnionBuilder().newline();
 }
 
 template <typename... TArgs>
   void append_line(BSVProgram & bsv, const char* fmt, TArgs&&... args) {
-    bsv.getStructBuilder().emitIndent();
+    bsv.getUnionBuilder().emitIndent();
     boost::format msg(fmt);
     std::string s = format_string(msg, std::forward<TArgs>(args)...);
-    bsv.getStructBuilder().appendLine(s.c_str());
+    bsv.getUnionBuilder().appendLine(s.c_str());
   }
 
 inline void incr_indent(BSVProgram & bsv) {
-  bsv.getStructBuilder().increaseIndent();
+  bsv.getUnionBuilder().increaseIndent();
 }
 
 inline void decr_indent(BSVProgram & bsv) {
-  bsv.getStructBuilder().decreaseIndent();
+  bsv.getUnionBuilder().decreaseIndent();
 }
 
-}  // namespace Struct
+}  // namespace Union
 
-class StructCodeGen : public Inspector {
+class UnionCodeGen : public Inspector {
  public:
-  StructCodeGen(const FPGAParser *parser, BSVProgram& bsv) :
-    bsv(bsv), parser(parser) {}
-  bool preorder(const IR::Type_Header* header) override;
-  void emit();
+  UnionCodeGen(FPGAControl* control, BSVProgram& bsv):
+    control(control), bsv(bsv) {}
+  bool preorder(const IR::P4Table* table) override;
  private:
+  FPGAControl* control;
   BSVProgram & bsv;
-  const FPGAParser* parser;
 };
 
 }  // namespace FPGA
 
-#endif /* EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FSTRUCT_H_ */
+#endif /* EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FUNION_H_ */

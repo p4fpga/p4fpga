@@ -24,6 +24,8 @@ p4fpga_SOURCES = \
 	extensions/c++/libp4fpga/src/fparser.cpp \
 	extensions/c++/libp4fpga/include/fstruct.h \
 	extensions/c++/libp4fpga/src/fstruct.cpp \
+	extensions/c++/libp4fpga/include/funion.h \
+	extensions/c++/libp4fpga/src/funion.cpp \
 	extensions/c++/libp4fpga/src/fdeparser.cpp \
 	extensions/c++/libp4fpga/include/fcontrol.h \
 	extensions/c++/libp4fpga/src/fcontrol.cpp \

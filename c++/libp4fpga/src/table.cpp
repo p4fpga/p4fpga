@@ -96,7 +96,7 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
   // generate response typedef
   append_line(bsv, "typedef struct {");
   incr_indent(bsv);
-  append_line(bsv, "%sActionT action;", type);
+  append_line(bsv, "%sActionT _action;", type);
   // if there is any params
   for (auto action : *actionList) {
     auto elem = action->to<IR::ActionListElement>();
@@ -135,6 +135,7 @@ void TableCodeGen::emitSimulation(const IR::P4Table* table) {
   append_line(bsv, "actionvalue");
   incr_indent(bsv);
   append_format(bsv, "let v <- matchtable_read_%s;", name);
+  append_line(bsv, "return v;");
   decr_indent(bsv);
   append_line(bsv, "endactionvalue");
   append_line(bsv, "endfunction");
@@ -154,7 +155,7 @@ void TableCodeGen::emitRuleHandleRequest(const IR::P4Table* table) {
   auto name = table->name.toString();
   auto type = CamelCase(name);
   // handle table request
-  append_line(bsv, "Vector#(2, FIFOF#(MetadataT) metadata_ff <- replicateM(mkFIFOF);");
+  append_line(bsv, "Vector#(2, FIFOF#(MetadataT)) metadata_ff <- replicateM(mkFIFOF);");
   append_line(bsv, "rule rl_handle_request;");
   incr_indent(bsv);
   append_line(bsv, "let data = rx_info_metadata.first;");
@@ -166,7 +167,7 @@ void TableCodeGen::emitRuleHandleRequest(const IR::P4Table* table) {
     auto f = k.first;
     auto s = k.second;
     auto name = f->name.toString();
-    append_line(bsv, "let %s = fromMaybe(?, meta.%s)", name, name);
+    append_line(bsv, "let %s = fromMaybe(?, meta.%s);", name, name);
     fields += name + cstring(":") + name;
     if (k != key_vec.back()) {
       fields += cstring(",");
@@ -211,7 +212,7 @@ void TableCodeGen::emitRuleHandleExecution(const IR::P4Table* table) {
           append_format(bsv, "%s:", p->name.toString());
           incr_indent(bsv);
           fields += p->name.toString();
-          append_format(bsv, "BBRequest req = tagged %sReqT {%s};", t, fields);
+          append_format(bsv, "%sActionReq req = tagged %sReqT {%s};", t, t, fields);
           append_format(bsv, "bbReqFifo[%d].enq(req);", idx);
           decr_indent(bsv);
         }
@@ -296,8 +297,8 @@ void TableCodeGen::emit(const IR::P4Table* table) {
   append_line(bsv, "interface %s;", type);
   incr_indent(bsv);
   //FIXME: more than one action;
-  append_line(bsv, "Server#(MetadataRequest, MetadataResponse) prev_control_state;");
-  append_line(bsv, "Client#(BBRequest, BBResponse) next_control_state;");
+  append_line(bsv, "interface Server#(MetadataRequest, MetadataResponse) prev_control_state;");
+  append_line(bsv, "interface Client#(%sActionReq, %sActionRsp) next_control_state;", type, type);
   append_line(bsv, "method Action set_verbosity(int verbosity);");
   decr_indent(bsv);
   append_line(bsv, "endinterface");
@@ -311,8 +312,8 @@ void TableCodeGen::emit(const IR::P4Table* table) {
   append_line(bsv, "let rx_info_metadata = rx_metadata.u;");
   append_line(bsv, "let tx_info_metadata = tx_metadata.u;");
 
-  append_format(bsv, "Vector#(%d, FIFOF#(BBRequest)) bbReqFifo <- replicateM(mkFIFOF);", nActions);
-  append_format(bsv, "Vector#(%d, FIFOF#(BBResponse)) bbRspFifo <- replicateM(mkFIFOF);", nActions);
+  append_format(bsv, "Vector#(%d, FIFOF#(%sActionReq)) bbReqFifo <- replicateM(mkFIFOF);", nActions, type);
+  append_format(bsv, "Vector#(%d, FIFOF#(%sActionRsp)) bbRspFifo <- replicateM(mkFIFOF);", nActions, type);
   append_line(bsv, "FIFOF#(PacketInstance) packet_ff <- mkFIFOF;");
 
   emitRspFifoMux(table);

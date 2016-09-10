@@ -18,6 +18,8 @@
 #include "fcontrol.h"
 #include "table.h"
 #include "action.h"
+#include "fstruct.h"
+#include "funion.h"
 #include "codegeninspector.h"
 #include "string_utils.h"
 #include "vector_utils.h"
@@ -237,6 +239,7 @@ void FPGAControl::emitTables(BSVProgram & bsv) {
   }
 }
 
+
 void FPGAControl::emitActions(BSVProgram & bsv) {
   for (auto b : basicBlock) {
     ActionCodeGen visitor(this, bsv);
@@ -249,6 +252,13 @@ void FPGAControl::emitActions(BSVProgram & bsv) {
   }
 }
 
+void FPGAControl::emitActionTypes(BSVProgram & bsv) {
+  for (auto b : tables) {
+    UnionCodeGen visitor(this, bsv);
+    b.second->apply(visitor);
+  }
+}
+
 // control block module
 void FPGAControl::emit(BSVProgram & bsv) {
   auto cbname = controlBlock->container->name.toString();
@@ -256,6 +266,7 @@ void FPGAControl::emit(BSVProgram & bsv) {
 
   emitTables(bsv);
   emitActions(bsv);
+  emitActionTypes(bsv);
 
   // TODO: synthesize boundary
   append_format(bsv, "// =============== control %s ==============", cbname);
