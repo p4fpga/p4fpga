@@ -34,11 +34,13 @@ class TableCodeGen : public Inspector {
   FPGAControl* control;
   BSVProgram & bsv;
   int key_width = 0;
+  int action_size = 0;
   std::vector<std::pair<const IR::StructField*, int>> key_vec;
   std::vector<cstring> action_vec;
   cstring defaultActionName;
   void emit(const IR::P4Table* table);
   void emitTypedefs(const IR::P4Table* table);
+  void emitSimulation(const IR::P4Table *table);
 };
 
 }  // namespace FPGA

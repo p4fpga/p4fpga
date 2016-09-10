@@ -42,7 +42,9 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
   incr_indent(bsv);
   if ((key_width % 9) != 0) {
     auto pad = 9 - (key_width % 9);
+    append_line(bsv, "`ifndef SIMULATION");
     append_line(bsv, "Bit#(%d) padding;", pad);
+    append_line(bsv, "`endif");
   }
   for (auto k : key_vec) {
     auto f = k.first;
@@ -108,13 +110,46 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
         for (auto p : *params->parameters) {
           auto type = p->type->to<IR::Type_Bits>();
           append_line(bsv, "Bit#(%d) %s;", type->size, p->name.toString());
+          action_size += type->size;
         }
       }
+    } else {
+      ::warning("unhandled action type", action);
     }
   }
   decr_indent(bsv);
   append_line(bsv, "} %sRspT deriving (Bits, Eq, FShow);", type);
 }
+
+void TableCodeGen::emitSimulation(const IR::P4Table* table) {
+  auto name = table->name.toString();
+  auto id = table->declid;
+  append_line(bsv, "`ifndef SVDPI");
+  append_format(bsv, "import \"BDPI\" function ActionValue#(Bit#(%d)) matchtable_read_%s(Bit#(%d) msgtype);", key_width, name, action_size);
+  append_format(bsv, "import \"BDPI\" function Action matchtable_write_%s(Bit#(%d) msgtype, Bit#(%d) data);", name, key_width, action_size);
+  append_line(bsv, "`endif");
+
+  append_line(bsv, "instance MatchTableSim#(32, %d, %d);", key_width, action_size);
+  incr_indent(bsv);
+  append_format(bsv, "function ActionValue#(Bit#(%d)) matchtable_read(Bit#(32) id, Bit#(%d) key);", action_size, key_width);
+  append_line(bsv, "actionvalue");
+  incr_indent(bsv);
+  append_format(bsv, "let v <- matchtable_read_%s;", name);
+  decr_indent(bsv);
+  append_line(bsv, "endactionvalue");
+  append_line(bsv, "endfunction");
+
+  append_format(bsv, "function Action matchtable_write(Bit#(32) id, Bit#(%d) key, Bit#(%d) data);", key_width, action_size);
+  append_line(bsv, "action");
+  incr_indent(bsv);
+  append_format(bsv, "matchtable_write_%s(key, data);", name);
+  decr_indent(bsv);
+  append_line(bsv, "endaction");
+  append_line(bsv, "endfunction");
+  decr_indent(bsv);
+  append_line(bsv, "endinstance");
+}
+
 void TableCodeGen::emit(const IR::P4Table* table) {
   auto name = table->name.toString();
   auto type = CamelCase(name);
@@ -123,7 +158,10 @@ void TableCodeGen::emit(const IR::P4Table* table) {
 
   append_line(bsv, "interface %s;", type);
   incr_indent(bsv);
+  //FIXME: more than one action;
   append_line(bsv, "Server#(MetadataRequest, MetadataResponse) prev_control_state;");
+  append_line(bsv, "Client#(BBRequest, BBResponse) next_control_state;");
+  append_line(bsv, "method Action set_verbosity(int verbosity);");
   decr_indent(bsv);
   append_line(bsv, "endinterface");
   append_line(bsv, "(* synthesize *)");
@@ -140,6 +178,126 @@ void TableCodeGen::emit(const IR::P4Table* table) {
   append_format(bsv, "Vector#(%d, FIFOF#(BBRequest)) bbReqFifo <- replicateM(mkFIFOF);", nActions);
   append_format(bsv, "Vector#(%d, FIFOF#(BBResponse)) bbRspFifo <- replicateM(mkFIFOF);", nActions);
 
+  append_line(bsv, "FIFOF#(PacketInstance) packet_ff <- mkFIFOF;");
+
+  // ready mux for all rsp fifo
+  append_format(bsv, "Vector#(%d, Bool) readyBits = map(fifoNotEmpty, bbRspFifo);", nActions);
+  append_line(bsv, "Bool interruptStatus = False;");
+  append_format(bsv, "Bit#(%d) readyChannel = -1;", nActions);
+  append_format(bsv, "for (Integer i=%d; i>=0; i=i-1) begin", nActions-1);
+  incr_indent(bsv);
+  append_line(bsv, "if (readyBits[i]) begin");
+  incr_indent(bsv);
+  append_line(bsv, "interruptStatus = True;");
+  append_line(bsv, "readyChannel = fromInteger(i);");
+  decr_indent(bsv);
+  append_line(bsv, "end");
+  decr_indent(bsv);
+  append_line(bsv, "end");
+
+  // handle table request
+  append_line(bsv, "Vector#(2, FIFOF#(MetadataT) metadata_ff <- replicateM(mkFIFOF);");
+  append_line(bsv, "rule rl_handle_request;");
+  incr_indent(bsv);
+  append_line(bsv, "let data = rx_info_metadata.first;");
+  append_line(bsv, "rx_info_metadata.deq;");
+  append_line(bsv, "let meta = data.meta;");
+  append_line(bsv, "let pkt = data.pkt;");
+  auto fields = cstring("");
+  for (auto k : key_vec) {
+    auto f = k.first;
+    auto s = k.second;
+    auto name = f->name.toString();
+    append_line(bsv, "let %s = fromMaybe(?, meta.%s)", name, name);
+    fields += name + cstring(":") + name;
+    if (k != key_vec.back()) {
+      fields += cstring(",");
+    }
+  }
+  append_format(bsv, "%sReqT req = %sReqT{%s};", type, type, fields);
+  append_line(bsv, "matchTable.lookupPort.request.put(pack(req));");
+  append_line(bsv, "packet_ff.enq(pkt);");
+  append_line(bsv, "metadata_ff[0].enq(meta);");
+  decr_indent(bsv);
+  append_line(bsv, "endrule");
+
+  // handle action execution
+  append_line(bsv, "rule rl_execute;");
+  incr_indent(bsv);
+  append_line(bsv, "let rsp <- matchTable.lookupPort.response.get;");
+  append_line(bsv, "let pkt <- toGet(packet_ff).get;");
+  append_line(bsv, "let meta <- toGet(meta_ff[0]).get;");
+  append_line(bsv, "if (rsp matches tagged Valid .data) begin");
+  incr_indent(bsv);
+  append_format(bsv, "%sReqT resp = unpack(data);", type);
+  append_line(bsv, "case (resp._action) begin");
+  auto actionList = table->getActionList()->actionList;
+  int idx = 0;
+  for (auto action : *actionList) {
+    auto fields = cstring("");
+    auto elem = action->to<IR::ActionListElement>();
+    if (elem->expression->is<IR::MethodCallExpression>()) {
+      auto e = elem->expression->to<IR::MethodCallExpression>();
+      auto n = e->method->toString();
+      auto t = CamelCase(n);
+      // from action name to actual action declaration
+      auto k = control->basicBlock.find(n);
+      if (k != control->basicBlock.end()) {
+        auto params = k->second->parameters;
+        for (auto p : *params->parameters) {
+          auto type = p->type->to<IR::Type_Bits>();
+          append_format(bsv, "%s:", p->name.toString());
+          incr_indent(bsv);
+          fields += p->name.toString();
+          append_format(bsv, "BBRequest req = tagged %sReqT {%s};", t, fields);
+          append_format(bsv, "bbReqFifo[%d].enq(req);", idx);
+          decr_indent(bsv);
+        }
+      }
+      idx += 1;
+    }
+  }
+  append_line(bsv, "endcase");
+  append_line(bsv, "metadata_ff[1].enq(meta);");
+  decr_indent(bsv);
+  append_line(bsv, "end");
+  decr_indent(bsv);
+  append_line(bsv, "endrule");
+  // handle table response
+  append_line(bsv, "rule rl_handle_response;");
+  incr_indent(bsv);
+  append_line(bsv, "let v <- toGet(bbRspFifo[readyChannel]).get;");
+  append_line(bsv, "let meta <- toGet(metadata_ff[1]).get;");
+  append_line(bsv, "case (v) matches");
+  incr_indent(bsv);
+  for (auto action : *actionList) {
+    auto fields = cstring("");
+    auto elem = action->to<IR::ActionListElement>();
+    if (elem->expression->is<IR::MethodCallExpression>()) {
+      auto e = elem->expression->to<IR::MethodCallExpression>();
+      auto n = e->method->toString();
+      auto t = CamelCase(n);
+      // from action name to actual action declaration
+      auto k = control->basicBlock.find(n);
+      if (k != control->basicBlock.end()) {
+        auto params = k->second->parameters;
+        for (auto p : *params->parameters) {
+          auto type = p->type->to<IR::Type_Bits>();
+          fields += p->name.toString();
+        }
+        append_format(bsv, "tagged %sRspT: {%s}", t, fields);
+        incr_indent(bsv);
+        append_format(bsv, "%sResponse rsp = tagged %s%sRspT {pkt: pkt, meta: meta};", type, type, t);
+        append_line(bsv, "tx_info_metadata.enq(rsp);");
+        decr_indent(bsv);
+        append_line(bsv, "end");
+      }
+    }
+  }
+  decr_indent(bsv);
+  append_line(bsv, "endcase");
+  decr_indent(bsv);
+  append_line(bsv, "endrule");
   decr_indent(bsv);
   append_line(bsv, "endmodule");
 }
@@ -187,6 +345,7 @@ bool TableCodeGen::preorder(const IR::P4Table* table) {
 
 
   emitTypedefs(tbl);
+  emitSimulation(tbl);
   emit(tbl);
 
   return false;
