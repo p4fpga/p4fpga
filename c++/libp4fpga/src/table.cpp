@@ -150,51 +150,9 @@ void TableCodeGen::emitSimulation(const IR::P4Table* table) {
   append_line(bsv, "endinstance");
 }
 
-void TableCodeGen::emit(const IR::P4Table* table) {
+void TableCodeGen::emitRuleHandleRequest(const IR::P4Table* table) {
   auto name = table->name.toString();
   auto type = CamelCase(name);
-
-  append_format(bsv, "// =============== table %s ==============", name);
-
-  append_line(bsv, "interface %s;", type);
-  incr_indent(bsv);
-  //FIXME: more than one action;
-  append_line(bsv, "Server#(MetadataRequest, MetadataResponse) prev_control_state;");
-  append_line(bsv, "Client#(BBRequest, BBResponse) next_control_state;");
-  append_line(bsv, "method Action set_verbosity(int verbosity);");
-  decr_indent(bsv);
-  append_line(bsv, "endinterface");
-  append_line(bsv, "(* synthesize *)");
-  append_format(bsv, "module mk%s (%s);", type, type);
-  incr_indent(bsv);
-  control->emitDebugPrint(bsv);
-
-  append_line(bsv, "RX #(MetadataRequest) rx_metadata <- mkRX;");
-  append_line(bsv, "TX #(MetadataRequest) tx_metadata <- mkTX;");
-  append_line(bsv, "let rx_info_metadata = rx_metadata.u;");
-  append_line(bsv, "let tx_info_metadata = tx_metadata.u;");
-
-  auto nActions = table->getActionList()->actionList->size();
-  append_format(bsv, "Vector#(%d, FIFOF#(BBRequest)) bbReqFifo <- replicateM(mkFIFOF);", nActions);
-  append_format(bsv, "Vector#(%d, FIFOF#(BBResponse)) bbRspFifo <- replicateM(mkFIFOF);", nActions);
-
-  append_line(bsv, "FIFOF#(PacketInstance) packet_ff <- mkFIFOF;");
-
-  // ready mux for all rsp fifo
-  append_format(bsv, "Vector#(%d, Bool) readyBits = map(fifoNotEmpty, bbRspFifo);", nActions);
-  append_line(bsv, "Bool interruptStatus = False;");
-  append_format(bsv, "Bit#(%d) readyChannel = -1;", nActions);
-  append_format(bsv, "for (Integer i=%d; i>=0; i=i-1) begin", nActions-1);
-  incr_indent(bsv);
-  append_line(bsv, "if (readyBits[i]) begin");
-  incr_indent(bsv);
-  append_line(bsv, "interruptStatus = True;");
-  append_line(bsv, "readyChannel = fromInteger(i);");
-  decr_indent(bsv);
-  append_line(bsv, "end");
-  decr_indent(bsv);
-  append_line(bsv, "end");
-
   // handle table request
   append_line(bsv, "Vector#(2, FIFOF#(MetadataT) metadata_ff <- replicateM(mkFIFOF);");
   append_line(bsv, "rule rl_handle_request;");
@@ -220,7 +178,11 @@ void TableCodeGen::emit(const IR::P4Table* table) {
   append_line(bsv, "metadata_ff[0].enq(meta);");
   decr_indent(bsv);
   append_line(bsv, "endrule");
+}
 
+void TableCodeGen::emitRuleHandleExecution(const IR::P4Table* table) {
+  auto name = table->name.toString();
+  auto type = CamelCase(name);
   // handle action execution
   append_line(bsv, "rule rl_execute;");
   incr_indent(bsv);
@@ -263,6 +225,12 @@ void TableCodeGen::emit(const IR::P4Table* table) {
   append_line(bsv, "end");
   decr_indent(bsv);
   append_line(bsv, "endrule");
+}
+
+void TableCodeGen::emitRuleHandleResponse(const IR::P4Table *table) {
+  auto name = table->name.toString();
+  auto type = CamelCase(name);
+  auto actionList = table->getActionList()->actionList;
   // handle table response
   append_line(bsv, "rule rl_handle_response;");
   incr_indent(bsv);
@@ -298,6 +266,60 @@ void TableCodeGen::emit(const IR::P4Table* table) {
   append_line(bsv, "endcase");
   decr_indent(bsv);
   append_line(bsv, "endrule");
+}
+
+void TableCodeGen::emitRspFifoMux(const IR::P4Table *table) {
+  auto actionList = table->getActionList()->actionList;
+  auto nActions = actionList->size();
+  // ready mux for all rsp fifo
+  append_format(bsv, "Vector#(%d, Bool) readyBits = map(fifoNotEmpty, bbRspFifo);", nActions);
+  append_line(bsv, "Bool interruptStatus = False;");
+  append_format(bsv, "Bit#(%d) readyChannel = -1;", nActions);
+  append_format(bsv, "for (Integer i=%d; i>=0; i=i-1) begin", nActions-1);
+  incr_indent(bsv);
+  append_line(bsv, "if (readyBits[i]) begin");
+  incr_indent(bsv);
+  append_line(bsv, "interruptStatus = True;");
+  append_line(bsv, "readyChannel = fromInteger(i);");
+  decr_indent(bsv);
+  append_line(bsv, "end");
+  decr_indent(bsv);
+  append_line(bsv, "end");
+}
+
+void TableCodeGen::emit(const IR::P4Table* table) {
+  auto name = table->name.toString();
+  auto type = CamelCase(name);
+  auto actionList = table->getActionList()->actionList;
+  auto nActions = actionList->size();
+  append_format(bsv, "// =============== table %s ==============", name);
+  append_line(bsv, "interface %s;", type);
+  incr_indent(bsv);
+  //FIXME: more than one action;
+  append_line(bsv, "Server#(MetadataRequest, MetadataResponse) prev_control_state;");
+  append_line(bsv, "Client#(BBRequest, BBResponse) next_control_state;");
+  append_line(bsv, "method Action set_verbosity(int verbosity);");
+  decr_indent(bsv);
+  append_line(bsv, "endinterface");
+  append_line(bsv, "(* synthesize *)");
+  append_format(bsv, "module mk%s (%s);", type, type);
+  incr_indent(bsv);
+  control->emitDebugPrint(bsv);
+
+  append_line(bsv, "RX #(MetadataRequest) rx_metadata <- mkRX;");
+  append_line(bsv, "TX #(MetadataRequest) tx_metadata <- mkTX;");
+  append_line(bsv, "let rx_info_metadata = rx_metadata.u;");
+  append_line(bsv, "let tx_info_metadata = tx_metadata.u;");
+
+  append_format(bsv, "Vector#(%d, FIFOF#(BBRequest)) bbReqFifo <- replicateM(mkFIFOF);", nActions);
+  append_format(bsv, "Vector#(%d, FIFOF#(BBResponse)) bbRspFifo <- replicateM(mkFIFOF);", nActions);
+  append_line(bsv, "FIFOF#(PacketInstance) packet_ff <- mkFIFOF;");
+
+  emitRspFifoMux(table);
+  emitRuleHandleRequest(table);
+  emitRuleHandleExecution(table);
+  emitRuleHandleResponse(table);
+
   decr_indent(bsv);
   append_line(bsv, "endmodule");
 }
@@ -342,7 +364,6 @@ bool TableCodeGen::preorder(const IR::P4Table* table) {
       }
     }
   }
-
 
   emitTypedefs(tbl);
   emitSimulation(tbl);
