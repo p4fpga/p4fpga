@@ -138,8 +138,8 @@ void ActionCodeGen::postorder(const IR::P4Action* action) {
   append_line(bsv, "TX #(BBResponse) tx_prev_control_state <- mkTX;");
   append_line(bsv, "let rx_info_prev_control_state = rx_prev_control_state.u;");
   append_line(bsv, "let tx_info_prev_control_state = tx_prev_control_state.u;");
-  append_line(bsv, "CPU cpu <- mkCPU(\"%s\", );", name);
-  append_line(bsv, "IMem mem <- mkIMem(\"%s.hex\")", name);
+  append_line(bsv, "CPU cpu <- mkCPU(\"%s\", nil);", name);
+  append_line(bsv, "IMem mem <- mkIMem(\"%s.hex\");", name);
   append_line(bsv, "mkConnection(cpu.imem_client, imem.cpu_server);");
   // Extern ??
   emitCpuReqRule();

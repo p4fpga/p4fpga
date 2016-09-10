@@ -98,6 +98,33 @@ cstring CamelCase(const cstring& source) {
   return camel;
 }
 
+cstring camelCase(const cstring& source) {
+  std::string camel;
+  camel.reserve(source.size());
+
+  bool capitalize_next = true;
+  for (size_t i = 0; i < source.size(); ++i) {
+    const char c = source[i];
+
+    // Skip spaces, but flag the next letter as start of new word.
+    if (IsSpace(c)) {
+      capitalize_next = true;
+      continue;
+    }
+
+    // If flagged for capitalization, capitalize and clear flag.
+    if (capitalize_next) {
+      camel += static_cast<char>(tolower(c));
+      capitalize_next = false;
+      continue;
+    }
+
+    // Send through as-is.
+    camel += c;
+  }
+  return camel;
+}
+
 cstring UpperCase(const cstring& source) {
   std::string camel;
   camel.reserve(source.size());

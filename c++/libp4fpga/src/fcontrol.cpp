@@ -153,20 +153,25 @@ void FPGAControl::emitTableRule(BSVProgram & bsv, const CFG::TableNode* node) {
 
 void FPGAControl::emitCondRule(BSVProgram & bsv, const CFG::IfNode* node) {
   auto sig = cstring("w_") + node->name;
-  LOG1(sig);
+  auto name = node->name;
   append_format(bsv, "rule rl_%s if (%s);", node->name, sig);
   incr_indent(bsv);
   auto stmt = node->statement->to<IR::IfStatement>();
-  LOG1(node << " succ " << node->successors);
-  LOG1(node << " pred " << node->predecessors);
-  if (stmt != nullptr) {
-    LOG1(stmt->condition);
-    append_line(bsv, "%s", stmt->condition);
-    if (stmt->ifTrue != nullptr) {
-      LOG1(stmt->ifTrue);
-    }
-    if (stmt->ifFalse != nullptr) {
-      LOG1(stmt->ifFalse);
+  LOG1(node << " succ " << node->successors.edges);
+  append_format(bsv, "%s_req_ff.deq;", name);
+  append_format(bsv, "let _req = %s_req_ff.first;", name);
+  for (auto e : node->successors.edges) {
+    if (e->isBool()) {
+      if (e->getBool()) {
+        LOG1(e->label);
+        append_format(bsv, "if (%s) {", stmt->condition);
+        append_format(bsv, "%s.enq(_req);", e->getNode()->name);
+        append_line(bsv, "}");
+      } else {
+        append_line(bsv, "else {");
+        append_format(bsv, "%s.enq(_req);", e->getNode()->name);
+        append_line(bsv, "}");
+      }
     }
   }
   decr_indent(bsv);
@@ -177,7 +182,7 @@ void FPGAControl::emitDeclaration(BSVProgram & bsv) {
   // basic block instances
   for (auto b : basicBlock) {
     LOG1("basic block" << b.second);
-    auto name = b.second->name.toString();
+    auto name = camelCase(b.second->name.toString());
     auto type = CamelCase(name);
     append_format(bsv, "%s %s <- mk%s();", type, name, type);
   }
@@ -212,8 +217,20 @@ void FPGAControl::emitConnection(BSVProgram & bsv) {
     auto name = table->name.toString();
     auto type = CamelCase(name);
     append_format(bsv, "mkConnection(toClient(%s_req_ff, %s_rsp_ff), %s.prev_control_state);", name, name, name);
+
+    auto actionList = table->getActionList()->actionList;
+    int idx = 0;
+    for (auto action : *actionList) {
+      auto elem = action->to<IR::ActionListElement>();
+      if (elem->expression->is<IR::MethodCallExpression>()) {
+        auto e = elem->expression->to<IR::MethodCallExpression>();
+        auto t = program->typeMap->getType(e->method, true);
+        auto n = e->method->toString();
+        append_format(bsv, "mkChan(mkFIFOF, mkFIFOF, %s.next_control_state_%d, %s.prev_control_state);", name, idx, camelCase(n));
+        idx ++ ;
+      }
+    }
   }
-  // table to action
 }
 
 void FPGAControl::emitDebugPrint(BSVProgram & bsv) {
@@ -246,6 +263,7 @@ void FPGAControl::emitActions(BSVProgram & bsv) {
     b.second->apply(visitor);
     auto stmt = b.second->body->to<IR::BlockStatement>();
     if (stmt == nullptr) continue;
+    // encode to cpu instruction
     //for (auto path : *stmt->components) {
     //  path->apply(visitor);
     //}

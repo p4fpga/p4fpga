@@ -31,6 +31,9 @@ cstring SnakeCase(const cstring& source);
 /// https://en.wikipedia.org/wiki/CamelCase
 cstring CamelCase(const cstring& source);
 
+/// Return `source` as aStringInCamelCase.
+cstring camelCase(const cstring& source);
+
 /// Return `source` as ASTRINGINUPPERCASE.
 cstring UpperCase(const cstring& source);
 
