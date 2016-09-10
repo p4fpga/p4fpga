@@ -40,11 +40,11 @@ class TableCodeGen : public Inspector {
   cstring defaultActionName;
   void emit(const IR::P4Table* table);
   void emitTypedefs(const IR::P4Table* table);
-  void emitSimulation(const IR::P4Table *table);
+  void emitSimulation(const IR::P4Table* table);
   void emitRuleHandleRequest(const IR::P4Table* table);
   void emitRuleHandleExecution(const IR::P4Table* table);
-  void emitRuleHandleResponse(const IR::P4Table *table);
-  void emitRspFifoMux(const IR::P4Table *table);
+  void emitRuleHandleResponse(const IR::P4Table* table);
+  void emitRspFifoMux(const IR::P4Table* table);
 };
 
 }  // namespace FPGA

@@ -18,6 +18,7 @@ limitations under the License.
 #define _BACKENDS_FPGA_ANALYZER_H_
 
 #include "ir/ir.h"
+#include "lib/ordered_set.h"
 #include "frontends/p4/typeMap.h"
 #include "frontends/common/resolveReferences/referenceMap.h"
 
@@ -32,7 +33,7 @@ class CFG : public IHasDbPrint {
 
     class EdgeSet {
      public:
-        std::set<CFG::Edge*> edges;
+       std::set<CFG::Edge*> edges;
 
         EdgeSet() = default;
         explicit EdgeSet(CFG::Edge* edge) { edges.emplace(edge); }
@@ -130,7 +131,7 @@ class CFG : public IHasDbPrint {
     Node* entryPoint;
     Node* exitPoint;
     const IR::P4Control* container;
-    std::set<Node*> allNodes;
+    ordered_set<Node*> allNodes;
 
     CFG() : entryPoint(nullptr), exitPoint(nullptr), container(nullptr) {}
     Node* makeNode(const IR::P4Table* table, const IR::Expression* invocation) {

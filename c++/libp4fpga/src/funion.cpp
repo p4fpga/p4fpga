@@ -23,7 +23,7 @@ namespace FPGA {
 using namespace Union;
 
 bool UnionCodeGen::preorder(const IR::P4Table* table) {
-  auto name = table->name.toString();
+  auto name = nameFromAnnotation(table->annotations, table->name);
   auto type = CamelCase(name);
 
   append_line(bsv, "typedef union tagged {");
@@ -70,6 +70,10 @@ bool UnionCodeGen::preorder(const IR::P4Table* table) {
   decr_indent(bsv);
   append_line(bsv, "} %sActionRsp deriving (Bits, Eq, FShow);", type);
   return false;
+}
+
+void UnionCodeGen::emit() {
+  append_line(bsv, "import Ethernet::*;");
 }
 
 }  // namespace FPGA

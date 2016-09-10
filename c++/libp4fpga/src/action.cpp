@@ -115,18 +115,22 @@ void ActionCodeGen::postorder(const IR::P4Action* action) {
   }
 
   // empty action, forward;
+  // TODO: use library forward unit
   if (stmt->components->size() == 0) {
     forward();
-    return;
+    //return;
   }
 
   append_format(bsv, "// =============== action %s ==============", name);
   // drop action, mark_to_drop;
 
+  auto table = control->action_to_table[name];
+  auto table_name = nameFromAnnotation(table->annotations, table->name);
+  auto table_type = CamelCase(table_name);
   // generate instruction for cpu;
   append_line(bsv, "interface %s;", type);
   incr_indent(bsv);
-  append_line(bsv, "interface Server#(BBRequest, BBResponse) prev_control_state;");
+  append_line(bsv, "interface Server#(%sActionReq, %sActionRsp) prev_control_state;", table_type, table_type);
   append_line(bsv, "method Action set_verbosity(int verbosity);");
   decr_indent(bsv);
   append_line(bsv, "endinterface");
@@ -134,8 +138,8 @@ void ActionCodeGen::postorder(const IR::P4Action* action) {
   append_line(bsv, "module mk%s (%s);", type, type);
   incr_indent(bsv);
   control->emitDebugPrint(bsv);
-  append_line(bsv, "RX #(BBRequest) rx_prev_control_state <- mkRX;");
-  append_line(bsv, "TX #(BBResponse) tx_prev_control_state <- mkTX;");
+  append_line(bsv, "RX #(%sActionReq) rx_prev_control_state <- mkRX;", table_type);
+  append_line(bsv, "TX #(%sActionRsp) tx_prev_control_state <- mkTX;", table_type);
   append_line(bsv, "let rx_info_prev_control_state = rx_prev_control_state.u;");
   append_line(bsv, "let tx_info_prev_control_state = tx_prev_control_state.u;");
   append_line(bsv, "CPU cpu <- mkCPU(\"%s\", nil);", name);

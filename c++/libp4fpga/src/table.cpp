@@ -125,7 +125,7 @@ void TableCodeGen::emitSimulation(const IR::P4Table* table) {
   auto name = nameFromAnnotation(table->annotations, table->name);
   auto id = table->declid;
   append_line(bsv, "`ifndef SVDPI");
-  append_format(bsv, "import \"BDPI\" function ActionValue#(Bit#(%d)) matchtable_read_%s(Bit#(%d) msgtype);", key_width, name, action_size);
+  append_format(bsv, "import \"BDPI\" function ActionValue#(Bit#(%d)) matchtable_read_%s(Bit#(%d) msgtype);", action_size, name, key_width);
   append_format(bsv, "import \"BDPI\" function Action matchtable_write_%s(Bit#(%d) msgtype, Bit#(%d) data);", name, key_width, action_size);
   append_line(bsv, "`endif");
 
@@ -134,7 +134,7 @@ void TableCodeGen::emitSimulation(const IR::P4Table* table) {
   append_format(bsv, "function ActionValue#(Bit#(%d)) matchtable_read(Bit#(32) id, Bit#(%d) key);", action_size, key_width);
   append_line(bsv, "actionvalue");
   incr_indent(bsv);
-  append_format(bsv, "let v <- matchtable_read_%s;", name);
+  append_format(bsv, "let v <- matchtable_read_%s(key);", name);
   append_line(bsv, "return v;");
   decr_indent(bsv);
   append_line(bsv, "endactionvalue");
@@ -192,7 +192,7 @@ void TableCodeGen::emitRuleHandleExecution(const IR::P4Table* table) {
   append_line(bsv, "let meta <- toGet(meta_ff[0]).get;");
   append_line(bsv, "if (rsp matches tagged Valid .data) begin");
   incr_indent(bsv);
-  append_format(bsv, "%sReqT resp = unpack(data);", type);
+  append_format(bsv, "%sRspT resp = unpack(data);", type);
   append_line(bsv, "case (resp._action) matches");
   auto actionList = table->getActionList()->actionList;
   int idx = 0;
@@ -267,8 +267,8 @@ void TableCodeGen::emitRuleHandleResponse(const IR::P4Table *table) {
         }
         append_format(bsv, "tagged %sRspT {%s} : begin", t, fields);
         incr_indent(bsv);
-        append_format(bsv, "%sResponse rsp = tagged %s%sRspT {pkt: pkt, meta: meta};", type, type, t);
-        append_line(bsv, "tx_info_metadata.enq(rsp);");
+        //append_format(bsv, "%sResponse rsp = tagged %s%sRspT {pkt: pkt, meta: meta};", type, type, t);
+        //append_line(bsv, "tx_info_metadata.enq(rsp);");
         decr_indent(bsv);
         append_line(bsv, "end");
       }
@@ -276,6 +276,8 @@ void TableCodeGen::emitRuleHandleResponse(const IR::P4Table *table) {
   }
   decr_indent(bsv);
   append_line(bsv, "endcase");
+  append_format(bsv, "MetadataResponse rsp = MetadataResponse {pkt: pkt, meta: meta};");
+  append_line(bsv, "tx_info_metadata.enq(rsp);");
   decr_indent(bsv);
   append_line(bsv, "endrule");
 }
@@ -309,17 +311,21 @@ void TableCodeGen::emit(const IR::P4Table* table) {
   incr_indent(bsv);
   //FIXME: more than one action;
   append_line(bsv, "interface Server#(MetadataRequest, MetadataResponse) prev_control_state;");
-  append_line(bsv, "interface Client#(%sActionReq, %sActionRsp) next_control_state;", type, type);
+  int idx = 0;
+  for (auto action : *actionList) {
+    append_line(bsv, "interface Client#(%sActionReq, %sActionRsp) next_control_state_%d;", type, type, idx);
+    idx ++;
+  }
   append_line(bsv, "method Action set_verbosity(int verbosity);");
   decr_indent(bsv);
   append_line(bsv, "endinterface");
   append_line(bsv, "(* synthesize *)");
-  append_format(bsv, "module mk%s (%s);", type, type);
+  append_format(bsv, "module mk%s (Control::%s);", type, type);
   incr_indent(bsv);
   control->emitDebugPrint(bsv);
 
   append_line(bsv, "RX #(MetadataRequest) rx_metadata <- mkRX;");
-  append_line(bsv, "TX #(MetadataRequest) tx_metadata <- mkTX;");
+  append_line(bsv, "TX #(MetadataResponse) tx_metadata <- mkTX;");
   append_line(bsv, "let rx_info_metadata = rx_metadata.u;");
   append_line(bsv, "let tx_info_metadata = tx_metadata.u;");
 
@@ -332,6 +338,18 @@ void TableCodeGen::emit(const IR::P4Table* table) {
   emitRuleHandleExecution(table);
   emitRuleHandleResponse(table);
 
+
+  append_line(bsv, "interface prev_control_state = toServer(rx_metadata.e, tx_metadata.e);");
+  idx = 0;
+  for (auto action : *actionList) {
+    append_line(bsv, "interface next_control_state_%d = toClient(bbReqFifo[%d], bbRspFifo[%d]);", idx, idx, idx);
+    idx ++;
+  }
+  append_line(bsv, "method Action set_verbosity(int verbosity);");
+  incr_indent(bsv);
+  append_line(bsv, "cf_verbosity <= verbosity;");
+  decr_indent(bsv);
+  append_line(bsv, "endmethod");
   decr_indent(bsv);
   append_line(bsv, "endmodule");
 }

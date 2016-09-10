@@ -67,6 +67,7 @@ class UnionCodeGen : public Inspector {
   UnionCodeGen(FPGAControl* control, BSVProgram& bsv):
     control(control), bsv(bsv) {}
   bool preorder(const IR::P4Table* table) override;
+  void emit();
  private:
   FPGAControl* control;
   BSVProgram & bsv;

@@ -99,6 +99,18 @@ bool FPGAControl::build() {
       auto table = tblblk->container;
       auto name = nameFromAnnotation(table->annotations, table->name);
       tables.emplace(name, table);
+      // populate map <Action, Table>
+      for (auto act : *table->getActionList()->actionList) {
+        auto element = act->to<IR::ActionListElement>();
+        if (element->expression->is<IR::PathExpression>()) {
+          //LOG1("Path " << element->expression->to<IR::PathExpression>());
+        } else if (element->expression->is<IR::MethodCallExpression>()) {
+          auto expression = element->expression->to<IR::MethodCallExpression>();
+          auto type = program->typeMap->getType(expression->method, true);
+          auto action = expression->method->toString();
+          action_to_table[action] = table;
+        }
+      }
     } else if (b->is<IR::ExternBlock>()) {
       auto ctrblk = b->to<IR::ExternBlock>();
       LOG1("extern " << ctrblk);
@@ -147,7 +159,7 @@ void FPGAControl::emitEntryRule(BSVProgram & bsv, const CFG::Node* node) {
 void FPGAControl::emitExitRule(BSVProgram & bsv, const CFG::Node* node) {
   append_format(bsv, "rule rl_exit if (exit_req_ff.notEmpty);");
   incr_indent(bsv);
-  append_line(bsv, "exit_req_ff.deq");
+  append_line(bsv, "exit_req_ff.deq;");
   decr_indent(bsv);
   append_line(bsv, "endrule");
 }
@@ -161,21 +173,25 @@ void FPGAControl::emitTableRule(BSVProgram & bsv, const CFG::TableNode* node) {
   append_format(bsv, "%s_rsp_ff.deq;", name);
   append_format(bsv, "let _rsp = %s_rsp_ff.first;", name);
   // find next states
-  append_line(bsv, "let meta = _req.meta;");
-  append_line(bsv, "let pkt = _req.pkt;");
+  append_line(bsv, "let meta = _rsp.meta;");
+  append_line(bsv, "let pkt = _rsp.pkt;");
   append_line(bsv, "case (_rsp) matches");
   incr_indent(bsv);
   for (auto s : node->successors.edges) {
     if (s->label == nullptr) {
-      append_line(bsv, "default:");
+      append_line(bsv, "default: begin");
       incr_indent(bsv);
+      append_line(bsv, "MetadataRequest req = MetadataRequest { pkt : pkt, meta : meta};");
       append_line(bsv, "%s_req_ff.enq(req);", s->endpoint->name);
       decr_indent(bsv);
+      append_line(bsv, "end");
     } else {
-      append_line(bsv, "%s:", s->label);
+      append_line(bsv, "%s: begin", s->label);
       incr_indent(bsv);
+      append_line(bsv, "MetadataRequest req = MetadataRequest { pkt : pkt, meta : meta};");
       append_line(bsv, "%s_req_ff.enq(req);", s->endpoint->name);
       decr_indent(bsv);
+      append_line(bsv, "end");
     }
   }
   decr_indent(bsv);
@@ -193,24 +209,33 @@ void FPGAControl::emitCondRule(BSVProgram & bsv, const CFG::IfNode* node) {
   // LOG1(node << " succ " << node->successors.edges);
   append_format(bsv, "%s_req_ff.deq;", name);
   append_format(bsv, "let _req = %s_req_ff.first;", name);
+
+  auto ifTrue = cstring("");
+  auto ifFalse = cstring("");
   for (auto e : node->successors.edges) {
     if (e->isBool()) {
       if (e->getBool()) {
-        ExpressionConverter visitor;
-        stmt->condition->apply(visitor);
-        append_format(bsv, "if (%s) {", visitor.bsv);
-        incr_indent(bsv);
-        append_format(bsv, "%s_req_ff.enq(_req);", e->getNode()->name);
-        decr_indent(bsv);
-        append_line(bsv, "}");
+        ifTrue = e->getNode()->name + cstring("_req_ff.enq(_req);");
       } else {
-        append_line(bsv, "else {");
-        incr_indent(bsv);
-        append_format(bsv, "%s_req_ff.enq(_req);", e->getNode()->name);
-        decr_indent(bsv);
-        append_line(bsv, "}");
+        ifFalse = e->getNode()->name + cstring("_req_ff.enq(_req);");
       }
     }
+  }
+  ExpressionConverter visitor;
+  stmt->condition->apply(visitor);
+  if (ifTrue != "") {
+    append_format(bsv, "if (%s) begin", visitor.bsv);
+    incr_indent(bsv);
+    append_format(bsv, ifTrue);
+    decr_indent(bsv);
+    append_line(bsv, "end");
+  }
+  if (ifFalse != "") {
+    append_line(bsv, "else begin");
+    incr_indent(bsv);
+    append_format(bsv, ifFalse);
+    decr_indent(bsv);
+    append_line(bsv, "end");
   }
   decr_indent(bsv);
   append_line(bsv, "endrule");
@@ -219,10 +244,10 @@ void FPGAControl::emitCondRule(BSVProgram & bsv, const CFG::IfNode* node) {
 void FPGAControl::emitDeclaration(BSVProgram & bsv) {
   // basic block instances
   for (auto b : basicBlock) {
-    // LOG1("basic block" << b.second);
-    auto name = camelCase(b.second->name.toString());
+    auto name = nameFromAnnotation(b.second->annotations, b.second->name);
     auto type = CamelCase(name);
-    append_format(bsv, "%s %s <- mk%s();", type, name, type);
+    auto camelCaseName = camelCase(name);
+    append_format(bsv, "Control::%s %s <- mk%s();", type, camelCaseName, type);
   }
   for (auto t : tables) {
     auto table = t.second->to<IR::P4Table>();
@@ -230,7 +255,7 @@ void FPGAControl::emitDeclaration(BSVProgram & bsv) {
       continue;
     auto name = nameFromAnnotation(table->annotations, table->name);
     auto type = CamelCase(name);
-    append_format(bsv, "%s %s <- mk%s();", type, name, type);
+    append_format(bsv, "Control::%s %s <- mk%s();", type, name, type);
   }
 }
 
@@ -242,7 +267,7 @@ void FPGAControl::emitFifo(BSVProgram & bsv) {
     auto name = nameFromAnnotation(table->annotations, table->name);
     auto type = CamelCase(name);
     append_line(bsv, "FIFOF#(MetadataRequest) %s_req_ff <- mkFIFOF;", name);
-    append_line(bsv, "FIFOF#(%sResponse) %s_rsp_ff <- mkFIFOF;", type, name);
+    append_line(bsv, "FIFOF#(MetadataResponse) %s_rsp_ff <- mkFIFOF;", name);
   }
   append_line(bsv, "FIFOF#(MetadataRequest) exit_req_ff <- mkFIFOF;");
   append_line(bsv, "FIFOF#(MetadataResponse) exit_rsp_ff <- mkFIFOF;");
@@ -309,30 +334,43 @@ void FPGAControl::emitActions(BSVProgram & bsv) {
 }
 
 void FPGAControl::emitActionTypes(BSVProgram & bsv) {
+  UnionCodeGen visitor(this, bsv);
+  visitor.emit();
   for (auto b : tables) {
     UnionCodeGen visitor(this, bsv);
     b.second->apply(visitor);
   }
 }
 
+
 // control block module
 void FPGAControl::emit(BSVProgram & bsv) {
   auto cbname = controlBlock->container->name.toString();
   auto cbtype = CamelCase(cbname);
 
+  append_line(bsv, "import StructDefines::*;");
+  append_line(bsv, "import UnionDefines::*;");
+  append_line(bsv, "import CPU::*;");
+  append_line(bsv, "import IMem::*;");
   emitTables(bsv);
   emitActions(bsv);
   emitActionTypes(bsv);
 
   // TODO: synthesize boundary
   append_format(bsv, "// =============== control %s ==============", cbname);
-
+  append_line(bsv, "interface %s;", cbtype);
+  incr_indent(bsv);
+  append_line(bsv, "interface Client#(MetadataRequest, MetadataResponse) next;");
+  append_line(bsv, "interface MemFreeClient freeClient;");
+  append_line(bsv, "method Action set_verbosity(int verbosity);");
+  decr_indent(bsv);
+  append_line(bsv, "endinterface");
   append_line(bsv, "module mk%s #(Vector#(numClients, Client#(MetadataRequest, MetadataResponse)) mdc) (%s);", cbtype, cbtype);
   incr_indent(bsv);
   emitDebugPrint(bsv);
   emitDeclaration(bsv);
   emitFifo(bsv);
-  append_line(bsv, "Vector#(numClients, Server#(MetadataRequest, MetadataResponse)) mds = replicate(toServer(default_req_ff, default_rsp_ff));");
+  append_line(bsv, "Vector#(numClients, Server#(MetadataRequest, MetadataResponse)) mds = replicate(toServer(entry_req_ff, entry_rsp_ff));");
   append_line(bsv, "mkConnection(mds, mdc);");
   emitConnection(bsv);
 

@@ -123,7 +123,7 @@ bool DeparserRuleVisitor::preorder(const IR::BSV::DeparseState* state) {
   append_format(bsv_, "succeed_and_next(%d);", width);
   append_line(bsv_, "deparse_state_ff.deq;");
   append_line(bsv_, "let metadata = meta[0];");
-  append_format(bsv_, "metadata.%s = tagged NotPresent;", name);
+  append_format(bsv_, "metadata.%s = tagged StructDefines::NotPresent;", name);
   append_line(bsv_, "transit_next_state(metadata);");
   append_line(bsv_, "meta[0] <= metadata;");
   decr_indent(bsv_);
