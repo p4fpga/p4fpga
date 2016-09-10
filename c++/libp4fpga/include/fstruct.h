@@ -18,7 +18,7 @@
 #define EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FSTRUCT_H_
 
 #include "ir/ir.h"
-#include "fparser.h"
+#include "fprogram.h"
 #include "bsvprogram.h"
 #include "string_utils.h"
 
@@ -64,13 +64,13 @@ inline void decr_indent(BSVProgram & bsv) {
 
 class StructCodeGen : public Inspector {
  public:
-  StructCodeGen(const FPGAParser *parser, BSVProgram& bsv) :
-    bsv(bsv), parser(parser) {}
+  StructCodeGen(const FPGAProgram* program, BSVProgram& bsv) :
+    bsv(bsv), program(program) {}
   bool preorder(const IR::Type_Header* header) override;
   void emit();
  private:
   BSVProgram & bsv;
-  const FPGAParser* parser;
+  const FPGAProgram* program;
 };
 
 }  // namespace FPGA

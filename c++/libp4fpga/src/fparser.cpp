@@ -171,18 +171,15 @@ void FPGAParser::emitEnums(BSVProgram & bsv) {
   for (auto f : *htype->to<IR::Type_Struct>()->fields) {
     auto ftype = typeMap->getType(f);
     if (ftype->is<IR::Type_Header>()) {
-      StructCodeGen visitor(this, bsv);
+      StructCodeGen visitor(program, bsv);
       ftype->apply(visitor);
     } else if (ftype->is<IR::Type_Stack>()) {
       auto hstack = ftype->to<IR::Type_Stack>();
       auto header = hstack->elementType->to<IR::Type_Header>();
-      StructCodeGen visitor(this, bsv);
+      StructCodeGen visitor(program, bsv);
       header->apply(visitor);
     }
   }
-
-  StructCodeGen visitor(this, bsv);
-  visitor.emit();
 }
 
 

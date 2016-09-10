@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 #include "frontends/p4/coreLibrary.h"
+#include "fstruct.h"
 #include "fprogram.h"
 #include "fparser.h"
 #include "fcontrol.h"
@@ -72,6 +73,10 @@ void FPGAProgram::emit(BSVProgram & bsv) {
   ingress->emit(bsv);
   egress->emit(bsv);
   deparser->emit(bsv);
+
+  // generate MetadataT
+  StructCodeGen visitor(this, bsv);
+  visitor.emit();
 }
 
 //void FPGAProgram::generateGraph(Graph & graph) {

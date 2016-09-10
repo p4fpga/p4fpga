@@ -15,6 +15,8 @@
 */
 
 #include "fstruct.h"
+#include "fparser.h"
+#include "fcontrol.h"
 #include "ir/ir.h"
 #include "string_utils.h"
 
@@ -49,10 +51,20 @@ bool StructCodeGen::preorder(const IR::Type_Header* type) {
 }
 
 void StructCodeGen::emit() {
-  LOG1("print");
   append_line(bsv, "typedef struct {");
   incr_indent(bsv);
-  for (auto s : parser->states) {
+  // metadata
+  for (auto p : program->ingress->metadata_to_table) {
+    auto name = nameFromAnnotation(p.first->annotations, p.first->name);
+    auto size = p.first->type->to<IR::Type_Bits>()->size;
+    append_line(bsv, "Maybe#(Bit#(%d)) %s;", size, name);
+  }
+  for (auto p : program->egress->metadata_to_table) {
+    auto name = nameFromAnnotation(p.first->annotations, p.first->name);
+    auto size = p.first->type->to<IR::Type_Bits>()->size;
+    append_line(bsv, "Maybe#(Bit#(%d)) %s;", size, name);
+  }
+  for (auto s : program->parser->states) {
     append_format(bsv, "HeaderState %s;", s->name.toString());
   }
   decr_indent(bsv);
@@ -63,10 +75,6 @@ void StructCodeGen::emit() {
   decr_indent(bsv);
   append_line(bsv, "endinstance");
 }
-// TODO need to generate MetadataT
-
-// collect all metadata used by table..
-// collect all header and assign HeaderState
 
 }  // namespace FPGA
 

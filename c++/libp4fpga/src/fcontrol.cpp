@@ -99,6 +99,7 @@ bool FPGAControl::build() {
       auto table = tblblk->container;
       auto name = nameFromAnnotation(table->annotations, table->name);
       tables.emplace(name, table);
+
       // populate map <Action, Table>
       for (auto act : *table->getActionList()->actionList) {
         auto element = act->to<IR::ActionListElement>();
@@ -109,6 +110,29 @@ bool FPGAControl::build() {
           auto type = program->typeMap->getType(expression->method, true);
           auto action = expression->method->toString();
           action_to_table[action] = table;
+        }
+      }
+
+      // populate map <Metadata, Table>
+      auto keys = table->getKey();
+      if (keys == nullptr) return false;
+
+      for (auto key : *keys->keyElements) {
+        auto element = key->to<IR::KeyElement>();
+        if (element->expression->is<IR::Member>()) {
+          auto m = element->expression->to<IR::Member>();
+          auto type = program->typeMap->getType(m->expr, true);
+          // from meta
+          if (type->is<IR::Type_Struct>()) {
+            auto t = type->to<IR::Type_StructLike>();
+            auto f = t->getField(m->member);
+            metadata_to_table[f].insert(table);
+          // from hdr
+          } else if (type->is<IR::Type_Header>()) {
+            auto t = type->to<IR::Type_StructLike>();
+            auto f = t->getField(m->member);
+            metadata_to_table[f].insert(table);
+          }
         }
       }
     } else if (b->is<IR::ExternBlock>()) {
