@@ -77,10 +77,11 @@ bool FPGAControl::build() {
   } else {
     BUG_CHECK(cfg->entryPoint->successors.size() == 1, "Expected 1 start node for %1%", cont);
     auto start = (*(cfg->entryPoint->successors.edges.begin()))->endpoint;
-    LOG1(start);
+    LOG1("start node" << start);
   }
 
   // build map <cstring, IR::P4Action*>
+  LOG1("Building action map");
   for (auto s : *controlBlock->container->getDeclarations()) {
     if (s->is<IR::P4Action>()) {
       auto action = s->to<IR::P4Action>();
@@ -91,6 +92,7 @@ bool FPGAControl::build() {
 
   // constantValue : compile-time allocated resource, such as table..
   // build map <cstring, IR::P4Table*>
+  LOG1("Building table map");
   for (auto c : controlBlock->constantValue) {
     auto b = c.second;
     if (!b->is<IR::Block>()) continue;
@@ -110,13 +112,16 @@ bool FPGAControl::build() {
           auto type = program->typeMap->getType(expression->method, true);
           auto action = expression->method->toString();
           action_to_table[action] = table;
-          LOG1("action yyy" << action);
+          LOG1("action yyy " << action);
         }
       }
 
       // populate map <Metadata, Table>
       auto keys = table->getKey();
-      if (keys == nullptr) return false;
+      if (keys == nullptr) {
+        LOG4("Table has no key : " << name);
+        continue;
+      }
 
       for (auto key : *keys->keyElements) {
         auto element = key->to<IR::KeyElement>();
@@ -372,6 +377,7 @@ void FPGAControl::emitActionTypes(BSVProgram & bsv) {
 void FPGAControl::emit(BSVProgram & bsv) {
   auto cbname = controlBlock->container->name.toString();
   auto cbtype = CamelCase(cbname);
+  LOG1("Emitting " << cbname);
 
   append_line(bsv, "import StructDefines::*;");
   append_line(bsv, "import UnionDefines::*;");

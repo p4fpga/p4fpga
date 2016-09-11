@@ -27,11 +27,9 @@ namespace FPGA {
 using namespace Parser;
 
 class ParserBuilder : public Inspector {
-  // variables to keep track of which state is being handled.
-  cstring state;
-  cstring header;
-  std::map<cstring, int> ext_count;
-  std::map<cstring, IR::BSV::ParseState*> smap;
+  const IR::ParserState* parser_state;
+  std::map<const IR::ParserState*, int> ext_count;
+  std::map<const IR::ParserState*, IR::BSV::ParseState*> smap;
  public:
   ParserBuilder(FPGAParser* parser, const FPGAProgram* program) :
     parser(parser), program(program) {}
@@ -55,11 +53,14 @@ class ParserBuilder : public Inspector {
 bool ParserBuilder::preorder(const IR::ParserState* ps) {
 
   // skip accept / reject states
-  if (ps->isBuiltin()) return false;
+  if (ps->isBuiltin()) {
+    LOG1("skip built in state " << ps);
+    return false;
+  }
 
   // take a note of current p4 parse state
-  state = ps->name;
-  ext_count[state] = 0;
+  parser_state = ps;
+  ext_count[ps] = 0;
 
   // process 'extract' method
   visit(ps->components);
@@ -74,7 +75,7 @@ bool ParserBuilder::preorder(const IR::ParserState* ps) {
     auto nextState = new IR::SelectCase(new IR::DefaultExpression(), path);
     auto cases = new IR::IndexedVector<IR::SelectCase>();
     cases->push_back(nextState);
-    auto s = smap[header];
+    auto s = smap[parser_state];
     if (s != nullptr) {
       s->cases = cases;
     }
@@ -84,7 +85,7 @@ bool ParserBuilder::preorder(const IR::ParserState* ps) {
 
 bool ParserBuilder::preorder(const IR::SelectExpression* expression) {
   // get current parse state
-  auto s = smap[header];
+  auto s = smap[parser_state];
 
   // populate select keys
   auto keys = expression->select;
@@ -113,11 +114,11 @@ bool ParserBuilder::preorder(const IR::MethodCallExpression* expression) {
   if (e == nullptr) return false;
 
   if (e->member == "extract") {
-    if (ext_count[state] == 0) {
-      ext_count[state] += 1;
+    if (ext_count[parser_state] == 0) {
+      ext_count[parser_state] += 1;
     } else {
       //::warning("More than one 'extract' method");
-      BUG("ERROR: More than one 'extract' method in %s. TODO", state);
+      BUG("ERROR: More than one 'extract' method in %s. TODO", parser_state->name);
     }
     // implementing one-argument variant of 'extract' method
     for (auto h: MakeZipRange(*expression->typeArguments, *expression->arguments)) {
@@ -131,8 +132,6 @@ bool ParserBuilder::preorder(const IR::MethodCallExpression* expression) {
         ::warning("unhandle extract method %1%", name);
       } else if (instName->is<IR::Member>()) {
         auto name = instName->to<IR::Member>()->member;
-        // keep track of current header
-        header = name;
         if (header_type->is<IR::Type_StructLike>()) {
           auto hh = header_type->to<IR::Type_StructLike>();
           auto tn = typeName->to<IR::Type_Name>();
@@ -140,7 +139,8 @@ bool ParserBuilder::preorder(const IR::MethodCallExpression* expression) {
           // leave fields related to next state selection empty
           auto s = new IR::BSV::ParseState(name, hh->fields, header_width, tn, nullptr, nullptr);
           parser->states.push_back(s);
-          smap[name] = s;
+          smap[parser_state] = s;
+          LOG1("parse state " << parser_state->name << " " << s);
         }
       }
     }
@@ -181,7 +181,6 @@ void FPGAParser::emitEnums(BSVProgram & bsv) {
     }
   }
 }
-
 
 void FPGAParser::emitFunctions(BSVProgram & bsv) {
   append_line(bsv, "`ifdef PARSER_FUNCTION");
@@ -327,6 +326,14 @@ void FPGAParser::emitRules(BSVProgram & bsv) {
     append_line(bsv, "");
 
     // Rule: transition rules
+    if (s->cases == nullptr) {
+      
+    } else {
+      for (auto c : *s->cases) {
+        auto rl_name = name + "_" + c->state->toString();
+        append_line(bsv, "rule rl_%s if (w_%s)", rl_name, rl_name);
+      }
+    }
   }
   append_line(bsv, "`endif");
 }

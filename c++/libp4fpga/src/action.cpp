@@ -24,9 +24,9 @@ namespace FPGA {
 using namespace Control;
 
 bool ActionCodeGen::preorder(const IR::AssignmentStatement* stmt) {
-  //LOG1("assignment " << stmt->left << stmt->right);
+  append_line(bsv, "// %s = %s", stmt->left, stmt->right);
   visit(stmt->left);
-  // visit(stmt->right);
+  visit(stmt->right);
   return false;
 }
 
@@ -69,8 +69,7 @@ bool ActionCodeGen::preorder(const IR::MethodCallExpression* expression) {
   auto extFunc = mi->to<P4::ExternFunction>();
   if (extFunc != nullptr) {
     if (extFunc->method->name == "mark_to_drop") {
-      // drop packet
-      //append_line(bsv_, "drop");
+      append_line(bsv, "// mark_to_drop ");
     }
     return false;
   }
@@ -136,7 +135,6 @@ void ActionCodeGen::postorder(const IR::P4Action* action) {
     return;
   }
 
-  // empty action, forward;
   // TODO: use library forward unit
   if (stmt->components->size() == 0) {
     forward();

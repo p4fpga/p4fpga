@@ -30,10 +30,14 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
     const IR::P4Program* program = toplevel->getProgram();
 
     FPGAProgram fpgaprog(program, refMap, typeMap, toplevel);
-    if (!fpgaprog.build())
+    if (!fpgaprog.build()) {
+        ::error("FPGAprog build failed");
         return;
-    if (options.outputFile.isNullOrEmpty())
+    }
+    if (options.outputFile.isNullOrEmpty()) {
+        ::error("Must specify output directory");
         return;
+    }
 
     boost::filesystem::path dir(options.outputFile);
     boost::filesystem::create_directory(dir);

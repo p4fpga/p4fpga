@@ -24,21 +24,23 @@ limitations under the License.
 namespace FPGA {
 bool FPGAProgram::build() {
   auto pack = toplevel->getMain();
-
+  bool success = false;
   /*
    * We assume a v1model: parser -> ingress -> egress -> deparser.
    * As a result, FPGAParser, FPGAControl are created staticaly here.
    * A better solution should be reading arch.p4 first, then create
    * pipeline objects dynamically based on what's specified in arch.p4
    */
+  LOG1("Building Parser");
   auto pb = pack->getParameterValue(v1model.sw.parser.name)
                 ->to<IR::ParserBlock>();
   BUG_CHECK(pb != nullptr, "No parser block found");
   parser = new FPGAParser(this, pb, typeMap, refMap);
-  bool success = parser->build();
+  success = parser->build();
   if (!success)
       return success;
 
+  LOG1("Building Ingress");
   auto cb = pack->getParameterValue(v1model.sw.ingress.name)
                 ->to<IR::ControlBlock>();
   BUG_CHECK(cb != nullptr, "No control block found");
@@ -48,6 +50,7 @@ bool FPGAProgram::build() {
   if (!success)
       return success;
 
+  LOG1("Building Egress");
   auto eb = pack->getParameterValue(v1model.sw.egress.name)
                 ->to<IR::ControlBlock>();
   BUG_CHECK(eb != nullptr, "No egress block found");
@@ -56,7 +59,7 @@ bool FPGAProgram::build() {
   if (!success)
     return success;
 
-  LOG1("deparser " << v1model.sw.deparser.name);
+  LOG1("Building Deparser");
   auto db = pack->getParameterValue(v1model.sw.deparser.name)
                 ->to<IR::ControlBlock>();
   BUG_CHECK(db != nullptr, "No deparser block found");
@@ -69,6 +72,7 @@ bool FPGAProgram::build() {
 }
 
 void FPGAProgram::emit(BSVProgram & bsv) {
+  LOG1("Emitting FPGA program");
   parser->emit(bsv);
   ingress->emit(bsv);
   egress->emit(bsv);
