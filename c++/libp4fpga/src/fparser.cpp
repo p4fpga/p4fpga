@@ -242,7 +242,7 @@ void FPGAParser::emitFunctions(BSVProgram & bsv) {
         }
       }
     } else {
-      //FIXME
+      // no case.
     }
     decr_indent(bsv);
     append_line(bsv, "endcase");
@@ -344,15 +344,15 @@ void FPGAParser::emitTransitionRule(BSVProgram & bsv, const IR::BSV::ParseState*
         if (c->state->toString() == IR::ParserState::accept) {
           append_line(bsv, "parse_done[0] <= True;");
           append_line(bsv, "w_parse_done.send();");
-          append_line(bsv, "fetch_next_header(0);");
+          append_line(bsv, "fetch_next_header0(0);");
         } else {
-          append_format(bsv, "parse_state_ff.enq(State%s)", CamelCase(rl_name));
           // ParserState* -> BSV::ParseState --> width_bits
           // LOG1("decl" << decl << " " << c->state << " " << decl->node_type_name());
           if (decl->is<IR::ParserState>()) {
             auto s = decl->to<IR::ParserState>();
             auto bsv_parse_state = parseStateMap[s];
-            append_line(bsv, "fetch_next_header(%d);", bsv_parse_state->width_bits);
+            append_format(bsv, "parse_state_ff.enq(State%s);", CamelCase(bsv_parse_state->name.toString()));
+            append_line(bsv, "fetch_next_header0(%d);", bsv_parse_state->width_bits);
           }
         }
         decr_indent(bsv);
@@ -368,6 +368,7 @@ void FPGAParser::emitRules(BSVProgram & bsv) {
     emitExtractionRule(bsv, s);
     emitTransitionRule(bsv, s);
   }
+  emitAcceptRule(bsv);
   append_line(bsv, "`endif");
 }
 
@@ -426,9 +427,9 @@ void FPGAParser::emitUserMetadata(BSVProgram & bsv, const IR::Type_Struct* metad
 }
 
 void FPGAParser::emitAcceptRule(BSVProgram & bsv) {
-  append_line(bsv, "rule rl_accept if (accept_ff.notEmpty);");
+  append_line(bsv, "rule rl_accept if (delay_ff.notEmpty);");
   incr_indent(bsv);
-  append_line(bsv, "accept_ff.deq;");
+  append_line(bsv, "delay_ff.deq;");
   append_line(bsv, "MetadataT meta = defaultValue;");
   for (auto h : *program->program->getDeclarations()) {
     // In V1 model, metadata comes from three sources:
@@ -460,7 +461,6 @@ void FPGAParser::emit(BSVProgram & bsv) {
   emitStructs(bsv);
   emitFunctions(bsv);
   emitRules(bsv);
-  emitAcceptRule(bsv);
   emitStateElements(bsv);
 }
 
