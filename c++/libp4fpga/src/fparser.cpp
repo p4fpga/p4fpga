@@ -357,12 +357,57 @@ void FPGAParser::emitStateElements(BSVProgram & bsv) {
   append_line(bsv, "`endif");
 }
 
+// convert every field in struct headers to its origial header type
+void FPGAParser::emitAcceptedHeaders(BSVProgram & bsv, const IR::Type_Struct* headers) {
+  for (auto h : *headers->fields) {
+    auto node = h->getNode();
+    auto type = typeMap->getType(node, true);
+    auto name = h->name.toString();
+    if (type->is<IR::Type_Header>()) {
+      append_line(bsv, "let %s <- toGet(%s_out_ff).get;", name, name);
+    } else if (type->is<IR::Type_Stack>()) {
+      ::warning("TODO: generate out_ff for header stack;");
+    } else {
+      ::error("Unknown header type ", type);
+    }
+  }
+}
+
+void FPGAParser::emitAcceptRule(BSVProgram & bsv) {
+  append_line(bsv, "rule rl_accept if (w_parse_done);");
+  incr_indent(bsv);
+  for (auto h : *program->program->getDeclarations()) {
+    // In V1 model, metadata comes from three sources:
+    // - standard_metadata
+    // - metadata
+    // - header
+    if (h->is<IR::Type_Struct>()) {
+      auto h_struct = h->to<IR::Type_Struct>();
+      auto name = h_struct->name.toString();
+      // only handle one of the three above
+      if (name == "standard_metadata") {
+        // not used
+      } else if (name == "metadata") {
+        // this struct contains all extracted metadata
+      } else if (name == "headers") {
+        // this struct contains all extracted headers
+        emitAcceptedHeaders(bsv, h_struct);
+      } else {
+        // - struct used by externs, such as checksum
+      }
+    }
+  }
+  decr_indent(bsv);
+  append_line(bsv, "endrule");
+}
+
 // emit BSV_IR with BSV-specific CodeGenInspector
 void FPGAParser::emit(BSVProgram & bsv) {
   emitEnums(bsv);
   emitStructs(bsv);
   emitFunctions(bsv);
   emitRules(bsv);
+  emitAcceptRule(bsv);
   emitStateElements(bsv);
 }
 

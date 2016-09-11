@@ -71,7 +71,7 @@ bool FPGAControl::build() {
   cfg = new CFG();
   cfg->build(cont, program->refMap, program->typeMap);
 
-  cfg->dbprint(std::cout);
+  // cfg->dbprint(std::cout);
   if (cfg->entryPoint->successors.size() == 0) {
     LOG1("init table null");
   } else {

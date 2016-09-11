@@ -79,6 +79,8 @@ class FPGAParser : public FPGAObject {
   void emitStructs(BSVProgram & bsv);
   void emitFunctions(BSVProgram & bsv);
   void emitRules(BSVProgram & bsv);
+  void emitAcceptRule(BSVProgram & bsv);
+  void emitAcceptedHeaders(BSVProgram & bsv, const IR::Type_Struct* headers);
   void emitStateElements(BSVProgram & bsv);
 
   std::vector<IR::BSV::Rule*>         rules;
