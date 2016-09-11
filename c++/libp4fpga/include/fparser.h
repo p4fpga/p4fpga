@@ -64,16 +64,6 @@ inline void decr_indent(BSVProgram & bsv) {
 
 typedef std::map<const IR::ParserState*, IR::BSV::ParseState*> ParseStateMap;
 
-class FPGAParserState : public FPGAObject {
- public:
-  const IR::ParserState* state;
-  const FPGAParser* parser;
-
-  FPGAParserState(FPGAParser* parser, const IR::ParserState* state) :
-    parser(parser), state(state) {}
-  void emit(BSVProgram & bsv) override;
-};
-
 class FPGAParser : public FPGAObject {
  protected:
   // TODO(rjs): I think these should be const
@@ -102,6 +92,10 @@ class FPGAParser : public FPGAObject {
   const IR::Parameter*          userMetadata;
   const IR::Parameter*          stdMetadata;
   FPGAType*                     headerType;
+
+  // map from IR::ParserState to IR::BSV::ParseState
+  // the latter subclasses Type_Header, from which we
+  // compute bit width of next parse state.
   ParseStateMap                 parseStateMap;
 
   explicit FPGAParser(const FPGAProgram* program,

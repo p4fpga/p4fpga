@@ -348,7 +348,7 @@ void FPGAParser::emitTransitionRule(BSVProgram & bsv, const IR::BSV::ParseState*
         } else {
           append_format(bsv, "parse_state_ff.enq(State%s)", CamelCase(rl_name));
           // ParserState* -> BSV::ParseState --> width_bits
-          LOG1("decl" << decl << " " << c->state << " " << decl->node_type_name());
+          // LOG1("decl" << decl << " " << c->state << " " << decl->node_type_name());
           if (decl->is<IR::ParserState>()) {
             auto s = decl->to<IR::ParserState>();
             auto bsv_parse_state = parseStateMap[s];
