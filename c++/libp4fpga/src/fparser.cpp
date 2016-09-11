@@ -270,13 +270,11 @@ void FPGAParser::emitStructs(BSVProgram & bsv) {
   append_line(bsv, "`endif");
 }
 
-void FPGAParser::emitRules(BSVProgram & bsv) {
-  append_line(bsv, "`ifdef PARSER_RULES");
-  for (auto s : states) {
-    auto name = s->name.toString();
-    auto type = s->type->toString();
+void FPGAParser::emitBufferRule(BSVProgram & bsv, const IR::BSV::ParseState* state) {
+    auto name = state->name.toString();
+    auto type = state->type->toString();
     // Rule: load data
-    append_format(bsv, "rule rl_%s_load if ((parse_state_ff.first == State%s) && rg_buffered[0] < %d);", name, CamelCase(name), s->width_bits);
+    append_format(bsv, "rule rl_%s_load if ((parse_state_ff.first == State%s) && rg_buffered[0] < %d);", name, CamelCase(name), state->width_bits);
     incr_indent(bsv);
     append_line(bsv, "report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);");
     append_line(bsv, "if (isValid(data_ff.first)) begin");
@@ -290,9 +288,12 @@ void FPGAParser::emitRules(BSVProgram & bsv) {
     decr_indent(bsv);
     append_line(bsv, "endrule");
     append_line(bsv, "");
+}
 
-    // Rule: extract header
-    append_format(bsv, "rule rl_%s_extract if ((parse_state_ff.first == State%s) && (rg_buffered[0] > %d));", name, CamelCase(name), s->width_bits);
+void FPGAParser::emitExtractionRule(BSVProgram & bsv, const IR::BSV::ParseState* state) {
+    auto name = state->name.toString();
+    auto type = state->type->toString();
+    append_format(bsv, "rule rl_%s_extract if ((parse_state_ff.first == State%s) && (rg_buffered[0] > %d));", name, CamelCase(name), state->width_bits);
     incr_indent(bsv);
     append_line(bsv, "let data = rg_tmp[0];");
     append_line(bsv, "if (isValid(data_ff.first)) begin");
@@ -305,8 +306,8 @@ void FPGAParser::emitRules(BSVProgram & bsv) {
     append_line(bsv, "let %s = extract_%s(truncate(data));", name, type);
     //TODO: handle more than one key
     auto params = cstring("");
-    if (s->keys != nullptr) {
-      auto lk = s->keys->to<IR::ListExpression>();
+    if (state->keys != nullptr) {
+      auto lk = state->keys->to<IR::ListExpression>();
       if (lk != nullptr) {
         for (auto key : *lk->components) {
           auto field = key->to<IR::Member>();
@@ -317,23 +318,47 @@ void FPGAParser::emitRules(BSVProgram & bsv) {
       }
     }
     append_line(bsv, "compute_next_state_%s(%s);", name, params);
-    append_format(bsv, "rg_tmp[0] <= zeroExtend(data >> %d);", s->width_bits);
+    append_format(bsv, "rg_tmp[0] <= zeroExtend(data >> %d);", state->width_bits);
     append_format(bsv, "succeed_and_next(%d);", 0);
     append_line(bsv, "parse_state_ff.deq;");
     append_format(bsv, "%s_out_ff.enq(tagged Valid %s);", name, name);
     decr_indent(bsv);
     append_line(bsv, "endrule");
     append_line(bsv, "");
+}
 
-    // Rule: transition rules
-    if (s->cases == nullptr) {
-      
+void FPGAParser::emitTransitionRule(BSVProgram & bsv, const IR::BSV::ParseState* state) {
+    auto name = state->name.toString();
+    auto type = state->type->toString();
+    if (state->cases == nullptr) {
+      // direct transition path
+      ::warning("directly transit to next state", state->toString());
     } else {
-      for (auto c : *s->cases) {
+      for (auto c : *state->cases) {
         auto rl_name = name + "_" + c->state->toString();
-        append_line(bsv, "rule rl_%s if (w_%s)", rl_name, rl_name);
+        append_line(bsv, "rule rl_%s if (w_%s);", rl_name, rl_name);
+        auto type = typeMap->getType(c->state, true);
+        incr_indent(bsv);
+        if (c->state->toString() == IR::ParserState::accept) {
+          append_line(bsv, "parse_done[0] <= True;");
+          append_line(bsv, "w_parse_done.send();");
+          append_line(bsv, "fetch_next_header(0);");
+        } else {
+          append_format(bsv, "parse_state_ff.enq(State%s)", CamelCase(rl_name));
+          append_line(bsv, "fetch_next_header(%d);", type->width_bits());
+        }
+        decr_indent(bsv);
+        append_line(bsv, "endrule");
       }
     }
+}
+
+void FPGAParser::emitRules(BSVProgram & bsv) {
+  append_line(bsv, "`ifdef PARSER_RULES");
+  for (auto s : states) {
+    emitBufferRule(bsv, s);
+    emitExtractionRule(bsv, s);
+    emitTransitionRule(bsv, s);
   }
   append_line(bsv, "`endif");
 }
@@ -399,15 +424,13 @@ void FPGAParser::emitAcceptRule(BSVProgram & bsv) {
   append_line(bsv, "MetadataT meta = defaultValue;");
   for (auto h : *program->program->getDeclarations()) {
     // In V1 model, metadata comes from three sources:
-    // - standard_metadata
-    // - metadata
-    // - header
+    // - standard_metadata, metadata, header
     if (h->is<IR::Type_Struct>()) {
       auto h_struct = h->to<IR::Type_Struct>();
       auto name = h_struct->name.toString();
       // only handle one of the three above
       if (name == "standard_metadata") {
-        // not used
+        // TODO: emitStandardMetadata();
       } else if (name == "metadata") {
         // this struct contains all extracted metadata
         emitUserMetadata(bsv, h_struct);
