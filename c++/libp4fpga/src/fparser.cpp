@@ -364,7 +364,12 @@ void FPGAParser::emitAcceptedHeaders(BSVProgram & bsv, const IR::Type_Struct* he
     auto type = typeMap->getType(node, true);
     auto name = h->name.toString();
     if (type->is<IR::Type_Header>()) {
-      append_line(bsv, "let %s <- toGet(%s_out_ff).get;", name, name);
+      append_format(bsv, "let %s <- toGet(%s_out_ff).get;", name, name);
+      append_format(bsv, "if (isValid(%s)) begin", name);
+      incr_indent(bsv);
+      append_format(bsv, "meta.%s = tagged Forward;", name);
+      decr_indent(bsv);
+      append_line(bsv, "end");
     } else if (type->is<IR::Type_Stack>()) {
       ::warning("TODO: generate out_ff for header stack;");
     } else {
@@ -374,8 +379,10 @@ void FPGAParser::emitAcceptedHeaders(BSVProgram & bsv, const IR::Type_Struct* he
 }
 
 void FPGAParser::emitAcceptRule(BSVProgram & bsv) {
-  append_line(bsv, "rule rl_accept if (w_parse_done);");
+  append_line(bsv, "rule rl_accept if (accept_ff.notEmpty);");
   incr_indent(bsv);
+  append_line(bsv, "accept_ff.deq;");
+  append_line(bsv, "MetadataT meta = defaultValue;");
   for (auto h : *program->program->getDeclarations()) {
     // In V1 model, metadata comes from three sources:
     // - standard_metadata
@@ -397,6 +404,7 @@ void FPGAParser::emitAcceptRule(BSVProgram & bsv) {
       }
     }
   }
+  append_line(bsv, "meta_in_ff.enq(meta);");
   decr_indent(bsv);
   append_line(bsv, "endrule");
 }
