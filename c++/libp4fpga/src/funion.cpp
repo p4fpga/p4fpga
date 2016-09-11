@@ -63,6 +63,14 @@ bool UnionCodeGen::preorder(const IR::P4Table* table) {
       append_line(bsv, "struct {");
       incr_indent(bsv);
       append_line(bsv, "PacketInstance pkt;");
+      auto k = control->basicBlock.find(action);
+      if (k != control->basicBlock.end()) {
+        auto params = k->second->parameters;
+        for (auto p : *params->parameters) {
+          auto type = p->type->to<IR::Type_Bits>();
+          append_line(bsv, "Bit#(%d) %s;", type->size, p->name.toString() );
+        }
+      }
       decr_indent(bsv);
       append_line(bsv, "} %sRspT;", ty);
     }

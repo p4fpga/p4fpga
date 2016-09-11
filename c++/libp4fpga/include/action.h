@@ -37,7 +37,7 @@ class ActionCodeGen : public Inspector {
   void forward();
   void drop();
   void emitCpuReqRule();
-  void emitCpuRspRule();
+  void emitCpuRspRule(const IR::P4Action* action);
 };
 
 }  // namespace FPGA

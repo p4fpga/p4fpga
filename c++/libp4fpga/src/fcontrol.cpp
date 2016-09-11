@@ -110,6 +110,7 @@ bool FPGAControl::build() {
           auto type = program->typeMap->getType(expression->method, true);
           auto action = expression->method->toString();
           action_to_table[action] = table;
+          LOG1("action yyy" << action);
         }
       }
 
@@ -376,6 +377,7 @@ void FPGAControl::emit(BSVProgram & bsv) {
   append_line(bsv, "import UnionDefines::*;");
   append_line(bsv, "import CPU::*;");
   append_line(bsv, "import IMem::*;");
+  append_line(bsv, "import List::*;");
   emitTables(bsv);
   emitActions(bsv);
   emitActionTypes(bsv);

@@ -96,10 +96,32 @@ void ActionCodeGen::emitCpuReqRule() {
   append_line(bsv, "endrule");
 }
 
-void ActionCodeGen::emitCpuRspRule() {
+void ActionCodeGen::emitCpuRspRule(const IR::P4Action* action) {
+  auto name = action->name;
+  auto type = CamelCase(name);
+  auto table = control->action_to_table[name];
+  auto table_name = nameFromAnnotation(table->annotations, table->name);
+  auto table_type = CamelCase(table_name);
+  std::vector<cstring> fields;
+  cstring response = "";
+  if (action->parameters->size() > 0) {
+    auto params = action->parameters->to<IR::ParameterList>();
+    if (params != nullptr) {
+      for (auto p : *params->parameters) {
+        fields.push_back(p->name);
+      }
+    }
+    for (auto f : fields) {
+      response += cstring(f) + ": " + cstring(f);
+      if (f != fields.back()) {
+        response += ", ";
+      }
+    }
+  }
   append_line(bsv, "rule rl_cpu_resp if (cpu.not_running());");
   incr_indent(bsv);
   append_line(bsv, "let pkt <- toGet(curr_packet_ff).get;"); // FIXME: bottleneck
+  append_format(bsv, "%sActionRsp rsp = tagged %sRspT {%s};", table_type, type, response);
   append_line(bsv, "tx_info_prev_control_state.enq(rsp);");
   decr_indent(bsv);
   append_line(bsv, "endrule");
@@ -142,12 +164,13 @@ void ActionCodeGen::postorder(const IR::P4Action* action) {
   append_line(bsv, "TX #(%sActionRsp) tx_prev_control_state <- mkTX;", table_type);
   append_line(bsv, "let rx_info_prev_control_state = rx_prev_control_state.u;");
   append_line(bsv, "let tx_info_prev_control_state = tx_prev_control_state.u;");
-  append_line(bsv, "CPU cpu <- mkCPU(\"%s\", nil);", name);
-  append_line(bsv, "IMem mem <- mkIMem(\"%s.hex\");", name);
+  append_line(bsv, "FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;");
+  append_line(bsv, "CPU cpu <- mkCPU(\"%s\", List::nil);", name);
+  append_line(bsv, "IMem imem <- mkIMem(\"%s.hex\");", name);
   append_line(bsv, "mkConnection(cpu.imem_client, imem.cpu_server);");
   // Extern ??
   emitCpuReqRule();
-  emitCpuRspRule();
+  emitCpuRspRule(action);
   append_line(bsv, "interface prev_control_state = toServer(rx_prev_control_state.e, tx_prev_control_state.e);");
   append_line(bsv, "method Action set_verbosity(int verbosity);");
   incr_indent(bsv);
