@@ -29,10 +29,10 @@ using namespace Parser;
 class ParserBuilder : public Inspector {
   const IR::ParserState* parser_state;
   std::map<const IR::ParserState*, int> ext_count;
-  std::map<const IR::ParserState*, IR::BSV::ParseState*> smap;
+  // ParseStateMap smap;
  public:
-  ParserBuilder(FPGAParser* parser, const FPGAProgram* program) :
-    parser(parser), program(program) {}
+  ParserBuilder(FPGAParser* parser, const FPGAProgram* program, ParseStateMap& smap) :
+    parser(parser), program(program), smap(smap) {}
   bool preorder(const IR::ParserState* state) override;
   bool preorder(const IR::SelectExpression* expression) override;
   bool preorder(const IR::MethodCallStatement* stmt) override
@@ -43,6 +43,7 @@ class ParserBuilder : public Inspector {
  private:
   const FPGAProgram* program;
   FPGAParser* parser;
+  ParseStateMap & smap;
 };
 
 // A P4 parse state corresponds to one or more Bluespec parse state,
@@ -338,6 +339,7 @@ void FPGAParser::emitTransitionRule(BSVProgram & bsv, const IR::BSV::ParseState*
         auto rl_name = name + "_" + c->state->toString();
         append_line(bsv, "rule rl_%s if (w_%s);", rl_name, rl_name);
         auto type = typeMap->getType(c->state, true);
+        auto decl = refMap->getDeclaration(c->state->path, true);
         incr_indent(bsv);
         if (c->state->toString() == IR::ParserState::accept) {
           append_line(bsv, "parse_done[0] <= True;");
@@ -345,7 +347,13 @@ void FPGAParser::emitTransitionRule(BSVProgram & bsv, const IR::BSV::ParseState*
           append_line(bsv, "fetch_next_header(0);");
         } else {
           append_format(bsv, "parse_state_ff.enq(State%s)", CamelCase(rl_name));
-          append_line(bsv, "fetch_next_header(%d);", type->width_bits());
+          // ParserState* -> BSV::ParseState --> width_bits
+          LOG1("decl" << decl << " " << c->state << " " << decl->node_type_name());
+          if (decl->is<IR::ParserState>()) {
+            auto s = decl->to<IR::ParserState>();
+            auto bsv_parse_state = parseStateMap[s];
+            append_line(bsv, "fetch_next_header(%d);", bsv_parse_state->width_bits);
+          }
         }
         decr_indent(bsv);
         append_line(bsv, "endrule");
@@ -472,7 +480,7 @@ bool FPGAParser::build() {
   stdMetadata = pl->getParameter(model.parser.standardMetadataParam.index);
 
   auto states = parserBlock->container->states;
-  ParserBuilder visitor(this, program);
+  ParserBuilder visitor(this, program, parseStateMap);
   for (auto state : *states) {
     LOG1(state);
     state->apply(visitor);

@@ -62,6 +62,8 @@ inline void decr_indent(BSVProgram & bsv) {
 
 }  // namespace Parser
 
+typedef std::map<const IR::ParserState*, IR::BSV::ParseState*> ParseStateMap;
+
 class FPGAParserState : public FPGAObject {
  public:
   const IR::ParserState* state;
@@ -100,6 +102,7 @@ class FPGAParser : public FPGAObject {
   const IR::Parameter*          userMetadata;
   const IR::Parameter*          stdMetadata;
   FPGAType*                     headerType;
+  ParseStateMap                 parseStateMap;
 
   explicit FPGAParser(const FPGAProgram* program,
                       const IR::ParserBlock* block,
