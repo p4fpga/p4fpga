@@ -378,6 +378,20 @@ void FPGAParser::emitAcceptedHeaders(BSVProgram & bsv, const IR::Type_Struct* he
   }
 }
 
+void FPGAParser::emitUserMetadata(BSVProgram & bsv, const IR::Type_Struct* metadata) {
+  for (auto h : *metadata->fields) {
+    auto node = h->getNode();
+    auto type = typeMap->getType(node, true);
+    if (type->is<IR::Type_Struct>()) {
+      auto hh = type->to<IR::Type_Struct>();
+      for (auto f : *hh->fields) {
+        auto name = f->toString();
+        append_line(bsv, "meta.%s = tagged Invalid;", name);
+      }
+    }
+  }
+}
+
 void FPGAParser::emitAcceptRule(BSVProgram & bsv) {
   append_line(bsv, "rule rl_accept if (accept_ff.notEmpty);");
   incr_indent(bsv);
@@ -396,8 +410,8 @@ void FPGAParser::emitAcceptRule(BSVProgram & bsv) {
         // not used
       } else if (name == "metadata") {
         // this struct contains all extracted metadata
+        emitUserMetadata(bsv, h_struct);
       } else if (name == "headers") {
-        // this struct contains all extracted headers
         emitAcceptedHeaders(bsv, h_struct);
       } else {
         // - struct used by externs, such as checksum
