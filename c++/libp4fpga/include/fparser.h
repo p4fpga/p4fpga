@@ -62,7 +62,7 @@ inline void decr_indent(BSVProgram & bsv) {
 
 }  // namespace Parser
 
-typedef std::map<const IR::ParserState*, IR::BSV::ParseState*> ParseStateMap;
+typedef std::map<const IR::ParserState*, IR::BSV::ParseStep*> ParseStepMap;
 
 class FPGAParser : public FPGAObject {
  protected:
@@ -71,9 +71,9 @@ class FPGAParser : public FPGAObject {
   void emitStructs(BSVProgram & bsv);
   void emitFunctions(BSVProgram & bsv);
   void emitRules(BSVProgram & bsv);
-  void emitBufferRule(BSVProgram & bsv, const IR::BSV::ParseState* state);
-  void emitExtractionRule(BSVProgram & bsv, const IR::BSV::ParseState* state);
-  void emitTransitionRule(BSVProgram & bsv, const IR::BSV::ParseState* state);
+  void emitBufferRule(BSVProgram & bsv, const IR::BSV::ParseStep* state);
+  void emitExtractionRule(BSVProgram & bsv, const IR::BSV::ParseStep* state);
+  void emitTransitionRule(BSVProgram & bsv, const IR::BSV::ParseStep* state);
   void emitAcceptRule(BSVProgram & bsv);
   void emitAcceptedHeaders(BSVProgram & bsv, const IR::Type_Struct* headers);
   void emitUserMetadata(BSVProgram & bsv, const IR::Type_Struct* metadata);
@@ -86,17 +86,17 @@ class FPGAParser : public FPGAObject {
   const P4::ReferenceMap*       refMap;
   const P4::TypeMap*            typeMap;
   const IR::ParserBlock*        parserBlock;
-  std::vector<IR::BSV::ParseState*> states;
   const IR::Parameter*          packet;
   const IR::Parameter*          headers;
   const IR::Parameter*          userMetadata;
   const IR::Parameter*          stdMetadata;
   FPGAType*                     headerType;
 
-  // map from IR::ParserState to IR::BSV::ParseState
+  // map from IR::ParserState to IR::BSV::ParseStep
   // the latter subclasses Type_Header, from which we
   // compute bit width of next parse state.
-  ParseStateMap                 parseStateMap;
+  ParseStepMap                 parseStateMap;
+  std::vector<IR::BSV::ParseStep*> parseSteps;
 
   explicit FPGAParser(const FPGAProgram* program,
                       const IR::ParserBlock* block,

@@ -73,6 +73,9 @@ bool FPGAProgram::build() {
 
 void FPGAProgram::emit(BSVProgram & bsv) {
   LOG1("Emitting FPGA program");
+  for (auto f : parser->parseStateMap) {
+    LOG1(f.first << f.second);
+  }
   parser->emit(bsv);
   ingress->emit(bsv);
   egress->emit(bsv);

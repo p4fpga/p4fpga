@@ -27,23 +27,30 @@ namespace FPGA {
 using namespace Parser;
 
 class ParserBuilder : public Inspector {
-  const IR::ParserState* parser_state;
-  std::map<const IR::ParserState*, int> ext_count;
-  // ParseStateMap smap;
  public:
-  ParserBuilder(FPGAParser* parser, const FPGAProgram* program, ParseStateMap& smap) :
-    parser(parser), program(program), smap(smap) {}
+  ParserBuilder(FPGAParser* parser) : parser(parser) {
+    statements = new IR::IndexedVector<IR::AssignmentStatement>();
+    cases = new IR::IndexedVector<IR::SelectCase>();
+    fields = new IR::IndexedVector<IR::StructField>();
+    header_width = 0;
+  }
   bool preorder(const IR::ParserState* state) override;
   bool preorder(const IR::SelectExpression* expression) override;
   bool preorder(const IR::MethodCallStatement* stmt) override
   { visit(stmt->methodCall); return false; };
-  bool preorder(const IR::AssignmentStatement* stmt) override
-  { LOG1(stmt); visit(stmt->right); visit(stmt->left); return false; };
+  bool preorder(const IR::AssignmentStatement* stmt) override;
   bool preorder(const IR::MethodCallExpression* expression) override;
  private:
-  const FPGAProgram* program;
+  IR::IndexedVector<IR::AssignmentStatement>* statements;
+  IR::IndexedVector<IR::SelectCase>*          cases;
+  const IR::ListExpression*                   select;
+  const IR::IndexedVector<IR::StructField>*   fields;
+  int                                         header_width;
+  const IR::Type_Name*                        header_type_name;
+  const IR::ID*                           header_name;
+
+  const IR::ParserState* parser_state;
   FPGAParser* parser;
-  ParseStateMap & smap;
 };
 
 // A P4 parse state corresponds to one or more Bluespec parse state,
@@ -51,62 +58,64 @@ class ParserBuilder : public Inspector {
 // There are two variants of 'extract' method:
 // - one-argument variant for extracting fixed-size headers
 // - two-argument variant for extracting variable-size headers
-bool ParserBuilder::preorder(const IR::ParserState* ps) {
-
+bool ParserBuilder::preorder(const IR::ParserState* state) {
   // skip accept / reject states
-  if (ps->isBuiltin()) {
-    LOG1("skip built in state " << ps);
+  if (state->isBuiltin()) {
+    LOG1("skip built in state " << state);
+  return false;
+  }
+
+  // ignore start state
+  if (state->name.toString() == "start") {
+    // NOTE: assume start state is actually called 'start'
+    LOG1("ignore start state");
     return false;
   }
 
   // take a note of current p4 parse state
-  parser_state = ps;
-  ext_count[ps] = 0;
+  parser_state = state;
 
-  // process 'extract' method
-  visit(ps->components);
+  // process 'extract' or 'set_metadata'
+  visit(state->components);
 
-  // process select expression
-  if (ps->selectExpression->is<IR::SelectExpression>()) {
-    // with more than one possible next state
-    visit(ps->selectExpression);
-  } else if (ps->selectExpression->is<IR::PathExpression>()){
-    // with only one next state
-    auto path = ps->selectExpression->to<IR::PathExpression>();
+  // process 'select' statement
+  if (state->selectExpression->is<IR::SelectExpression>()) {
+    // multiple next step
+    LOG1("select in state " << state);
+    visit(state->selectExpression);
+  } else if (state->selectExpression->is<IR::PathExpression>()){
+    // only one next step
+    LOG1("select only one " << state);
+    auto path = state->selectExpression->to<IR::PathExpression>();
     auto nextState = new IR::SelectCase(new IR::DefaultExpression(), path);
-    auto cases = new IR::IndexedVector<IR::SelectCase>();
     cases->push_back(nextState);
-    auto s = smap[parser_state];
-    if (s != nullptr) {
-      s->cases = cases;
-    }
+    select = nullptr;
   }
+
+  // create one parse step
+  //auto name = state->name.toString();
+  // FIXME: set parseStep name to header_name because we assume each step extracts a header.
+  auto name = header_name->toString();
+  LOG1("create parse step " << fields);
+  auto step = new IR::BSV::ParseStep(name, fields, header_width, header_type_name, select, cases, statements);
+  parser->parseSteps.push_back(step);
+  parser->parseStateMap[state] = step;
   return false;
 }
 
 bool ParserBuilder::preorder(const IR::SelectExpression* expression) {
-  // get current parse state
-  auto s = smap[parser_state];
-
-  // populate select keys
-  auto keys = expression->select;
-  if (s != nullptr && s->keys== nullptr) {
-    s->keys = keys;
-  }
-
-  // populate select cases
-  auto cases = new IR::IndexedVector<IR::SelectCase>();
+  LOG1("select expression " << expression);
+  select = expression->select;
   for (auto e : expression->selectCases) {
     if (e->is<IR::SelectCase>()) {
       cases->push_back(e->to<IR::SelectCase>());
     }
   }
-  if (s != nullptr && s->cases == nullptr) {
-    s->cases = cases;
-  }
   return false;
 }
 
+// handle 'extract' method call
+// 
 bool ParserBuilder::preorder(const IR::MethodCallExpression* expression) {
   auto m = expression->method->to<IR::Expression>();
   if (m == nullptr) return false;
@@ -115,42 +124,37 @@ bool ParserBuilder::preorder(const IR::MethodCallExpression* expression) {
   if (e == nullptr) return false;
 
   if (e->member == "extract") {
-    if (ext_count[parser_state] == 0) {
-      ext_count[parser_state] += 1;
-    } else {
-      //::warning("More than one 'extract' method");
-      BUG("ERROR: More than one 'extract' method in %s. TODO", parser_state->name);
-    }
-    // implementing one-argument variant of 'extract' method
+    // argument types
     for (auto h: MakeZipRange(*expression->typeArguments, *expression->arguments)) {
       auto typeName = h.get<0>();
       auto instName = h.get<1>();
-      auto header_type = program->typeMap->getType(typeName, true);
-      auto header_width = header_type->width_bits();
-      if (instName->is<IR::ArrayIndex>()) {
-        auto name = instName->to<IR::ArrayIndex>();
-        // TODO: handle header stack
-        ::warning("unhandle extract method %1%", name);
-      } else if (instName->is<IR::Member>()) {
-        auto name = instName->to<IR::Member>()->member;
-        if (header_type->is<IR::Type_StructLike>()) {
-          auto hh = header_type->to<IR::Type_StructLike>();
-          auto tn = typeName->to<IR::Type_Name>();
-          // create parse state
-          // leave fields related to next state selection empty
-          auto s = new IR::BSV::ParseState(name, hh->fields, header_width, tn, nullptr, nullptr);
-          parser->states.push_back(s);
-          smap[parser_state] = s;
-          LOG1("parse state " << parser_state->name << " " << s);
-        }
+      auto header_type = parser->program->typeMap->getType(typeName, true);
+      header_width += header_type->width_bits();
+      if (header_type->is<IR::Type_StructLike>()) {
+        auto header = header_type->to<IR::Type_StructLike>();
+        fields = header->fields;
+        LOG1("fields" << header->fields);
       }
+
+      header_type_name = typeName->to<IR::Type_Name>();
+      if (instName->is<IR::Member>()) {
+        header_name = &instName->to<IR::Member>()->member;
+      } else if (instName->is<IR::ArrayIndex>()) {
+        //header_name = instName->to<IR::ArrayIndex>()->typeName;
+        ::warning("extract expression, handle stack header");
+      }
+      LOG1("header_type " << header_type_name);
     }
     // TODO: implement two-argument variant for extracting variable-size headers
   } else {
     // TODO: handle 'lookahead' method
     warning("unhandled method %1%.", e->member);
-    //::error("%1%: unhandled method", e->member);
   }
+  return false;
+}
+
+bool ParserBuilder::preorder(const IR::AssignmentStatement* statement) {
+  statements->push_back(statement);
   return false;
 }
 
@@ -163,6 +167,21 @@ FPGAParser::FPGAParser(const FPGAProgram* program,
 }
 
 void FPGAParser::emitEnums(BSVProgram & bsv) {
+  append_line(bsv, "`ifdef PARSER_STRUCT");
+  append_line(bsv, "typedef enum {");
+  incr_indent(bsv);
+  for (auto s : parseSteps) {
+    if (s == parseSteps.back())
+      append_format(bsv, "State%s", CamelCase(s->name));
+    else
+      append_format(bsv, "State%s,", CamelCase(s->name));
+  }
+  decr_indent(bsv);
+  append_line(bsv, "} ParserState deriving (Bits, Eq);");
+  append_line(bsv, "`endif");
+}
+
+void FPGAParser::emitStructs(BSVProgram & bsv) {
   // assume all headers are parsed_out
   // optimization opportunity ??
   auto htype = typeMap->getType(headers);
@@ -185,7 +204,7 @@ void FPGAParser::emitEnums(BSVProgram & bsv) {
 
 void FPGAParser::emitFunctions(BSVProgram & bsv) {
   append_line(bsv, "`ifdef PARSER_FUNCTION");
-  for (auto state : states) {
+  for (auto state : parseSteps) {
     // find out type and name of each field
     auto name = state->name.toString();
     std::vector<cstring> match;
@@ -251,29 +270,13 @@ void FPGAParser::emitFunctions(BSVProgram & bsv) {
     append_line(bsv, "endfunction");
   }
 
-  append_line(bsv, "let initState = State%s;", CamelCase(states[0]->name.toString()));
+  append_line(bsv, "let initState = State%s;", CamelCase(parseSteps[0]->name.toString()));
 
   append_line(bsv, "`endif");
 }
 
-void FPGAParser::emitStructs(BSVProgram & bsv) {
-  append_line(bsv, "`ifdef PARSER_STRUCT");
-  append_line(bsv, "typedef enum {");
-  incr_indent(bsv);
-  for (auto s : states) {
-    if (s == states.back())
-      append_format(bsv, "State%s", CamelCase(s->name));
-    else
-      append_format(bsv, "State%s,", CamelCase(s->name));
-  }
-  decr_indent(bsv);
-  append_line(bsv, "} ParserState deriving (Bits, Eq);");
-  append_line(bsv, "`endif");
-}
-
-void FPGAParser::emitBufferRule(BSVProgram & bsv, const IR::BSV::ParseState* state) {
+void FPGAParser::emitBufferRule(BSVProgram & bsv, const IR::BSV::ParseStep* state) {
     auto name = state->name.toString();
-    auto type = state->type->toString();
     // Rule: load data
     append_format(bsv, "rule rl_%s_load if ((parse_state_ff.first == State%s) && rg_buffered[0] < %d);", name, CamelCase(name), state->width_bits);
     incr_indent(bsv);
@@ -291,7 +294,7 @@ void FPGAParser::emitBufferRule(BSVProgram & bsv, const IR::BSV::ParseState* sta
     append_line(bsv, "");
 }
 
-void FPGAParser::emitExtractionRule(BSVProgram & bsv, const IR::BSV::ParseState* state) {
+void FPGAParser::emitExtractionRule(BSVProgram & bsv, const IR::BSV::ParseStep* state) {
     auto name = state->name.toString();
     auto type = state->type->toString();
     append_format(bsv, "rule rl_%s_extract if ((parse_state_ff.first == State%s) && (rg_buffered[0] > %d));", name, CamelCase(name), state->width_bits);
@@ -305,16 +308,21 @@ void FPGAParser::emitExtractionRule(BSVProgram & bsv, const IR::BSV::ParseState*
     append_line(bsv, "end");
     append_line(bsv, "report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);");
     append_line(bsv, "let %s = extract_%s(truncate(data));", name, type);
-    //TODO: handle more than one key
     auto params = cstring("");
     if (state->keys != nullptr) {
       auto lk = state->keys->to<IR::ListExpression>();
       if (lk != nullptr) {
         for (auto key : *lk->components) {
-          auto field = key->to<IR::Member>();
-          auto header = field->expr->to<IR::Member>();
-          // NOTE: what if header has a nested struture, i.e. header inside header?
-          params += header->member.toString() + "." + field->member.toString();
+          if (key->is<IR::Member>()) {
+            auto field = key->to<IR::Member>();
+            if (field->expr->is<IR::Member>()) {
+              auto header = field->expr->to<IR::Member>();
+              // NOTE: what if header has a nested struture, i.e. header inside header?
+              params += header->member.toString() + "." + field->member.toString();
+            } else if (field->expr->is<IR::ArrayIndex>()) {
+              ::warning("handle stack header");
+            }
+          }
         }
       }
     }
@@ -328,7 +336,7 @@ void FPGAParser::emitExtractionRule(BSVProgram & bsv, const IR::BSV::ParseState*
     append_line(bsv, "");
 }
 
-void FPGAParser::emitTransitionRule(BSVProgram & bsv, const IR::BSV::ParseState* state) {
+void FPGAParser::emitTransitionRule(BSVProgram & bsv, const IR::BSV::ParseStep* state) {
     auto name = state->name.toString();
     auto type = state->type->toString();
     if (state->cases == nullptr) {
@@ -346,7 +354,7 @@ void FPGAParser::emitTransitionRule(BSVProgram & bsv, const IR::BSV::ParseState*
           append_line(bsv, "w_parse_done.send();");
           append_line(bsv, "fetch_next_header0(0);");
         } else {
-          // ParserState* -> BSV::ParseState --> width_bits
+          // ParserState* -> BSV::ParseStep --> width_bits
           // LOG1("decl" << decl << " " << c->state << " " << decl->node_type_name());
           if (decl->is<IR::ParserState>()) {
             auto s = decl->to<IR::ParserState>();
@@ -363,7 +371,7 @@ void FPGAParser::emitTransitionRule(BSVProgram & bsv, const IR::BSV::ParseState*
 
 void FPGAParser::emitRules(BSVProgram & bsv) {
   append_line(bsv, "`ifdef PARSER_RULES");
-  for (auto s : states) {
+  for (auto s : parseSteps) {
     emitBufferRule(bsv, s);
     emitExtractionRule(bsv, s);
     emitTransitionRule(bsv, s);
@@ -374,8 +382,8 @@ void FPGAParser::emitRules(BSVProgram & bsv) {
 
 void FPGAParser::emitStateElements(BSVProgram & bsv) {
   append_line(bsv, "`ifdef PARSER_STATE");
-  // pulsewire to communicate between different parse states
-  for (auto state : states) {
+  // pulsewire to communicate between different parse parseSteps
+  for (auto state : parseSteps) {
     if (state->cases == nullptr) continue;
     auto name = state->name.toString();
     for (auto c : *state->cases) {
@@ -383,7 +391,7 @@ void FPGAParser::emitStateElements(BSVProgram & bsv) {
     }
   }
   // dfifo to output parsed header
-  for (auto state : states) {
+  for (auto state : parseSteps) {
     auto name = state->name.toString();
     auto type = CamelCase(state->type->toString());
     append_line(bsv, "FIFOF#(Maybe#(%s)) %s_out_ff <- mkDFIFOF(tagged Invalid);", type, name);
@@ -461,7 +469,7 @@ void FPGAParser::emit(BSVProgram & bsv) {
   emitStructs(bsv);
   emitFunctions(bsv);
   emitRules(bsv);
-  emitStateElements(bsv);
+  // emitStateElements(bsv);
 }
 
 // build IR::BSV from mid-end IR
@@ -480,9 +488,8 @@ bool FPGAParser::build() {
   stdMetadata = pl->getParameter(model.parser.standardMetadataParam.index);
 
   auto states = parserBlock->container->states;
-  ParserBuilder visitor(this, program, parseStateMap);
   for (auto state : *states) {
-    LOG1(state);
+    ParserBuilder visitor(this);
     state->apply(visitor);
   }
   return true;

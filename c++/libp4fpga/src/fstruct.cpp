@@ -64,7 +64,7 @@ void StructCodeGen::emit() {
     auto size = p.first->type->to<IR::Type_Bits>()->size;
     append_line(bsv, "Maybe#(Bit#(%d)) %s;", size, name);
   }
-  for (auto s : program->parser->states) {
+  for (auto s : program->parser->parseSteps) {
     append_format(bsv, "HeaderState %s;", s->name.toString());
   }
   decr_indent(bsv);

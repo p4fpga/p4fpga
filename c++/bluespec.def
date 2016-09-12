@@ -62,11 +62,12 @@ class DeparseState : IR::Type_Header {
 #nodbprint
 }
 
-class ParseState : IR::Type_Header {
+class ParseStep : IR::Type_Header {
 	int width_bits;
-  Type_Name type;
+	NullOK Type_Name type;
 	NullOK ListExpression keys;
 	NullOK IndexedVector<IR::SelectCase> cases;
+	NullOK IndexedVector<IR::AssignmentStatement> statements;
 #nodbprint
 }
 
