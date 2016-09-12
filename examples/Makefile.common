@@ -32,6 +32,7 @@ CONNECTALFLAGS += -m $(P4EXAMPLEDIR)/bsv/AsymmetricBRAM/mem_model.c
 CONNECTALFLAGS += -m generatedcpp/jni/matchtable_model.cpp
 CONNECTALFLAGS += --bscflags="-fdir $(CURDIR)/sample_input"
 CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/templates/
+CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/templates/bsv
 CONNECTALFLAGS += --nocache
 CONNECTALFLAGS += --cxxflags=-std=c++11
 
