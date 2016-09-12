@@ -469,7 +469,7 @@ void FPGAParser::emit(BSVProgram & bsv) {
   emitStructs(bsv);
   emitFunctions(bsv);
   emitRules(bsv);
-  // emitStateElements(bsv);
+  emitStateElements(bsv);
 }
 
 // build IR::BSV from mid-end IR
