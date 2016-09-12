@@ -23,6 +23,7 @@ namespace FPGA {
 
 using namespace Control;
 
+
 bool ActionCodeGen::preorder(const IR::AssignmentStatement* stmt) {
   append_line(bsv, "// %s = %s", stmt->left, stmt->right);
   visit(stmt->left);
@@ -78,14 +79,6 @@ bool ActionCodeGen::preorder(const IR::MethodCallExpression* expression) {
   return false;
 }
 
-void ActionCodeGen::forward() {
-  // primitive action
-}
-
-void ActionCodeGen::drop() {
-  // mark_to_drop
-}
-
 void ActionCodeGen::emitCpuReqRule() {
   append_line(bsv, "rule rl_cpu_request if (cpu.not_running());");
   incr_indent(bsv);
@@ -126,6 +119,33 @@ void ActionCodeGen::emitCpuRspRule(const IR::P4Action* action) {
   append_line(bsv, "endrule");
 }
 
+void ActionCodeGen::emitDropAction() {
+
+}
+
+void ActionCodeGen::emitForwardAction() {
+
+}
+
+bool ActionCodeGen::hasDrop(const IR::BlockStatement* statement) {
+  // return true is current block has mark_to_drop
+  bool _has_drop = false;
+  for (auto s : *statement->components) {
+    auto stmt = s->to<IR::MethodCallStatement>();
+    if (stmt == nullptr) continue;
+    auto expr = stmt->methodCall->to<IR::MethodCallExpression>();
+    if (expr == nullptr) continue;
+
+    if (expr->method->is<IR::PathExpression>()) {
+      auto path = expr->method->to<IR::PathExpression>();
+      if (path != nullptr && path->path->name == "mark_to_drop") {
+        return true;
+      }
+    }
+  }
+  return _has_drop;
+}
+
 void ActionCodeGen::postorder(const IR::P4Action* action) {
   auto name = action->name.toString();
   auto type = CamelCase(name);
@@ -135,14 +155,17 @@ void ActionCodeGen::postorder(const IR::P4Action* action) {
     return;
   }
 
-  // TODO: use library forward unit
-  if (stmt->components->size() == 0) {
-    forward();
-    //return;
+  if (stmt->components->size() == 0) { // NoAction means forward
+    emitForwardAction();
+    return;
+  }
+
+  if (hasDrop(stmt)) {
+    emitDropAction();
+    return;
   }
 
   append_format(bsv, "// =============== action %s ==============", name);
-  // drop action, mark_to_drop;
 
   auto table = control->action_to_table[name];
   auto table_name = nameFromAnnotation(table->annotations, table->name);

@@ -34,10 +34,11 @@ class ActionCodeGen : public Inspector {
  private:
   FPGAControl* control;
   BSVProgram & bsv;
-  void forward();
-  void drop();
+  void emitForwardAction();
+  void emitDropAction();
   void emitCpuReqRule();
   void emitCpuRspRule(const IR::P4Action* action);
+  bool hasDrop(const IR::BlockStatement* statement);
 };
 
 }  // namespace FPGA
