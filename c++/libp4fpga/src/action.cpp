@@ -23,7 +23,6 @@ namespace FPGA {
 
 using namespace Control;
 
-
 bool ActionCodeGen::preorder(const IR::AssignmentStatement* stmt) {
   append_line(bsv, "// %s = %s", stmt->left, stmt->right);
   visit(stmt->left);
@@ -119,54 +118,82 @@ void ActionCodeGen::emitCpuRspRule(const IR::P4Action* action) {
   append_line(bsv, "endrule");
 }
 
-void ActionCodeGen::emitDropAction() {
-
-}
-
-void ActionCodeGen::emitForwardAction() {
-
-}
-
-bool ActionCodeGen::hasDrop(const IR::BlockStatement* statement) {
-  // return true is current block has mark_to_drop
-  bool _has_drop = false;
-  for (auto s : *statement->components) {
-    auto stmt = s->to<IR::MethodCallStatement>();
-    if (stmt == nullptr) continue;
-    auto expr = stmt->methodCall->to<IR::MethodCallExpression>();
-    if (expr == nullptr) continue;
-
-    if (expr->method->is<IR::PathExpression>()) {
-      auto path = expr->method->to<IR::PathExpression>();
-      if (path != nullptr && path->path->name == "mark_to_drop") {
-        return true;
-      }
-    }
-  }
-  return _has_drop;
-}
-
-void ActionCodeGen::postorder(const IR::P4Action* action) {
+void ActionCodeGen::emitDropAction(const IR::P4Action* action) {
   auto name = action->name.toString();
   auto type = CamelCase(name);
-
-  auto stmt = action->body->to<IR::BlockStatement>();
-  if (stmt == nullptr) {
-    return;
-  }
-
-  if (stmt->components->size() == 0) { // NoAction means forward
-    emitForwardAction();
-    return;
-  }
-
-  if (hasDrop(stmt)) {
-    emitDropAction();
-    return;
-  }
-
   append_format(bsv, "// =============== action %s ==============", name);
+  auto table = control->action_to_table[name];
+  auto table_name = nameFromAnnotation(table->annotations, table->name);
+  auto table_type = CamelCase(table_name);
+  append_line(bsv, "interface %s;", type);
+  incr_indent(bsv);
+  append_line(bsv, "interface Server#(%sActionReq, %sActionRsp) prev_control_state;", table_type, table_type);
+  append_line(bsv, "method Action set_verbosity(int verbosity);");
+  decr_indent(bsv);
+  append_line(bsv, "endinterface");
+  append_line(bsv, "(* synthesize *)");
+  append_line(bsv, "module mk%s (%s);", type, type);
+  incr_indent(bsv);
+  control->emitDebugPrint(bsv);
+  append_line(bsv, "RX #(%sActionReq) rx_prev_control_state <- mkRX;", table_type);
+  append_line(bsv, "TX #(%sActionRsp) tx_prev_control_state <- mkTX;", table_type);
+  append_line(bsv, "let rx_info_prev_control_state = rx_prev_control_state.u;");
+  append_line(bsv, "let tx_info_prev_control_state = tx_prev_control_state.u;");
+  append_line(bsv, "rule drop;");
+  incr_indent(bsv);
+  append_line(bsv, "let v = rx_info_prev_control_state.first;");
+  append_line(bsv, "rx_info_prev_control_state.deq;");
+  decr_indent(bsv);
+  append_line(bsv, "endrule");
+  append_line(bsv, "FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;");
+  append_line(bsv, "interface prev_control_state = toServer(rx_prev_control_state.e, tx_prev_control_state.e);");
+  append_line(bsv, "method Action set_verbosity(int verbosity);");
+  incr_indent(bsv);
+  append_line(bsv, "cf_verbosity <= verbosity;");
+  // extern verbosity
+  decr_indent(bsv);
+  append_line(bsv, "endmethod");
+  decr_indent(bsv);
+  append_line(bsv, "endmodule");
+}
 
+void ActionCodeGen::emitForwardAction(const IR::P4Action* action) {
+  auto name = action->name.toString();
+  auto type = CamelCase(name);
+  append_format(bsv, "// =============== action %s ==============", name);
+  auto table = control->action_to_table[name];
+  auto table_name = nameFromAnnotation(table->annotations, table->name);
+  auto table_type = CamelCase(table_name);
+  append_line(bsv, "interface %s;", type);
+  incr_indent(bsv);
+  append_line(bsv, "interface Server#(%sActionReq, %sActionRsp) prev_control_state;", table_type, table_type);
+  append_line(bsv, "method Action set_verbosity(int verbosity);");
+  decr_indent(bsv);
+  append_line(bsv, "endinterface");
+  append_line(bsv, "(* synthesize *)");
+  append_line(bsv, "module mk%s (%s);", type, type);
+  incr_indent(bsv);
+  control->emitDebugPrint(bsv);
+  append_line(bsv, "RX #(%sActionReq) rx_prev_control_state <- mkRX;", table_type);
+  append_line(bsv, "TX #(%sActionRsp) tx_prev_control_state <- mkTX;", table_type);
+  append_line(bsv, "let rx_info_prev_control_state = rx_prev_control_state.u;");
+  append_line(bsv, "let tx_info_prev_control_state = tx_prev_control_state.u;");
+  append_line(bsv, "interface prev_control_state = toServer(rx_prev_control_state.e, tx_prev_control_state.e);");
+  append_line(bsv, "method Action set_verbosity(int verbosity);");
+  incr_indent(bsv);
+  append_line(bsv, "cf_verbosity <= verbosity;");
+  // extern verbosity
+  decr_indent(bsv);
+  append_line(bsv, "endmethod");
+  decr_indent(bsv);
+  append_line(bsv, "endmodule");
+
+}
+
+void ActionCodeGen::emitCPUAction(const IR::P4Action* action) {
+  auto name = action->name.toString();
+  auto type = CamelCase(name);
+  append_format(bsv, "// =============== action %s ==============", name);
   auto table = control->action_to_table[name];
   auto table_name = nameFromAnnotation(table->annotations, table->name);
   auto table_type = CamelCase(table_name);
@@ -203,6 +230,52 @@ void ActionCodeGen::postorder(const IR::P4Action* action) {
   append_line(bsv, "endmethod");
   decr_indent(bsv);
   append_line(bsv, "endmodule");
+}
+
+bool ActionCodeGen::isDropAction(const IR::P4Action* action) {
+  bool is_drop = false;
+  if (action->body == nullptr) {
+    return false;
+  }
+  for (auto s : *action->body->components) {
+    auto stmt = s->to<IR::MethodCallStatement>();
+    if (stmt == nullptr) continue;
+    auto expr = stmt->methodCall->to<IR::MethodCallExpression>();
+    if (expr == nullptr) continue;
+
+    if (expr->method->is<IR::PathExpression>()) {
+      auto path = expr->method->to<IR::PathExpression>();
+      if (path != nullptr && path->path->name == "mark_to_drop") {
+        return true;
+      }
+    }
+  }
+  return is_drop;
+}
+
+bool ActionCodeGen::isNoAction(const IR::P4Action* action) {
+  bool is_nop = false;
+  if (action->body == nullptr) {
+    return true;
+  }
+  if (action->body->components->size() == 0) {
+    return true;
+  }
+  return is_nop;
+}
+
+void ActionCodeGen::postorder(const IR::P4Action* action) {
+  auto stmt = action->body->to<IR::BlockStatement>();
+  if (stmt == nullptr) {
+    return;
+  }
+  if (isNoAction(action)) {
+    emitForwardAction(action);
+  } else if (isDropAction(action)) {
+    emitDropAction(action);
+  } else {
+    emitCPUAction(action);
+  }
 }
 
 }  // namespace FPGA

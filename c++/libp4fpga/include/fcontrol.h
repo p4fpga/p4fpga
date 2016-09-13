@@ -21,6 +21,7 @@
 #include "ir/ir.h"
 #include "fprogram.h"
 #include "analyzer.h"
+#include "action.h"
 
 namespace FPGA {
 
@@ -62,6 +63,8 @@ inline void decr_indent(BSVProgram & bsv) {
 
 }  // namespace Control
 
+using namespace FPGA;
+
 class FPGAControl : public FPGAObject {
  public:
     const FPGAProgram*            program;
@@ -71,14 +74,13 @@ class FPGAControl : public FPGAObject {
     // map from action name to P4Action
     std::map<cstring, const IR::P4Action*>    basicBlock;
     // map from table name to TableBlock
-    std::map<cstring, const IR::P4Table*>  tables;
+    std::map<cstring, const IR::P4Table*>     tables;
     // map from extern name to ExternBlock
     std::map<cstring, const IR::ExternBlock*> externs;
 
     std::map<const IR::StructField*, std::set<const IR::P4Table*>> metadata_to_table;
     std::map<const IR::StructField*, cstring> metadata_to_action;
     std::map<cstring, const IR::P4Table*> action_to_table;
-    std::map<const IR::P4Table*, std::set<std::pair<const IR::StructField*, const IR::P4Table*> > > adj_list;
 
     explicit FPGAControl(const FPGAProgram* program, const IR::ControlBlock* block)
       : program(program), controlBlock(block) {}

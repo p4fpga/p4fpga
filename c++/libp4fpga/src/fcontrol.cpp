@@ -154,16 +154,6 @@ bool FPGAControl::build() {
     metadata_to_table[n.first].insert(action_to_table[n.second]);
   }
 
-  for (auto n : metadata_to_table) {
-    LOG1("metadata " << n.first << n.second);
-    for (auto n1 : n.second) {
-      for (auto n2 : n.second) {
-        if (n1 == n2) continue;
-        std::pair<const IR::StructField*, const IR::P4Table*> p (n.first, n2);
-        adj_list[n1].insert(p);
-      }
-    }
-  }
   return true;
 }
 

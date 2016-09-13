@@ -31,14 +31,16 @@ class ActionCodeGen : public Inspector {
   bool preorder(const IR::Expression* expression) override;
   bool preorder(const IR::MethodCallExpression* expression) override;
   void postorder(const IR::P4Action* action) override;
+  bool isDropAction(const IR::P4Action* action);
+  bool isNoAction(const IR::P4Action* action);
  private:
   FPGAControl* control;
   BSVProgram & bsv;
-  void emitForwardAction();
-  void emitDropAction();
+  void emitForwardAction(const IR::P4Action* action);
+  void emitDropAction(const IR::P4Action* action);
+  void emitCPUAction(const IR::P4Action* action);
   void emitCpuReqRule();
   void emitCpuRspRule(const IR::P4Action* action);
-  bool hasDrop(const IR::BlockStatement* statement);
 };
 
 }  // namespace FPGA
