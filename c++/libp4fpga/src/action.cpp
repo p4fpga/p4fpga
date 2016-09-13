@@ -24,7 +24,15 @@ namespace FPGA {
 using namespace Control;
 
 bool ActionCodeGen::preorder(const IR::AssignmentStatement* stmt) {
-  append_line(bsv, "// %s = %s", stmt->left, stmt->right);
+  auto type = control->program->typeMap->getType(stmt->left, true);
+  if (type != nullptr) {
+    if (type->is<IR::Type_Bits>()) {
+      auto bits = type->to<IR::Type_Bits>();
+      append_line(bsv, "// INST (%d) %s = %s", bits->width_bits(), stmt->left, stmt->right);
+    } else {
+      append_line(bsv, "// INST (%d) %s = %s", stmt->left, stmt->right);
+    }
+  }
   visit(stmt->left);
   visit(stmt->right);
   return false;
@@ -47,6 +55,7 @@ bool ActionCodeGen::preorder(const IR::MethodCallExpression* expression) {
   auto mi = P4::MethodInstance::resolve(expression,
                                         control->program->refMap,
                                         control->program->typeMap);
+  LOG1("MethodCall " << mi << " " << mi->methodType);
   auto apply = mi->to<P4::ApplyMethod>();
   if (apply != nullptr) {
     LOG1("handle apply");
@@ -55,7 +64,11 @@ bool ActionCodeGen::preorder(const IR::MethodCallExpression* expression) {
 
   auto ext = mi->to<P4::ExternMethod>();
   if (ext != nullptr) {
-    LOG1("handle extern");
+    // ext->type : register
+    // ext->method : read / write
+    // ext->expr : register name
+    // ext->getParameters : index value or result index
+    append_line(bsv, "// INST extern %s %s %s %s", ext->method->name.toString(), ext->type->toString(), ext->expr->toString(), ext->getParameters()->toString());
     return false;
   }
 
@@ -70,11 +83,12 @@ bool ActionCodeGen::preorder(const IR::MethodCallExpression* expression) {
   if (extFunc != nullptr) {
     if (extFunc->method->name == "mark_to_drop") {
       append_line(bsv, "// mark_to_drop ");
+    } else {
+      append_line(bsv, "// INST extern ", extFunc->method->name.toString());
     }
     return false;
   }
 
-  LOG1(mi->methodType);
   return false;
 }
 
@@ -119,7 +133,8 @@ void ActionCodeGen::emitCpuRspRule(const IR::P4Action* action) {
 }
 
 void ActionCodeGen::emitDropAction(const IR::P4Action* action) {
-  auto name = action->name.toString();
+  auto name = nameFromAnnotation(action->annotations, action->name);
+  // auto name = action->name.toString();
   auto type = CamelCase(name);
   append_format(bsv, "// =============== action %s ==============", name);
   auto table = control->action_to_table[name];
@@ -158,7 +173,8 @@ void ActionCodeGen::emitDropAction(const IR::P4Action* action) {
 }
 
 void ActionCodeGen::emitForwardAction(const IR::P4Action* action) {
-  auto name = action->name.toString();
+  auto name = nameFromAnnotation(action->annotations, action->name);
+  // auto name = action->name.toString();
   auto type = CamelCase(name);
   append_format(bsv, "// =============== action %s ==============", name);
   auto table = control->action_to_table[name];
@@ -191,10 +207,12 @@ void ActionCodeGen::emitForwardAction(const IR::P4Action* action) {
 }
 
 void ActionCodeGen::emitCPUAction(const IR::P4Action* action) {
-  auto name = action->name.toString();
+  auto name = nameFromAnnotation(action->annotations, action->name);
+  auto orig_name = action->name.toString();
   auto type = CamelCase(name);
+  LOG1("emit action " << type);
   append_format(bsv, "// =============== action %s ==============", name);
-  auto table = control->action_to_table[name];
+  auto table = control->action_to_table[orig_name];
   auto table_name = nameFromAnnotation(table->annotations, table->name);
   auto table_type = CamelCase(table_name);
   // generate instruction for cpu;
