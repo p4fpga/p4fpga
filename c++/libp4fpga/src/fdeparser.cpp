@@ -242,6 +242,7 @@ void FPGADeparser::emitStates(BSVProgram & bsv) {
   append_line(bsv, "endaction");
   decr_indent(bsv);
   append_line(bsv, "endfunction");
+  append_line(bsv, "let initState = StateDeparse%s;", CamelCase(states[0]->name.toString()));
   append_line(bsv, "`endif  // DEPARSER_STATE");
 }
 
