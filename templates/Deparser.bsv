@@ -142,7 +142,7 @@ module mkDeparser (Deparser);
     let metadata = meta_in_ff.first;
     meta[1] <= metadata;
     meta_in_ff.deq;
-    deparse_state_ff.enq(StateDeparseEthernet);
+    deparse_state_ff.enq(initState);
     fetch_next_header(112);
     dbprint(4, $format("start deparse %d", valueOf(SizeOf#(DeparserState))));
   endrule
