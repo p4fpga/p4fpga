@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#include <string>
+#include <algorithm>
 #include "analyzer.h"
 
 #include "ir/ir.h"
@@ -33,7 +35,10 @@ cstring nameFromAnnotation(const IR::Annotations* annotations,
         CHECK_NULL(anno->expr);
         auto str = anno->expr->to<IR::StringLiteral>();
         CHECK_NULL(str);
-        return str->value;
+        // NOTE: replace '.' with '_' to make bsc happy
+        std::string name(str->value);
+        std::replace(name.begin(), name.end(), '.', '_');
+        return name.c_str();
     }
     return defaultValue;
 }
