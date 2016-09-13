@@ -1,38 +1,84 @@
 import Ethernet::*;
+import StructDefines::*;
 typedef union tagged {
-  struct {
-    PacketInstance pkt;
-  } DropReqT;
-  struct {
-    PacketInstance pkt;
-    Bit#(48) runtime_smac_48;
-  } RewriteMacReqT;
-  struct {
-    PacketInstance pkt;
-    Bit#(48) runtime_dmac_48;
-  } SetDmacReqT;
-  struct {
-    PacketInstance pkt;
-    Bit#(9) runtime_port_9;
-    Bit#(32) runtime_nhop_ipv4_32;
-  } SetNhopReqT;
-} BBRequest deriving (Bits, Eq, FShow);
+    struct {
+        PacketInstance pkt;
+        MetadataT meta;
+        Bit#(48) dmac;
+    } SetDmacReqT;
+    struct {
+        PacketInstance pkt;
+    } Drop2ReqT;
+    struct {
+        PacketInstance pkt;
+        MetadataT meta;
+    } NoAction3ReqT;
+} ForwardActionReq deriving (Bits, Eq, FShow);
 typedef union tagged {
-  struct {
-    PacketInstance pkt;
-  } DropRspT;
-  struct {
-    PacketInstance pkt;
-    Bit#(48) ethernet$srcAddr;
-  } RewriteMacRspT;
-  struct {
-    PacketInstance pkt;
-    Bit#(48) ethernet$dstAddr;
-  } SetDmacRspT;
-  struct {
-    PacketInstance pkt;
-    Bit#(8) ipv4$ttl;
-    Bit#(9) standard_metadata$egress_port;
-    Bit#(32) routing_metadata$nhop_ipv4;
-  } SetNhopRspT;
-} BBResponse deriving (Bits, Eq, FShow);
+    struct {
+        PacketInstance pkt;
+        MetadataT meta;
+    } SetDmacRspT;
+    struct {
+        PacketInstance pkt;
+    } Drop2RspT;
+    struct {
+        PacketInstance pkt;
+        MetadataT meta;
+    } NoAction3RspT;
+} ForwardActionRsp deriving (Bits, Eq, FShow);
+typedef union tagged {
+    struct {
+        PacketInstance pkt;
+        MetadataT meta;
+        Bit#(32) nhop_ipv4;
+        Bit#(9) port;
+    } SetNhopReqT;
+    struct {
+        PacketInstance pkt;
+    } Drop3ReqT;
+    struct {
+        PacketInstance pkt;
+        MetadataT meta;
+    } NoAction4ReqT;
+} Ipv4LpmActionReq deriving (Bits, Eq, FShow);
+typedef union tagged {
+    struct {
+        PacketInstance pkt;
+        MetadataT meta;
+    } SetNhopRspT;
+    struct {
+        PacketInstance pkt;
+    } Drop3RspT;
+    struct {
+        PacketInstance pkt;
+        MetadataT meta;
+    } NoAction4RspT;
+} Ipv4LpmActionRsp deriving (Bits, Eq, FShow);
+import Ethernet::*;
+typedef union tagged {
+    struct {
+        PacketInstance pkt;
+        MetadataT meta;
+        Bit#(48) smac;
+    } RewriteMacReqT;
+    struct {
+        PacketInstance pkt;
+    } DropReqT;
+    struct {
+        PacketInstance pkt;
+    } NoAction2ReqT;
+} SendFrameActionReq deriving (Bits, Eq, FShow);
+typedef union tagged {
+    struct {
+        PacketInstance pkt;
+        MetadataT meta;
+    } RewriteMacRspT;
+    struct {
+        PacketInstance pkt;
+    } DropRspT;
+    struct {
+        PacketInstance pkt;
+        MetadataT meta;
+    } NoAction2RspT;
+} SendFrameActionRsp deriving (Bits, Eq, FShow);

@@ -1,15 +1,15 @@
 import BuildVector::*;
 import Clocks::*;
 import Connectable::*;
-import Egress::*;
 import GetPut::*;
 import HostChannel::*;
-import Ingress::*;
 import MainAPI::*;
 import PacketBuffer::*;
 import SharedBuff::*;
 import Sims::*;
 import TxChannel::*;
+import Control::*;
+`include "ConnectalProjectConfig.bsv"
 interface Main;
   interface MainRequest request;
 endinterface
@@ -29,9 +29,11 @@ module mkMain #(MainIndication indication,ConnectalMemory::MemServerIndication m
   Reset rxReset = txReset;
   `endif
   HostChannel hostchan <- mkHostChannel();
+  // RxChannel x4
   Ingress ingress <- mkIngress(vec(hostchan.next));
   Egress egress <- mkEgress(vec(ingress.next));
   TxChannel txchan <- mkTxChannel(txClock, txReset);
+  // TxChannel x4
   SharedBuffer#(12, 128, 1) mem <- mkSharedBuffer(vec(txchan.readClient), vec(txchan.freeClient), vec(hostchan.writeClient), vec(hostchan.mallocClient), memServerInd);
   mkConnection(egress.next, txchan.prev);
   `ifdef SIMULATION
