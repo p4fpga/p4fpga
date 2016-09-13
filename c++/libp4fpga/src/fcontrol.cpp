@@ -85,7 +85,8 @@ bool FPGAControl::build() {
   for (auto s : *controlBlock->container->getDeclarations()) {
     if (s->is<IR::P4Action>()) {
       auto action = s->to<IR::P4Action>();
-      auto name = nameFromAnnotation(action->annotations, action->name);
+      // Do not use annotated name, as P4Table will use original name
+      auto name = action->name;
       basicBlock.emplace(name, action);
     }
   }
@@ -266,8 +267,8 @@ void FPGAControl::emitDeclaration(BSVProgram & bsv) {
   for (auto b : basicBlock) {
     auto name = nameFromAnnotation(b.second->annotations, b.second->name);
     auto type = CamelCase(name);
-    auto camelCaseName = camelCase(name);
-    append_format(bsv, "Control::%s %s <- mk%s();", type, camelCaseName, type);
+    // ensure NoAction is translated to noAction
+    append_format(bsv, "Control::%s %s <- mk%s();", type, camelCase(name), type);
   }
   for (auto t : tables) {
     auto table = t.second->to<IR::P4Table>();
@@ -289,6 +290,15 @@ void FPGAControl::emitFifo(BSVProgram & bsv) {
     append_line(bsv, "FIFOF#(MetadataRequest) %s_req_ff <- mkFIFOF;", name);
     append_line(bsv, "FIFOF#(MetadataResponse) %s_rsp_ff <- mkFIFOF;", name);
   }
+
+  if (cfg != nullptr) {
+    for (auto node : cfg->allNodes) {
+      if (node->is<CFG::IfNode>()) {
+        auto n = node->to<CFG::IfNode>();
+        append_line(bsv, "FIFOF#(MetadataRequest) %s_req_ff <- mkFIFOF;", n->name);
+      }
+    }
+  }
   append_line(bsv, "FIFOF#(MetadataRequest) exit_req_ff <- mkFIFOF;");
   append_line(bsv, "FIFOF#(MetadataResponse) exit_rsp_ff <- mkFIFOF;");
 }
@@ -299,7 +309,7 @@ void FPGAControl::emitConnection(BSVProgram & bsv) {
     auto table = t.second->to<IR::P4Table>();
     auto name = nameFromAnnotation(table->annotations, table->name);
     auto type = CamelCase(name);
-    append_format(bsv, "mkConnection(toClient(%s_req_ff, %s_rsp_ff), %s.prev_control_state);", name, name, name);
+    append_line(bsv, "mkConnection(toClient(%s_req_ff, %s_rsp_ff), %s.prev_control_state);", name, name, name);
 
     auto actionList = table->getActionList()->actionList;
     int idx = 0;
@@ -309,7 +319,9 @@ void FPGAControl::emitConnection(BSVProgram & bsv) {
         auto e = elem->expression->to<IR::MethodCallExpression>();
         auto t = program->typeMap->getType(e->method, true);
         auto n = e->method->toString();
-        append_format(bsv, "mkChan(mkFIFOF, mkFIFOF, %s.next_control_state_%d, %s.prev_control_state);", name, idx, camelCase(n));
+        auto action = basicBlock[n];
+        auto annotatedName = nameFromAnnotation(action->annotations, action->name);
+        append_format(bsv, "mkChan(mkFIFOF, mkFIFOF, %s.next_control_state_%d, %s.prev_control_state);", name, idx, camelCase(annotatedName));
         idx ++ ;
       }
     }
@@ -347,9 +359,9 @@ void FPGAControl::emitActions(BSVProgram & bsv) {
     auto stmt = b.second->body->to<IR::BlockStatement>();
     if (stmt == nullptr) continue;
     // encode to cpu instruction
-    //for (auto path : *stmt->components) {
+    for (auto path : *stmt->components) {
     //  path->apply(visitor);
-    //}
+    }
   }
 }
 
@@ -373,7 +385,8 @@ void FPGAControl::emit(BSVProgram & bsv) {
   append_line(bsv, "import UnionDefines::*;");
   append_line(bsv, "import CPU::*;");
   append_line(bsv, "import IMem::*;");
-  append_line(bsv, "import List::*;");
+  append_line(bsv, "import Lists::*;");
+  append_line(bsv, "import TxRx::*;");
   emitTables(bsv);
   emitActions(bsv);
   emitActionTypes(bsv);
