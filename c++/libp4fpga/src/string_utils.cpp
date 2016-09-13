@@ -18,7 +18,7 @@
 
 namespace FPGA {
 
-static const char kSpaceChars[] = { '_', ' ' };
+static const char kSpaceChars[] = { '_', ' ', '.' };
 
 static inline bool IsSpace(char c) {
   for (size_t i = 0; i < sizeof(kSpaceChars) / sizeof(kSpaceChars[0]); ++i) {
