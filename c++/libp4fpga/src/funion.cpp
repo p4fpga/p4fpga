@@ -33,6 +33,7 @@ bool UnionCodeGen::preorder(const IR::P4Table* table) {
     if (elem->expression->is<IR::MethodCallExpression>()) {
       auto expr = elem->expression->to<IR::MethodCallExpression>();
       auto action = expr->method->toString();
+      LOG1("action type " << action << " " << expr->method->node_type_name());
       auto ty = CamelCase(action);
       append_line(bsv, "struct {");
       incr_indent(bsv);
@@ -68,7 +69,8 @@ bool UnionCodeGen::preorder(const IR::P4Table* table) {
         auto params = k->second->parameters;
         for (auto p : *params->parameters) {
           auto type = p->type->to<IR::Type_Bits>();
-          append_line(bsv, "Bit#(%d) %s;", type->size, p->name.toString() );
+          auto pname = nameFromAnnotation(p->annotations, p->name);
+          append_line(bsv, "Bit#(%d) %s;", type->size, pname);
         }
       }
       decr_indent(bsv);
