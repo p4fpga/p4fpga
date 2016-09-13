@@ -15,7 +15,7 @@ P4FPGADIR?=$(DEV_ROOT)/p4fpga
 ###########################################
 S2H_INTERFACES=MainRequest:Main.request
 H2S_INTERFACES=Main:MainIndication,MemServerIndication
-BSVFILES=generatedbsv/Main.bsv generatedbsv/MainAPI.bsv generatedbsv/MainDefs.bsv
+BSVFILES=generatedbsv/Main.bsv generatedbsv/MainAPI.bsv# generatedbsv/MainDefs.bsv
 CPPFILES = $(P4FPGADIR)/templates/cpp/main.cpp $(SONICDIR)/sw/lpcap.c
 CONNECTALFLAGS += -I $(SONICDIR)/sw/
 CONNECTALFLAGS += -lpcap -lpthread
