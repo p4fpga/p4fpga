@@ -296,6 +296,7 @@ void FPGAControl::emitFifo(BSVProgram & bsv) {
       if (node->is<CFG::IfNode>()) {
         auto n = node->to<CFG::IfNode>();
         append_line(bsv, "FIFOF#(MetadataRequest) %s_req_ff <- mkFIFOF;", n->name);
+        append_line(bsv, "PulseWire w_%s <- mkPulseWire;", n->name);
       }
     }
   }
