@@ -28,6 +28,23 @@ namespace FPGA {
 
 using namespace Control;
 
+class MetadataExtractor : public Inspector {
+ public:
+  std::vector<cstring> bsv;
+  explicit MetadataExtractor () {}
+
+  bool preorder(const IR::Member* expr) {
+    bsv.push_back(cstring("let ") + expr->member.toString() +
+           cstring("_isValid = meta.") + expr->member.toString() +
+           cstring(" matches tagged Valid .d") +
+           cstring(" ? True : False;"));
+    bsv.push_back(cstring("let ") + expr->member.toString() +
+           cstring(" = fromMaybe(?, meta.") + expr->member.toString() +
+           cstring(");"));
+    return false;
+  }
+};
+
 class ExpressionConverter : public Inspector {
  public:
   cstring bsv = "";
@@ -60,7 +77,11 @@ class ExpressionConverter : public Inspector {
     return false;
   }
   bool preorder(const IR::Member* expr) {
-    bsv += expr->toString();
+    // FIXME: use header$field format to avoid naming conflict
+    bsv += expr->member.toString() +
+           cstring("_isValid") +
+           cstring(" && ") +
+           expr->member.toString();
     return false;
   }
 };
@@ -230,6 +251,13 @@ void FPGAControl::emitCondRule(BSVProgram & bsv, const CFG::IfNode* node) {
   // LOG1(node << " succ " << node->successors.edges);
   append_format(bsv, "%s_req_ff.deq;", name);
   append_format(bsv, "let _req = %s_req_ff.first;", name);
+  append_line(bsv, "let meta = _req.meta;");
+
+  MetadataExtractor metadataVisitor;
+  stmt->condition->apply(metadataVisitor);
+  for (auto str : metadataVisitor.bsv) {
+    append_line(bsv, str);
+  }
 
   auto ifTrue = cstring("");
   auto ifFalse = cstring("");
