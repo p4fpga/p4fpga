@@ -203,10 +203,10 @@ void FPGADeparser::emitStates(BSVProgram & bsv) {
   append_format(bsv, "function Bit#(%d) nextDeparseState(MetadataT metadata);", lenp1);
   incr_indent(bsv);
   append_format(bsv, "Vector#(%d, Bool) headerValid;", lenp1);
-  //append_line(bsv, "headerValid[0] = False;");
+  append_line(bsv, "headerValid[0] = False;");
   for (int i = 0; i < states.size(); i++) {
     auto name = states.at(i)->name.name;
-    append_format(bsv, "headerValid[%d] = metadata.%s matches tagged Forward ? True : False;", i, name);
+    append_format(bsv, "headerValid[%d] = metadata.%s matches tagged Forward ? True : False;", i+1, name);
   }
   append_line(bsv, "let vec = pack(headerValid);");
   append_line(bsv, "return vec;");
