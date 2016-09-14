@@ -374,7 +374,7 @@ void FPGAControl::emitDebugPrint(BSVProgram & bsv) {
 
 void FPGAControl::emitTables(BSVProgram & bsv) {
   for (auto t : tables) {
-    // LOG1("emit Tables");
+    LOG1("emit Tables");
     TableCodeGen visitor(this, bsv);
     t.second->apply(visitor);
   }
@@ -384,13 +384,14 @@ void FPGAControl::emitTables(BSVProgram & bsv) {
 void FPGAControl::emitActions(BSVProgram & bsv) {
   for (auto b : basicBlock) {
     ActionCodeGen visitor(this, bsv);
+    LOG1(b.second);
     b.second->apply(visitor);
-    auto stmt = b.second->body->to<IR::BlockStatement>();
-    if (stmt == nullptr) continue;
-    // encode to cpu instruction
-    for (auto path : *stmt->components) {
-    //  path->apply(visitor);
-    }
+ //   auto stmt = b.second->body->to<IR::BlockStatement>();
+ //   if (stmt == nullptr) continue;
+ //   // encode to cpu instruction
+ //   for (auto path : *stmt->components) {
+ //   //  path->apply(visitor);
+ //   }
   }
 }
 
@@ -398,6 +399,7 @@ void FPGAControl::emitActionTypes(BSVProgram & bsv) {
   UnionCodeGen visitor(this, bsv);
   visitor.emit();
   for (auto b : tables) {
+    LOG1("emit Action Types");
     UnionCodeGen visitor(this, bsv);
     b.second->apply(visitor);
   }

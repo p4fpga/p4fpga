@@ -68,7 +68,7 @@ bool ActionCodeGen::preorder(const IR::MethodCallExpression* expression) {
     // ext->method : read / write
     // ext->expr : register name
     // ext->getParameters : index value or result index
-    append_line(bsv, "// INST extern %s %s %s %s", ext->method->name.toString(), ext->type->toString(), ext->expr->toString(), ext->getParameters()->toString());
+    // append_line(bsv, "// INST extern %s %s %s %s", ext->method->name.toString(), ext->type->toString(), ext->expr->toString(), ext->getParameters()->toString());
     return false;
   }
 
@@ -84,7 +84,7 @@ bool ActionCodeGen::preorder(const IR::MethodCallExpression* expression) {
     if (extFunc->method->name == "mark_to_drop") {
       append_line(bsv, "// mark_to_drop ");
     } else {
-      append_line(bsv, "// INST extern ", extFunc->method->name.toString());
+      append_line(bsv, "// INST extern %s", extFunc->method->name.toString());
     }
     return false;
   }
@@ -139,28 +139,46 @@ void ActionCodeGen::emitCpuRspRule(const IR::P4Action* action) {
   append_line(bsv, "endrule");
 }
 
-void ActionCodeGen::emitDropAction(const IR::P4Action* action) {
+void ActionCodeGen::emitActionBegin(const IR::P4Action* action) {
   auto name = nameFromAnnotation(action->annotations, action->name);
-  // auto name = action->name.toString();
+  auto orig_name = action->name.toString();
   auto type = CamelCase(name);
   append_format(bsv, "// =============== action %s ==============", name);
-  auto table = control->action_to_table[name];
+  auto table = control->action_to_table[orig_name];
+  if (table == nullptr) {
+    ::error("unable to find table from action %s", orig_name);
+  }
   auto table_name = nameFromAnnotation(table->annotations, table->name);
   auto table_type = CamelCase(table_name);
   append_line(bsv, "interface %s;", type);
   incr_indent(bsv);
-  append_line(bsv, "interface Server#(%sActionReq, %sActionRsp) prev_control_state;", table_type, table_type);
+  append_format(bsv, "interface Server#(%sActionReq, %sActionRsp) prev_control_state;", table_type, table_type);
   append_line(bsv, "method Action set_verbosity(int verbosity);");
   decr_indent(bsv);
   append_line(bsv, "endinterface");
   append_line(bsv, "(* synthesize *)");
-  append_line(bsv, "module mk%s (Control::%s);", type, type);
+  append_format(bsv, "module mk%s (Control::%s);", type, type);
   incr_indent(bsv);
   control->emitDebugPrint(bsv);
-  append_line(bsv, "RX #(%sActionReq) rx_prev_control_state <- mkRX;", table_type);
-  append_line(bsv, "TX #(%sActionRsp) tx_prev_control_state <- mkTX;", table_type);
+  append_format(bsv, "RX #(%sActionReq) rx_prev_control_state <- mkRX;", table_type);
+  append_format(bsv, "TX #(%sActionRsp) tx_prev_control_state <- mkTX;", table_type);
   append_line(bsv, "let rx_info_prev_control_state = rx_prev_control_state.u;");
   append_line(bsv, "let tx_info_prev_control_state = tx_prev_control_state.u;");
+}
+
+void ActionCodeGen::emitActionEnd(const IR::P4Action* action) {
+  append_line(bsv, "interface prev_control_state = toServer(rx_prev_control_state.e, tx_prev_control_state.e);");
+  append_line(bsv, "method Action set_verbosity(int verbosity);");
+  incr_indent(bsv);
+  append_line(bsv, "cf_verbosity <= verbosity;");
+  // extern verbosity
+  decr_indent(bsv);
+  append_line(bsv, "endmethod");
+  decr_indent(bsv);
+  append_line(bsv, "endmodule");
+}
+
+void ActionCodeGen::emitDropRule(const IR::P4Action* action) {
   append_line(bsv, "rule drop;");
   incr_indent(bsv);
   append_line(bsv, "let v = rx_info_prev_control_state.first;");
@@ -168,75 +186,14 @@ void ActionCodeGen::emitDropAction(const IR::P4Action* action) {
   decr_indent(bsv);
   append_line(bsv, "endrule");
   append_line(bsv, "FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;");
-  append_line(bsv, "interface prev_control_state = toServer(rx_prev_control_state.e, tx_prev_control_state.e);");
-  append_line(bsv, "method Action set_verbosity(int verbosity);");
-  incr_indent(bsv);
-  append_line(bsv, "cf_verbosity <= verbosity;");
-  // extern verbosity
-  decr_indent(bsv);
-  append_line(bsv, "endmethod");
-  decr_indent(bsv);
-  append_line(bsv, "endmodule");
 }
 
-void ActionCodeGen::emitForwardAction(const IR::P4Action* action) {
-  auto name = nameFromAnnotation(action->annotations, action->name);
-  // auto name = action->name.toString();
-  auto type = CamelCase(name);
-  append_format(bsv, "// =============== action %s ==============", name);
-  auto table = control->action_to_table[name];
-  auto table_name = nameFromAnnotation(table->annotations, table->name);
-  auto table_type = CamelCase(table_name);
-  append_line(bsv, "interface %s;", type);
-  incr_indent(bsv);
-  append_line(bsv, "interface Server#(%sActionReq, %sActionRsp) prev_control_state;", table_type, table_type);
-  append_line(bsv, "method Action set_verbosity(int verbosity);");
-  decr_indent(bsv);
-  append_line(bsv, "endinterface");
-  append_line(bsv, "(* synthesize *)");
-  append_line(bsv, "module mk%s (Control::%s);", type, type);
-  incr_indent(bsv);
-  control->emitDebugPrint(bsv);
-  append_line(bsv, "RX #(%sActionReq) rx_prev_control_state <- mkRX;", table_type);
-  append_line(bsv, "TX #(%sActionRsp) tx_prev_control_state <- mkTX;", table_type);
-  append_line(bsv, "let rx_info_prev_control_state = rx_prev_control_state.u;");
-  append_line(bsv, "let tx_info_prev_control_state = tx_prev_control_state.u;");
-  append_line(bsv, "interface prev_control_state = toServer(rx_prev_control_state.e, tx_prev_control_state.e);");
-  append_line(bsv, "method Action set_verbosity(int verbosity);");
-  incr_indent(bsv);
-  append_line(bsv, "cf_verbosity <= verbosity;");
-  // extern verbosity
-  decr_indent(bsv);
-  append_line(bsv, "endmethod");
-  decr_indent(bsv);
-  append_line(bsv, "endmodule");
+void ActionCodeGen::emitForwardRule(const IR::P4Action* action) {
 
 }
 
-void ActionCodeGen::emitCPUAction(const IR::P4Action* action) {
+void ActionCodeGen::emitModifyRule(const IR::P4Action* action) {
   auto name = nameFromAnnotation(action->annotations, action->name);
-  auto orig_name = action->name.toString();
-  auto type = CamelCase(name);
-  LOG1("emit action " << type);
-  append_format(bsv, "// =============== action %s ==============", name);
-  auto table = control->action_to_table[orig_name];
-  auto table_name = nameFromAnnotation(table->annotations, table->name);
-  auto table_type = CamelCase(table_name);
-  // generate instruction for cpu;
-  append_line(bsv, "interface %s;", type);
-  incr_indent(bsv);
-  append_line(bsv, "interface Server#(%sActionReq, %sActionRsp) prev_control_state;", table_type, table_type);
-  append_line(bsv, "method Action set_verbosity(int verbosity);");
-  decr_indent(bsv);
-  append_line(bsv, "endinterface");
-  append_line(bsv, "(* synthesize *)");
-  append_line(bsv, "module mk%s (Control::%s);", type, type);
-  incr_indent(bsv);
-  control->emitDebugPrint(bsv);
-  append_line(bsv, "RX #(%sActionReq) rx_prev_control_state <- mkRX;", table_type);
-  append_line(bsv, "TX #(%sActionRsp) tx_prev_control_state <- mkTX;", table_type);
-  append_line(bsv, "let rx_info_prev_control_state = rx_prev_control_state.u;");
-  append_line(bsv, "let tx_info_prev_control_state = tx_prev_control_state.u;");
   append_line(bsv, "Reg#(MetadataT) metadata <- mkReg(defaultValue);");
   append_line(bsv, "FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;");
   append_line(bsv, "Vector#(1, Reg#(Bit#(64))) temp <- replicateM(mkReg(0));");
@@ -246,17 +203,6 @@ void ActionCodeGen::emitCPUAction(const IR::P4Action* action) {
   // Extern ??
   emitCpuReqRule(action);
   emitCpuRspRule(action);
-  append_line(bsv, "interface prev_control_state = toServer(rx_prev_control_state.e, tx_prev_control_state.e);");
-  append_line(bsv, "method Action set_verbosity(int verbosity);");
-  incr_indent(bsv);
-  append_line(bsv, "cf_verbosity <= verbosity;");
-  append_line(bsv, "cpu.set_verbosity(verbosity);");
-  append_line(bsv, "imem.set_verbosity(verbosity);");
-  // extern verbosity
-  decr_indent(bsv);
-  append_line(bsv, "endmethod");
-  decr_indent(bsv);
-  append_line(bsv, "endmodule");
 }
 
 bool ActionCodeGen::isDropAction(const IR::P4Action* action) {
@@ -296,13 +242,15 @@ void ActionCodeGen::postorder(const IR::P4Action* action) {
   if (stmt == nullptr) {
     return;
   }
+  emitActionBegin(action);
   if (isNoAction(action)) {
-    emitForwardAction(action);
+    emitForwardRule(action);
   } else if (isDropAction(action)) {
-    emitDropAction(action);
+    emitDropRule(action);
   } else {
-    emitCPUAction(action);
+    emitModifyRule(action);
   }
+  emitActionEnd(action);
 }
 
 }  // namespace FPGA
