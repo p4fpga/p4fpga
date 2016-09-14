@@ -231,7 +231,8 @@ void ActionCodeGen::emitCPUAction(const IR::P4Action* action) {
   append_line(bsv, "let rx_info_prev_control_state = rx_prev_control_state.u;");
   append_line(bsv, "let tx_info_prev_control_state = tx_prev_control_state.u;");
   append_line(bsv, "FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;");
-  append_line(bsv, "CPU cpu <- mkCPU(\"%s\", List::nil);", name);
+  append_line(bsv, "Vector#(1, Reg#(64)) temp = replicateM(mkReg(0));");
+  append_line(bsv, "CPU cpu <- mkCPU(\"%s\", toList(temp));", name);
   append_line(bsv, "IMem imem <- mkIMem(\"%s.hex\");", name);
   append_line(bsv, "mkConnection(cpu.imem_client, imem.cpu_server);");
   // Extern ??
