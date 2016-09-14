@@ -92,11 +92,24 @@ bool ActionCodeGen::preorder(const IR::MethodCallExpression* expression) {
   return false;
 }
 
-void ActionCodeGen::emitCpuReqRule() {
+void ActionCodeGen::emitCpuReqRule(const IR::P4Action* action) {
   append_line(bsv, "rule rl_cpu_request if (cpu.not_running());");
   incr_indent(bsv);
   append_line(bsv, "let v = rx_info_prev_control_state.first;");
   append_line(bsv, "rx_info_prev_control_state.deq;");
+  append_line(bsv, "case (v) matches");
+  incr_indent(bsv);
+  auto name = action->name;
+  auto type = CamelCase(name);
+  append_format(bsv, "tagged %sReqT {pkt: .pkt, meta: .meta} : begin", type);
+  incr_indent(bsv);
+  append_line(bsv, "metadata <= meta;");
+  decr_indent(bsv);
+  append_line(bsv, "end");
+  decr_indent(bsv);
+  append_line(bsv, "endcase");
+  append_line(bsv, "// copy from metadata to stack");
+  append_line(bsv, "// run cpu");
   decr_indent(bsv);
   append_line(bsv, "endrule");
 }
@@ -108,7 +121,6 @@ void ActionCodeGen::emitCpuRspRule(const IR::P4Action* action) {
   auto table_name = nameFromAnnotation(table->annotations, table->name);
   auto table_type = CamelCase(table_name);
   std::vector<cstring> fields;
-  cstring response = "";
   if (action->parameters->size() > 0) {
     auto params = action->parameters->to<IR::ParameterList>();
     if (params != nullptr) {
@@ -116,17 +128,12 @@ void ActionCodeGen::emitCpuRspRule(const IR::P4Action* action) {
         fields.push_back(p->name);
       }
     }
-    for (auto f : fields) {
-      response += cstring(f) + ": " + cstring(f);
-      if (f != fields.back()) {
-        response += ", ";
-      }
-    }
+    LOG1("// Action Response: need to update metadata");
   }
   append_line(bsv, "rule rl_cpu_resp if (cpu.not_running());");
   incr_indent(bsv);
   append_line(bsv, "let pkt <- toGet(curr_packet_ff).get;"); // FIXME: bottleneck
-  append_format(bsv, "%sActionRsp rsp = tagged %sRspT {%s};", table_type, type, response);
+  append_format(bsv, "%sActionRsp rsp = tagged %sRspT { pkt: pkt, meta: metadata};", table_type, type);
   append_line(bsv, "tx_info_prev_control_state.enq(rsp);");
   decr_indent(bsv);
   append_line(bsv, "endrule");
@@ -147,7 +154,7 @@ void ActionCodeGen::emitDropAction(const IR::P4Action* action) {
   decr_indent(bsv);
   append_line(bsv, "endinterface");
   append_line(bsv, "(* synthesize *)");
-  append_line(bsv, "module mk%s (%s);", type, type);
+  append_line(bsv, "module mk%s (Control::%s);", type, type);
   incr_indent(bsv);
   control->emitDebugPrint(bsv);
   append_line(bsv, "RX #(%sActionReq) rx_prev_control_state <- mkRX;", table_type);
@@ -187,7 +194,7 @@ void ActionCodeGen::emitForwardAction(const IR::P4Action* action) {
   decr_indent(bsv);
   append_line(bsv, "endinterface");
   append_line(bsv, "(* synthesize *)");
-  append_line(bsv, "module mk%s (%s);", type, type);
+  append_line(bsv, "module mk%s (Control::%s);", type, type);
   incr_indent(bsv);
   control->emitDebugPrint(bsv);
   append_line(bsv, "RX #(%sActionReq) rx_prev_control_state <- mkRX;", table_type);
@@ -223,20 +230,21 @@ void ActionCodeGen::emitCPUAction(const IR::P4Action* action) {
   decr_indent(bsv);
   append_line(bsv, "endinterface");
   append_line(bsv, "(* synthesize *)");
-  append_line(bsv, "module mk%s (%s);", type, type);
+  append_line(bsv, "module mk%s (Control::%s);", type, type);
   incr_indent(bsv);
   control->emitDebugPrint(bsv);
   append_line(bsv, "RX #(%sActionReq) rx_prev_control_state <- mkRX;", table_type);
   append_line(bsv, "TX #(%sActionRsp) tx_prev_control_state <- mkTX;", table_type);
   append_line(bsv, "let rx_info_prev_control_state = rx_prev_control_state.u;");
   append_line(bsv, "let tx_info_prev_control_state = tx_prev_control_state.u;");
+  append_line(bsv, "Reg#(MetadataT) metadata <- mkReg(defaultValue);");
   append_line(bsv, "FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;");
-  append_line(bsv, "Vector#(1, Reg#(64)) temp = replicateM(mkReg(0));");
+  append_line(bsv, "Vector#(1, Reg#(Bit#(64))) temp <- replicateM(mkReg(0));");
   append_line(bsv, "CPU cpu <- mkCPU(\"%s\", toList(temp));", name);
   append_line(bsv, "IMem imem <- mkIMem(\"%s.hex\");", name);
   append_line(bsv, "mkConnection(cpu.imem_client, imem.cpu_server);");
   // Extern ??
-  emitCpuReqRule();
+  emitCpuReqRule(action);
   emitCpuRspRule(action);
   append_line(bsv, "interface prev_control_state = toServer(rx_prev_control_state.e, tx_prev_control_state.e);");
   append_line(bsv, "method Action set_verbosity(int verbosity);");

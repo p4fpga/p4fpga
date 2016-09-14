@@ -38,6 +38,7 @@ bool UnionCodeGen::preorder(const IR::P4Table* table) {
       append_line(bsv, "struct {");
       incr_indent(bsv);
       append_line(bsv, "PacketInstance pkt;");
+      append_line(bsv, "MetadataT meta;");
       auto k = control->basicBlock.find(action);
       if (k != control->basicBlock.end()) {
         auto params = k->second->parameters;
@@ -64,15 +65,7 @@ bool UnionCodeGen::preorder(const IR::P4Table* table) {
       append_line(bsv, "struct {");
       incr_indent(bsv);
       append_line(bsv, "PacketInstance pkt;");
-      auto k = control->basicBlock.find(action);
-      if (k != control->basicBlock.end()) {
-        auto params = k->second->parameters;
-        for (auto p : *params->parameters) {
-          auto type = p->type->to<IR::Type_Bits>();
-          auto pname = nameFromAnnotation(p->annotations, p->name);
-          append_line(bsv, "Bit#(%d) %s;", type->size, pname);
-        }
-      }
+      append_line(bsv, "MetadataT meta;");
       decr_indent(bsv);
       append_line(bsv, "} %sRspT;", ty);
     }
@@ -84,6 +77,7 @@ bool UnionCodeGen::preorder(const IR::P4Table* table) {
 
 void UnionCodeGen::emit() {
   append_line(bsv, "import Ethernet::*;");
+  append_line(bsv, "import StructDefines::*;");
 }
 
 }  // namespace FPGA

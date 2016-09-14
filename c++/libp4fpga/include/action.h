@@ -39,7 +39,7 @@ class ActionCodeGen : public Inspector {
   void emitForwardAction(const IR::P4Action* action);
   void emitDropAction(const IR::P4Action* action);
   void emitCPUAction(const IR::P4Action* action);
-  void emitCpuReqRule();
+  void emitCpuReqRule(const IR::P4Action* action);
   void emitCpuRspRule(const IR::P4Action* action);
 };
 
