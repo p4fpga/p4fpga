@@ -372,12 +372,23 @@ void FPGAControl::emitDebugPrint(BSVProgram & bsv) {
   append_line(bsv, "endfunction");
 }
 
-void FPGAControl::emitTables(BSVProgram & bsv) {
+void FPGAControl::emitTables(BSVProgram & bsv, CppProgram & cpp) {
+  append_line(cpp, "#include <iostream>");
+  append_line(cpp, "#include <unordered_map>");
+  append_line(cpp, "#ifdef __cplusplus");
+  append_line(cpp, "extern \"C\" {");
+  append_line(cpp, "#endif");
+  append_line(cpp, "#include <stdio.h>");
+  append_line(cpp, "#include <stdlib.h>");
+  append_line(cpp, "#include <string.h>");
+  append_line(cpp, "#include <stdint.h>");
   for (auto t : tables) {
-    LOG1("emit Tables");
-    TableCodeGen visitor(this, bsv);
+    TableCodeGen visitor(this, bsv, cpp);
     t.second->apply(visitor);
   }
+  append_line(cpp, "#ifdef __cplusplus");
+  append_line(cpp, "}");
+  append_line(cpp, "#endif");
 }
 
 
@@ -407,7 +418,7 @@ void FPGAControl::emitActionTypes(BSVProgram & bsv) {
 
 
 // control block module
-void FPGAControl::emit(BSVProgram & bsv) {
+void FPGAControl::emit(BSVProgram & bsv, CppProgram & cpp) {
   auto cbname = controlBlock->container->name.toString();
   auto cbtype = CamelCase(cbname);
   LOG1("Emitting " << cbname);
@@ -418,7 +429,7 @@ void FPGAControl::emit(BSVProgram & bsv) {
   append_line(bsv, "import IMem::*;");
   append_line(bsv, "import Lists::*;");
   append_line(bsv, "import TxRx::*;");
-  emitTables(bsv);
+  emitTables(bsv, cpp);
   emitActions(bsv);
   emitActionTypes(bsv);
 
@@ -458,6 +469,17 @@ void FPGAControl::emit(BSVProgram & bsv) {
     }
   }
   decr_indent(bsv);
+  append_line(bsv, "interface next = (interface Client#(MetadataRequest, MetadataResponse);");
+  incr_indent(bsv);
+  append_line(bsv, "interface request = toGet(exit_req_ff);");
+  append_line(bsv, "interface response = toPut(exit_rsp_ff);");
+  decr_indent(bsv);
+  append_line(bsv, "endinterface);");
+  append_line(bsv, "method Action set_verbosity (int verbosity);");
+  incr_indent(bsv);
+  append_line(bsv, "cf_verbosity <= verbosity;");
+  decr_indent(bsv);
+  append_line(bsv, "endmethod");
   append_line(bsv, "endmodule");
 }
 

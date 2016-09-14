@@ -44,7 +44,8 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
 
     // TODO(rjs): start here to change to program
     BSVProgram bsv;
-    fpgaprog.emit(bsv);
+    CppProgram cpp;
+    fpgaprog.emit(bsv, cpp);
 
     boost::filesystem::path parserFile("ParserGenerated.bsv");
     boost::filesystem::path parserPath = dir / parserFile;
@@ -61,11 +62,16 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
     boost::filesystem::path unionFile("UnionGenerated.bsv");
     boost::filesystem::path unionPath = dir / unionFile;
 
+    boost::filesystem::path simFile("matchtable_model.cpp");
+    boost::filesystem::path simPath = dir / simFile;
+
     std::ofstream(parserPath.native())   <<  bsv.getParserBuilder().toString();
     std::ofstream(deparserPath.native()) <<  bsv.getDeparserBuilder().toString();
     std::ofstream(structPath.native())   <<  bsv.getStructBuilder().toString();
     std::ofstream(controlPath.native())  <<  bsv.getControlBuilder().toString();
     std::ofstream(unionPath.native())    <<  bsv.getUnionBuilder().toString();
+
+    std::ofstream(simFile.native())      <<  cpp.getSimBuilder().toString();
 }
 
 void generate_metadata_profile(const IR::P4Program* program) {

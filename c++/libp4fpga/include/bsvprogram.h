@@ -9,22 +9,24 @@ class BSVProgram {
   BSVProgram() { }
   CodeBuilder& getParserBuilder() { return parserBuilder_; }
   CodeBuilder& getDeparserBuilder() { return deparserBuilder_; }
-  CodeBuilder& getHeaderBuilder() { return headerBuilder_; }
   CodeBuilder& getStructBuilder() { return structBuilder_; }
   CodeBuilder& getUnionBuilder()  { return unionBuilder_; }
-  CodeBuilder& getStateBuilder()  { return stateBuilder_; }
   CodeBuilder& getControlBuilder() { return controlBuilder_; }
-  CodeBuilder& getTableBuilder() { return tableBuilder_; }
 
  private:
   CodeBuilder parserBuilder_;
   CodeBuilder deparserBuilder_;
-  CodeBuilder headerBuilder_;
   CodeBuilder structBuilder_;
   CodeBuilder unionBuilder_;
-  CodeBuilder stateBuilder_;
   CodeBuilder controlBuilder_;
-  CodeBuilder tableBuilder_;
+};
+
+class CppProgram {
+ public:
+  CppProgram() {}
+  CodeBuilder& getSimBuilder() { return simBuilder_; }
+ private:
+  CodeBuilder simBuilder_;
 };
 
 class Profiler {

@@ -71,14 +71,14 @@ bool FPGAProgram::build() {
   return true;
 }
 
-void FPGAProgram::emit(BSVProgram & bsv) {
+void FPGAProgram::emit(BSVProgram & bsv, CppProgram & cpp) {
   LOG1("Emitting FPGA program");
   for (auto f : parser->parseStateMap) {
     LOG1(f.first << f.second);
   }
   parser->emit(bsv);
-  ingress->emit(bsv);
-  egress->emit(bsv);
+  ingress->emit(bsv, cpp);
+  egress->emit(bsv, cpp);
   deparser->emit(bsv);
 
   // generate MetadataT

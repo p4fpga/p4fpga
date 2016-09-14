@@ -32,7 +32,7 @@ class FPGAParser;
 class FPGAControl;
 class FPGADeparser;
 
-// Base class for FPGA objects
+// // Base class for FPGA objects
 class FPGAObject {
  public:
     virtual ~FPGAObject() {}
@@ -44,7 +44,7 @@ class FPGAObject {
         return dynamic_cast<T*>(this); }
 };
 
-class FPGAProgram : public FPGAObject {
+class FPGAProgram { // : public FPGAObject {
  public:
     const IR::P4Program*      program;
     const IR::ToplevelBlock*  toplevel;
@@ -60,8 +60,7 @@ class FPGAProgram : public FPGAObject {
     ExpressionTranslator*     tr;
 
     // write program as bluespec source code
-    void emit(BSVProgram & bsv) override;
-    // void generateGraph(Graph & graph);
+    void emit(BSVProgram & bsv, CppProgram & cpp); // override;
     bool build();  // return 'true' on success
 
     FPGAProgram(const IR::P4Program* program, P4::ReferenceMap* refMap,

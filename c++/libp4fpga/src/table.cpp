@@ -32,8 +32,6 @@ namespace FPGA {
 
 using namespace Control;
 
-//bool TableCodeGen::compareActionListElement
-
 void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
   // generate request typedef
   auto name = nameFromAnnotation(table->annotations, table->name);
@@ -359,6 +357,35 @@ void TableCodeGen::emit(const IR::P4Table* table) {
   append_line(bsv, "endmodule");
 }
 
+void TableCodeGen::emitCpp(const IR::P4Table* table) {
+  auto name = nameFromAnnotation(table->annotations, table->name);
+  auto type = CamelCase(name);
+  append_line(cpp, "typedef uint64_t %sReqT;", type);
+  append_line(cpp, "typedef uint64_t %sRspT;", type);
+  append_line(cpp, "std::unordered_map<%sReqT, %sRspT> tbl_%s;", type, type, name);
+  append_line(cpp, "extern \"C\" %sReqT matchtable_read_%s(%sReqT rdata) {", type, camelCase(name), type);
+  incr_indent(cpp);
+  append_line(cpp, "auto it = tbl_%s.find(rdata);", name);
+
+  append_line(cpp, "if (it != tbl_%s.end()) {", name);
+  incr_indent(cpp);
+  append_line(cpp, "return tbl_%s[rdata];", name);
+  decr_indent(cpp);
+  append_line(cpp, "} else {");
+  incr_indent(cpp);
+  append_line(cpp, "return 0;");
+  decr_indent(cpp);
+  append_line(cpp, "}");
+  decr_indent(cpp);
+  append_line(cpp, "}");
+
+  append_line(cpp, "extern \"C\" void matchtable_write_%s(%sReqT wdata, %sRspT action){", camelCase(name), type, type);
+  incr_indent(cpp);
+  append_line(cpp, "tbl_%s[wdata];", name);
+  decr_indent(cpp);
+  append_line(cpp, "}");
+}
+
 bool TableCodeGen::preorder(const IR::P4Table* table) {
   auto tbl = table->to<IR::P4Table>();
   for (auto act : *tbl->getActionList()->actionList) {
@@ -403,6 +430,7 @@ bool TableCodeGen::preorder(const IR::P4Table* table) {
   emitTypedefs(tbl);
   emitSimulation(tbl);
   emit(tbl);
+  emitCpp(tbl);
 
   return false;
 }

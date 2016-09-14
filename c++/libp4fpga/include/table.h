@@ -27,12 +27,13 @@ namespace FPGA {
 // per table code generator
 class TableCodeGen : public Inspector {
  public:
-  TableCodeGen(FPGAControl* control, BSVProgram & bsv) :
-    control(control), bsv(bsv) {}
+  TableCodeGen(FPGAControl* control, BSVProgram & bsv, CppProgram & cpp) :
+    control(control), bsv(bsv), cpp(cpp) {}
   bool preorder(const IR::P4Table* table) override;
  private:
   FPGAControl* control;
   BSVProgram & bsv;
+  CppProgram & cpp;
   int key_width = 0;
   int action_size = 0;
   std::vector<std::pair<const IR::StructField*, int>> key_vec;
@@ -45,6 +46,7 @@ class TableCodeGen : public Inspector {
   void emitRuleHandleExecution(const IR::P4Table* table);
   void emitRuleHandleResponse(const IR::P4Table* table);
   void emitRspFifoMux(const IR::P4Table* table);
+  void emitCpp(const IR::P4Table* table);
 };
 
 }  // namespace FPGA

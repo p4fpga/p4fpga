@@ -61,11 +61,27 @@ inline void decr_indent(BSVProgram & bsv) {
   bsv.getControlBuilder().decreaseIndent();
 }
 
+template <typename... TArgs>
+  void append_line(CppProgram & cpp, const char* fmt, TArgs&&... args) {
+    cpp.getSimBuilder().emitIndent();
+    boost::format msg(fmt);
+    std::string s = format_string(msg, std::forward<TArgs>(args)...);
+    cpp.getSimBuilder().appendLine(s.c_str());
+  }
+
+inline void incr_indent(CppProgram & cpp) {
+  cpp.getSimBuilder().increaseIndent();
+}
+
+inline void decr_indent(CppProgram & cpp) {
+  cpp.getSimBuilder().decreaseIndent();
+}
+
 }  // namespace Control
 
 using namespace FPGA;
 
-class FPGAControl : public FPGAObject {
+class FPGAControl { // : public FPGAObject {
  public:
     const FPGAProgram*            program;
     const IR::ControlBlock*       controlBlock;
@@ -86,7 +102,7 @@ class FPGAControl : public FPGAObject {
       : program(program), controlBlock(block) {}
 
     virtual ~FPGAControl() {}
-    void emit(BSVProgram & bsv);
+    void emit(BSVProgram & bsv, CppProgram & cpp);
     void emitTableRule(BSVProgram & bsv, const CFG::TableNode* node);
     void emitCondRule(BSVProgram & bsv, const CFG::IfNode* node);
     void emitEntryRule(BSVProgram & bsv, const CFG::Node* node);
@@ -95,7 +111,7 @@ class FPGAControl : public FPGAObject {
     void emitConnection(BSVProgram & bsv);
     void emitDebugPrint(BSVProgram & bsv);
     void emitFifo(BSVProgram & bsv);
-    void emitTables(BSVProgram & bsv);
+    void emitTables(BSVProgram & bsv, CppProgram & cpp);
     void emitActions(BSVProgram & bsv);
     void emitActionTypes(BSVProgram & bsv);
     bool build();
