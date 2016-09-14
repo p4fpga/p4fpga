@@ -65,7 +65,6 @@ bool ParserBuilder::preorder(const IR::ParserState* state) {
   return false;
   }
 
-  ignore start state
   if (state->name.toString() == "start") {
     // NOTE: assume start state is actually called 'start'
     LOG1("ignore start state");

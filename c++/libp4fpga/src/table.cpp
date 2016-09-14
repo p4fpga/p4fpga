@@ -166,15 +166,21 @@ void TableCodeGen::emitRuleHandleRequest(const IR::P4Table* table) {
   append_line(bsv, "let meta = data.meta;");
   append_line(bsv, "let pkt = data.pkt;");
   auto fields = cstring("");
+  auto field_width = 0;
   for (auto k : key_vec) {
     auto f = k.first;
     auto s = k.second;
+    LOG1("key size" << s);
+    field_width += s;
     auto name = f->name.toString();
     append_line(bsv, "let %s = fromMaybe(?, meta.%s);", name, name);
-    fields += name + cstring(":") + name;
+    fields += name + cstring(": ") + name;
     if (k != key_vec.back()) {
       fields += cstring(",");
     }
+  }
+  if (field_width % 9 != 0) {
+    fields += ", padding: 0";
   }
   append_format(bsv, "%sReqT req = %sReqT{%s};", type, type, fields);
   append_line(bsv, "matchTable.lookupPort.request.put(pack(req));");
