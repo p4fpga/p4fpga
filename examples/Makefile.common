@@ -15,10 +15,10 @@ P4FPGADIR?=$(DEV_ROOT)/p4fpga
 ###########################################
 S2H_INTERFACES=MainRequest:Main.request
 H2S_INTERFACES=Main:MainIndication,MemServerIndication
-BSVFILES=$(P4FPGADIR)/templates/Main.bsv $(P4FPGADIR)/templates/MainAPI.bsv
+BSVFILES=$(P4FPGADIR)/bsv/Main.bsv $(P4FPGADIR)/bsv/MainAPI.bsv
 
 ifeq ($(CPPFILES), )
-CPPFILES = $(P4FPGADIR)/templates/cpp/main.cpp $(SONICDIR)/sw/lpcap.c
+CPPFILES = $(P4FPGADIR)/cpp/main.cpp $(SONICDIR)/sw/lpcap.c
 endif
 
 CONNECTALFLAGS += -I $(SONICDIR)/sw/
@@ -33,10 +33,8 @@ CONNECTALFLAGS += -D IMPORT_HOSTIF
 CONNECTALFLAGS += -D BYTE_ENABLES
 CONNECTALFLAGS += --bscflags="-show-range-conflict +RTS -K596777766 -RTS -demote-errors G0066:G0045 -suppress-warnings G0046:G0020:G0023:S0015:S0080:S0039 -steps-max-intervals 20"
 CONNECTALFLAGS += -m $(P4EXAMPLEDIR)/bsv/AsymmetricBRAM/mem_model.c
-#CONNECTALFLAGS += -m generatedcpp/jni/matchtable_model.cpp
 CONNECTALFLAGS += --bscflags="-fdir $(CURDIR)/sample_input"
-CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/templates/
-CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/templates/bsv
+CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/bsv/
 CONNECTALFLAGS += --nocache
 CONNECTALFLAGS += --cxxflags=-std=c++11
 
