@@ -387,7 +387,7 @@ void TableCodeGen::emitCpp(const IR::P4Table* table) {
 
   append_line(cpp, "extern \"C\" void matchtable_write_%s(%sReqT wdata, %sRspT action){", camelCase(name), type, type);
   incr_indent(cpp);
-  append_line(cpp, "tbl_%s[wdata];", name);
+  append_line(cpp, "tbl_%s[wdata] = action;", name);
   decr_indent(cpp);
   append_line(cpp, "}");
 }
