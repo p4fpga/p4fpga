@@ -457,6 +457,9 @@ void FPGAParser::emitAcceptRule(BSVProgram & bsv) {
       }
     }
   }
+  append_line(bsv, "rg_tmp <= 0;");
+  append_line(bsv, "rg_shift_amt <= 0;");
+  append_line(bsv, "rg_buffered <= 0;");
   append_line(bsv, "meta_in_ff.enq(meta);");
   decr_indent(bsv);
   append_line(bsv, "endrule");
