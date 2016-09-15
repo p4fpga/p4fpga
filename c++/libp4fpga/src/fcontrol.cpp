@@ -423,13 +423,17 @@ void FPGAControl::emitActionTypes(BSVProgram & bsv) {
 }
 
 void FPGAControl::emitAPI(BSVProgram & bsv, cstring cbname) {
-  bsv.getAPIBuilder().increaseIndent();
   for (auto t : tables) {
     auto tname = t.first;
-    bsv.getAPIBuilder().appendFormat("method %s_add_entry = %s.%s_add_entry;", tname, cbname, tname);
-    bsv.getAPIBuilder().newline();
+    auto type = CamelCase(tname);
+    bsv.getAPIIntfDefBuilder().appendFormat("method Action %s_add_entry(%sReqSize key, %sRspSize value);", tname, type, type);
+    bsv.getAPIIntfDefBuilder().newline();
   }
-  bsv.getAPIBuilder().decreaseIndent();
+  for (auto t : tables) {
+    auto tname = t.first;
+    bsv.getAPIIntfDeclBuilder().appendFormat("method %s_add_entry = %s.%s_add_entry;", tname, cbname, tname);
+    bsv.getAPIIntfDeclBuilder().newline();
+  }
 }
 
 // control block module

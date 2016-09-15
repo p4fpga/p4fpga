@@ -51,6 +51,8 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
   }
   decr_indent(bsv);
   append_format(bsv, "} %sReqT deriving (Bits, Eq, FShow);", type);
+  bsv.getAPITypeDefBuilder().appendFormat("typedef Bit#(%d) %sReqSize;", key_width, type);
+  bsv.getAPITypeDefBuilder().newline();
 
   // action enum
   append_line(bsv, "typedef enum {");
@@ -118,6 +120,8 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
   action_size += ceil(log2(actionList->size()));
   decr_indent(bsv);
   append_line(bsv, "} %sRspT deriving (Bits, Eq, FShow);", type);
+  bsv.getAPITypeDefBuilder().appendFormat("typedef Bit#(%d) %sRspSize;", action_size, type);
+  bsv.getAPITypeDefBuilder().newline();
 }
 
 void TableCodeGen::emitSimulation(const IR::P4Table* table) {

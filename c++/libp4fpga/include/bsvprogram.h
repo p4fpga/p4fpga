@@ -12,7 +12,9 @@ class BSVProgram {
   CodeBuilder& getStructBuilder() { return structBuilder_; }
   CodeBuilder& getUnionBuilder()  { return unionBuilder_; }
   CodeBuilder& getControlBuilder() { return controlBuilder_; }
-  CodeBuilder& getAPIBuilder() { return apiBuilder_; }
+  CodeBuilder& getAPIIntfDefBuilder() { return apiIntfDefBuilder_; }
+  CodeBuilder& getAPIIntfDeclBuilder() { return apiIntfDeclBuilder_; }
+  CodeBuilder& getAPITypeDefBuilder() { return apiTypeDefBuilder_; }
 
  private:
   CodeBuilder parserBuilder_;
@@ -20,7 +22,9 @@ class BSVProgram {
   CodeBuilder structBuilder_;
   CodeBuilder unionBuilder_;
   CodeBuilder controlBuilder_;
-  CodeBuilder apiBuilder_;
+  CodeBuilder apiIntfDefBuilder_;
+  CodeBuilder apiIntfDeclBuilder_;
+  CodeBuilder apiTypeDefBuilder_;
 };
 
 class CppProgram {
