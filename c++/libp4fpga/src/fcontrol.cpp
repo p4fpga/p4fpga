@@ -422,11 +422,11 @@ void FPGAControl::emitActionTypes(BSVProgram & bsv) {
   }
 }
 
-void FPGAControl::emitAPI(BSVProgram & bsv, cstring cbtype) {
+void FPGAControl::emitAPI(BSVProgram & bsv, cstring cbname) {
   bsv.getAPIBuilder().increaseIndent();
   for (auto t : tables) {
     auto tname = t.first;
-    bsv.getAPIBuilder().appendFormat("method %s_add_entry = %s.%s_add_entry;", tname, cbtype, tname);
+    bsv.getAPIBuilder().appendFormat("method %s_add_entry = %s.%s_add_entry;", tname, cbname, tname);
     bsv.getAPIBuilder().newline();
   }
   bsv.getAPIBuilder().decreaseIndent();
@@ -456,7 +456,7 @@ void FPGAControl::emit(BSVProgram & bsv, CppProgram & cpp) {
   for (auto t : tables) {
     auto tname = t.first;
     auto type = CamelCase(tname);
-    append_line(bsv, "method Action %s_add_entry(Bit#(SizeOf#(%sReqT)) key, Bit#(SizeOf#(%sRspT)) value);", type, type);
+    append_line(bsv, "method Action %s_add_entry(Bit#(SizeOf#(%sReqT)) key, Bit#(SizeOf#(%sRspT)) value);", tname, type, type);
   }
   append_line(bsv, "method Action set_verbosity(int verbosity);");
   decr_indent(bsv);
@@ -509,7 +509,7 @@ void FPGAControl::emit(BSVProgram & bsv, CppProgram & cpp) {
   append_line(bsv, "endmethod");
   append_line(bsv, "endmodule");
 
-  emitAPI(bsv, cbtype);
+  emitAPI(bsv, cbname);
 }
 
 }  // namespace FPGA
