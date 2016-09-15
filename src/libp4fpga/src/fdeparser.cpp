@@ -215,7 +215,7 @@ void FPGADeparser::emitStates(BSVProgram & bsv) {
   append_line(bsv, "");
 
   // Function: transit_next_state
-  append_format(bsv, "function Action transit_next_state(MetadataT metadata);");
+  append_line(bsv, "function Action transit_next_state(MetadataT metadata);");
   incr_indent(bsv);
   append_line(bsv, "action");
   append_line(bsv, "let vec = nextDeparseState(metadata);");
@@ -226,7 +226,7 @@ void FPGADeparser::emitStates(BSVProgram & bsv) {
   append_line(bsv, "end");
   append_line(bsv, "else begin");
   incr_indent(bsv);
-  append_line(bsv, "let nextHeader = pack(countZerosLSB(vec));");
+  append_format(bsv, "Bit#(%d) nextHeader = truncate(pack(countZerosLSB(vec)%% %d));",log2(lenp1), lenp1 );
   append_line(bsv, "DeparserState nextState = unpack(nextHeader);");
   append_line(bsv, "case (nextState) matches");
   incr_indent(bsv);
