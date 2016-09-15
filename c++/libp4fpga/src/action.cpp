@@ -104,6 +104,7 @@ void ActionCodeGen::emitCpuReqRule(const IR::P4Action* action) {
   append_format(bsv, "tagged %sReqT {pkt: .pkt, meta: .meta} : begin", type);
   incr_indent(bsv);
   append_line(bsv, "metadata <= meta;");
+  append_line(bsv, "curr_packet_ff.enq(pkt);");
   decr_indent(bsv);
   append_line(bsv, "end");
   decr_indent(bsv);

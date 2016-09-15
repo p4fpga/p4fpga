@@ -190,6 +190,7 @@ void FPGAControl::emitEntryRule(BSVProgram & bsv, const CFG::Node* node) {
   append_line(bsv, "MetadataRequest req = MetadataRequest {pkt: pkt, meta: meta};");
   if (tables.size() == 0) {
     append_line(bsv, "exit_req_ff.enq(req);");
+    append_format(bsv, "dbprint(3, $format(\"exit\", fshow(meta)));");
   } else {
     BUG_CHECK(node->successors.size() == 1, "Expected 1 start node for %1%", node);
     auto start = (*(node->successors.edges.begin()))->endpoint;
@@ -247,9 +248,9 @@ void FPGAControl::emitTableRule(BSVProgram & bsv, const CFG::TableNode* node) {
 }
 
 void FPGAControl::emitCondRule(BSVProgram & bsv, const CFG::IfNode* node) {
-  auto sig = cstring("w_") + node->name;
+  //auto sig = cstring("w_") + node->name;
   auto name = node->name;
-  append_format(bsv, "rule rl_%s if (%s);", node->name, sig);
+  append_format(bsv, "rule rl_%s if (%s_req_ff.notEmpty);", node->name, node->name);
   incr_indent(bsv);
   auto stmt = node->statement->to<IR::IfStatement>();
   // LOG1(node << " succ " << node->successors.edges);
@@ -330,7 +331,7 @@ void FPGAControl::emitFifo(BSVProgram & bsv) {
       if (node->is<CFG::IfNode>()) {
         auto n = node->to<CFG::IfNode>();
         append_line(bsv, "FIFOF#(MetadataRequest) %s_req_ff <- mkFIFOF;", n->name);
-        append_line(bsv, "PulseWire w_%s <- mkPulseWire;", n->name);
+        //append_line(bsv, "PulseWire w_%s <- mkPulseWire;", n->name);
       }
     }
   }
