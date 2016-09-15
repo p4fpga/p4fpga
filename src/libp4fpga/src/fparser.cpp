@@ -157,7 +157,7 @@ bool ParserBuilder::preorder(const IR::AssignmentStatement* statement) {
   return false;
 }
 
-FPGAParser::FPGAParser(const FPGAProgram* program,
+FPGAParser::FPGAParser(FPGAProgram* program,
                        const IR::ParserBlock* block,
                        const P4::TypeMap* typeMap,
                        const P4::ReferenceMap* refMap) :
@@ -411,6 +411,21 @@ void FPGAParser::emitAcceptedHeaders(BSVProgram & bsv, const IR::Type_Struct* he
       append_format(bsv, "meta.%s = tagged Forward;", name);
       decr_indent(bsv);
       append_line(bsv, "end");
+      for (auto m : program->metadata) {
+        auto member = m.second;
+        auto ftype = program->typeMap->getType(member->expr, true);
+        auto structT = ftype->to<IR::Type_StructLike>();
+        auto field = structT->getField(member->member);
+        cstring fname = field->name.toString();
+        LOG1("### metadata " << m.second << ftype << structT);
+        if (ftype == type) {
+          append_format(bsv, "if (%s matches tagged Valid .d) begin", name);
+          incr_indent(bsv);
+          append_format(bsv, "meta.%s = tagged Valid d.%s;", fname, fname);
+          decr_indent(bsv);
+          append_line(bsv,"end");
+        }
+      }
     } else if (type->is<IR::Type_Stack>()) {
       ::warning("TODO: generate out_ff for header stack;");
     } else {
@@ -449,8 +464,10 @@ void FPGAParser::emitAcceptRule(BSVProgram & bsv) {
         // TODO: emitStandardMetadata();
       } else if (name == "metadata") {
         // this struct contains all extracted metadata
+        LOG1("metadata" << h_struct);
         emitUserMetadata(bsv, h_struct);
       } else if (name == "headers") {
+        LOG1("headers " << h_struct);
         emitAcceptedHeaders(bsv, h_struct);
       } else {
         // - struct used by externs, such as checksum

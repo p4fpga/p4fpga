@@ -82,7 +82,7 @@ class FPGAParser : public FPGAObject {
   std::vector<IR::BSV::Rule*>         rules;
 
  public:
-  const FPGAProgram*            program;
+  FPGAProgram*            program;
   const P4::ReferenceMap*       refMap;
   const P4::TypeMap*            typeMap;
   const IR::ParserBlock*        parserBlock;
@@ -98,11 +98,12 @@ class FPGAParser : public FPGAObject {
   ParseStepMap                 parseStateMap;
   std::vector<IR::BSV::ParseStep*> parseSteps;
 
-  explicit FPGAParser(const FPGAProgram* program,
+  explicit FPGAParser(FPGAProgram* program,
                       const IR::ParserBlock* block,
                       const P4::TypeMap* typeMap,
                       const P4::ReferenceMap* refMap);
 
+  void test();
   void emit(BSVProgram & bsv) override;
   bool build();
 };

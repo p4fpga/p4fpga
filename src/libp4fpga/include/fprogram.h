@@ -36,7 +36,8 @@ class FPGADeparser;
 class FPGAObject {
  public:
     virtual ~FPGAObject() {}
-    virtual void emit(BSVProgram & bsv) = 0;
+    virtual void emit(BSVProgram & bsv) {};
+    virtual void emit(BSVProgram & bsv, CppProgram & cpp) {};
     template<typename T> bool is() const { return to<T>() != nullptr; }
     template<typename T> const T* to() const {
         return dynamic_cast<const T*>(this); }
@@ -44,7 +45,7 @@ class FPGAObject {
         return dynamic_cast<T*>(this); }
 };
 
-class FPGAProgram { // : public FPGAObject {
+class FPGAProgram : public FPGAObject {
  public:
     const IR::P4Program*      program;
     const IR::ToplevelBlock*  toplevel;
@@ -55,9 +56,10 @@ class FPGAProgram { // : public FPGAObject {
     FPGAParser*               parser;
     FPGAControl*              ingress;
     FPGAControl*              egress;
-    FPGADeparser*              deparser;
+    FPGADeparser*             deparser;
     // TODO: flexible pipeline should have a map of these controlblocks
     ExpressionTranslator*     tr;
+    std::map<cstring, const IR::Member *> metadata;
 
     // write program as bluespec source code
     void emit(BSVProgram & bsv, CppProgram & cpp); // override;

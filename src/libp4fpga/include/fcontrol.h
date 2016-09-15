@@ -25,6 +25,8 @@
 
 namespace FPGA {
 
+class FPGAParser;
+
 namespace Control {
 inline static std::string format_string(boost::format& message) {
   return message.str();
@@ -83,8 +85,8 @@ using namespace FPGA;
 
 class FPGAControl { // : public FPGAObject {
  public:
-    const FPGAProgram*            program;
     const IR::ControlBlock*       controlBlock;
+    FPGAProgram*                  program;
     FPGA::CFG*                    cfg;
 
     // map from action name to P4Action
@@ -98,7 +100,7 @@ class FPGAControl { // : public FPGAObject {
     std::map<const IR::StructField*, cstring> metadata_to_action;
     std::map<cstring, const IR::P4Table*> action_to_table;
 
-    explicit FPGAControl(const FPGAProgram* program, const IR::ControlBlock* block)
+    explicit FPGAControl(FPGAProgram* program, const IR::ControlBlock* block)
       : program(program), controlBlock(block) {}
 
     virtual ~FPGAControl() {}

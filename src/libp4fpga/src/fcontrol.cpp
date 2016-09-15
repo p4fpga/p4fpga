@@ -150,7 +150,12 @@ bool FPGAControl::build() {
         auto element = key->to<IR::KeyElement>();
         if (element->expression->is<IR::Member>()) {
           auto m = element->expression->to<IR::Member>();
+
+          // save to metadata set for parser to extract
+          program->metadata.insert(std::make_pair(m->toString(), m));
+
           auto type = program->typeMap->getType(m->expr, true);
+          LOG1("meta type" << m);
           // from meta
           if (type->is<IR::Type_Struct>()) {
             auto t = type->to<IR::Type_StructLike>();
