@@ -226,7 +226,7 @@ void FPGADeparser::emitStates(BSVProgram & bsv) {
   append_line(bsv, "end");
   append_line(bsv, "else begin");
   incr_indent(bsv);
-  append_format(bsv, "Bit#(%d) nextHeader = truncate(pack(countZerosLSB(vec)%% %d));",log2(lenp1), lenp1 );
+  append_format(bsv, "Bit#(%d) nextHeader = truncate(pack(countZerosLSB(vec)%% %d));",(int)ceil(log2(lenp1)), lenp1 );
   append_line(bsv, "DeparserState nextState = unpack(nextHeader);");
   append_line(bsv, "case (nextState) matches");
   incr_indent(bsv);
