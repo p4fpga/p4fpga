@@ -67,8 +67,21 @@ bool ParserBuilder::preorder(const IR::ParserState* state) {
 
   if (state->name.toString() == "start") {
     // NOTE: assume start state is actually called 'start'
-    LOG1("ignore start state");
-    return false;
+    LOG1(state->components);
+    if (state->components->size() == 0) {
+      if (state->selectExpression->is<IR::PathExpression>()) {
+        auto expr = state->selectExpression->to<IR::PathExpression>();
+        auto inst = parser->refMap->getDeclaration(expr->path, true);
+        if (inst->is<IR::ParserState>()) {
+          auto pstate = inst->to<IR::ParserState>();
+          parser->initState = pstate;
+          LOG1("parse init state");
+        }
+      }
+      return false;
+    } else {
+      parser->initState = state;
+    }
   }
 
   // take a note of current p4 parse state
@@ -269,7 +282,8 @@ void FPGAParser::emitFunctions(BSVProgram & bsv) {
     append_line(bsv, "endfunction");
   }
 
-  append_line(bsv, "let initState = State%s;", CamelCase(parseSteps[0]->name.toString()));
+  auto initStep = parseStateMap[initState];
+  append_line(bsv, "let initState = State%s;", CamelCase(initStep->name.toString()));
 
   append_line(bsv, "`endif");
 }

@@ -97,6 +97,7 @@ class FPGAParser : public FPGAObject {
   // compute bit width of next parse state.
   ParseStepMap                 parseStateMap;
   std::vector<IR::BSV::ParseStep*> parseSteps;
+  const IR::ParserState*             initState;
 
   explicit FPGAParser(FPGAProgram* program,
                       const IR::ParserBlock* block,
