@@ -453,7 +453,11 @@ void FPGAControl::emit(BSVProgram & bsv, CppProgram & cpp) {
   append_line(bsv, "interface %s;", cbtype);
   incr_indent(bsv);
   append_line(bsv, "interface Client#(MetadataRequest, MetadataResponse) next;");
-  append_line(bsv, "interface MemFreeClient freeClient;");
+  for (auto t : tables) {
+    auto tname = t.first;
+    auto type = CamelCase(tname);
+    append_line(bsv, "method Action %s_add_entry(Bit#(SizeOf#(%sReqT)) key, Bit#(SizeOf#(%sRspT)) value);", type, type);
+  }
   append_line(bsv, "method Action set_verbosity(int verbosity);");
   decr_indent(bsv);
   append_line(bsv, "endinterface");
