@@ -9,14 +9,14 @@ import PacketBuffer::*;
 import TxChannel::*;
 import Vector::*;
 import Control::*;
-import APIDefines::*;
+import APITypeDefGenerated::*;
 `include "ConnectalProjectConfig.bsv"
 
 interface MainRequest;
   method Action read_version ();
   method Action writePacketData (Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
   method Action set_verbosity (Bit#(32) verbosity);
-`include "IntfDefGenerated.bsv"
+`include "APIDefGenerated.bsv"
 endinterface
 interface MainIndication;
   method Action read_version_rsp (Bit#(32) version);
@@ -43,7 +43,7 @@ module mkMainAPI #(MainIndication indication,HostChannel hostchan,Ingress ingres
         txchan.set_verbosity(unpack(verbosity));
         ingress.set_verbosity(unpack(verbosity));
     endmethod
-`include "IntfDeclGenerated.bsv"
+`include "APIDeclGenerated.bsv"
   endinterface
 endmodule
 // Copyright (c) 2016 P4FPGA Project
