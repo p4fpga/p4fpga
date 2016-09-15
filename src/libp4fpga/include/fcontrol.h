@@ -106,7 +106,6 @@ class FPGAControl { // : public FPGAObject {
     void emitTableRule(BSVProgram & bsv, const CFG::TableNode* node);
     void emitCondRule(BSVProgram & bsv, const CFG::IfNode* node);
     void emitEntryRule(BSVProgram & bsv, const CFG::Node* node);
-    void emitExitRule(BSVProgram & bsv, const CFG::Node* node);
     void emitDeclaration(BSVProgram & bsv);
     void emitConnection(BSVProgram & bsv);
     void emitDebugPrint(BSVProgram & bsv);

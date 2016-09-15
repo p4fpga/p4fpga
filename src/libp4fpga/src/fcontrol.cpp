@@ -201,13 +201,14 @@ void FPGAControl::emitEntryRule(BSVProgram & bsv, const CFG::Node* node) {
   append_line(bsv, "endrule");
 }
 
-void FPGAControl::emitExitRule(BSVProgram & bsv, const CFG::Node* node) {
-  append_format(bsv, "rule rl_exit if (exit_req_ff.notEmpty);");
-  incr_indent(bsv);
-  append_line(bsv, "exit_req_ff.deq;");
-  decr_indent(bsv);
-  append_line(bsv, "endrule");
-}
+// void FPGAControl::emitExitRule(BSVProgram & bsv, const CFG::Node* node) {
+//   append_format(bsv, "rule rl_exit if (exit_req_ff.notEmpty);");
+//   incr_indent(bsv);
+//   append_line(bsv, "exit_req_ff.deq;");
+//   append_format(bsv, "dbprint(3, $format(\"exit\", fshow(meta)));");
+//   decr_indent(bsv);
+//   append_line(bsv, "endrule");
+// }
 
 void FPGAControl::emitTableRule(BSVProgram & bsv, const CFG::TableNode* node) {
   auto table = node->table->to<IR::P4Table>();
@@ -488,9 +489,9 @@ void FPGAControl::emit(BSVProgram & bsv, CppProgram & cpp) {
         emitCondRule(bsv, n);
       }
     }
-    if (cfg->exitPoint != nullptr) {
-      emitExitRule(bsv, cfg->exitPoint);
-    }
+    // if (cfg->exitPoint != nullptr) {
+    //   emitExitRule(bsv, cfg->exitPoint);
+    // }
   }
   decr_indent(bsv);
   append_line(bsv, "interface next = (interface Client#(MetadataRequest, MetadataResponse);");
