@@ -122,6 +122,7 @@ bool FPGAControl::build() {
       auto tblblk = b->to<IR::TableBlock>();
       auto table = tblblk->container;
       auto name = nameFromAnnotation(table->annotations, table->name);
+      LOG1("table " << name);
       tables.emplace(name, table);
 
       // populate map <Action, Table>
@@ -193,6 +194,7 @@ void FPGAControl::emitEntryRule(BSVProgram & bsv, const CFG::Node* node) {
     BUG_CHECK(node->successors.size() == 1, "Expected 1 start node for %1%", node);
     auto start = (*(node->successors.edges.begin()))->endpoint;
     append_format(bsv, "%s_req_ff.enq(req);", start->name);
+    append_format(bsv, "dbprint(3, $format(\"%s\", fshow(meta)));", start->name);
   }
   decr_indent(bsv);
   append_line(bsv, "endrule");
@@ -225,6 +227,7 @@ void FPGAControl::emitTableRule(BSVProgram & bsv, const CFG::TableNode* node) {
       incr_indent(bsv);
       append_line(bsv, "MetadataRequest req = MetadataRequest { pkt : pkt, meta : meta};");
       append_line(bsv, "%s_req_ff.enq(req);", s->endpoint->name);
+      append_format(bsv, "dbprint(3, $format(\"default \", fshow(meta)));");
       decr_indent(bsv);
       append_line(bsv, "end");
     } else {
@@ -232,6 +235,7 @@ void FPGAControl::emitTableRule(BSVProgram & bsv, const CFG::TableNode* node) {
       incr_indent(bsv);
       append_line(bsv, "MetadataRequest req = MetadataRequest { pkt : pkt, meta : meta};");
       append_line(bsv, "%s_req_ff.enq(req);", s->endpoint->name);
+      append_format(bsv, "dbprint(3, $format(\"%s \", fshow(meta)));", s->label);
       decr_indent(bsv);
       append_line(bsv, "end");
     }
@@ -276,6 +280,7 @@ void FPGAControl::emitCondRule(BSVProgram & bsv, const CFG::IfNode* node) {
     append_format(bsv, "if (%s) begin", visitor.bsv);
     incr_indent(bsv);
     append_format(bsv, ifTrue);
+    append_format(bsv, "dbprint(3, $format(\"%s true\", fshow(meta)));", node->name);
     decr_indent(bsv);
     append_line(bsv, "end");
   }
@@ -283,6 +288,7 @@ void FPGAControl::emitCondRule(BSVProgram & bsv, const CFG::IfNode* node) {
     append_line(bsv, "else begin");
     incr_indent(bsv);
     append_format(bsv, ifFalse);
+    append_format(bsv, "dbprint(3, $format(\"%s false\", fshow(meta)));", node->name);
     decr_indent(bsv);
     append_line(bsv, "end");
   }
@@ -416,6 +422,15 @@ void FPGAControl::emitActionTypes(BSVProgram & bsv) {
   }
 }
 
+void FPGAControl::emitAPI(BSVProgram & bsv, cstring cbtype) {
+  bsv.getAPIBuilder().increaseIndent();
+  for (auto t : tables) {
+    auto tname = t.first;
+    bsv.getAPIBuilder().appendFormat("method %s_add_entry = %s.%s_add_entry;", tname, cbtype, tname);
+    bsv.getAPIBuilder().newline();
+  }
+  bsv.getAPIBuilder().decreaseIndent();
+}
 
 // control block module
 void FPGAControl::emit(BSVProgram & bsv, CppProgram & cpp) {
@@ -475,12 +490,22 @@ void FPGAControl::emit(BSVProgram & bsv, CppProgram & cpp) {
   append_line(bsv, "interface response = toPut(exit_rsp_ff);");
   decr_indent(bsv);
   append_line(bsv, "endinterface);");
+  for (auto t : tables) {
+    auto tname = t.first;
+    append_line(bsv, "method %s_add_entry = %s.add_entry;", tname, tname);
+  }
   append_line(bsv, "method Action set_verbosity (int verbosity);");
   incr_indent(bsv);
   append_line(bsv, "cf_verbosity <= verbosity;");
+  for (auto t : tables) {
+    auto tname = t.first;
+    append_line(bsv, "%s.set_verbosity(verbosity);", tname);
+  }
   decr_indent(bsv);
   append_line(bsv, "endmethod");
   append_line(bsv, "endmodule");
+
+  emitAPI(bsv, cbtype);
 }
 
 }  // namespace FPGA

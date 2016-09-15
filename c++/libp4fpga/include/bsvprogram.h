@@ -12,6 +12,7 @@ class BSVProgram {
   CodeBuilder& getStructBuilder() { return structBuilder_; }
   CodeBuilder& getUnionBuilder()  { return unionBuilder_; }
   CodeBuilder& getControlBuilder() { return controlBuilder_; }
+  CodeBuilder& getAPIBuilder() { return apiBuilder_; }
 
  private:
   CodeBuilder parserBuilder_;
@@ -19,6 +20,7 @@ class BSVProgram {
   CodeBuilder structBuilder_;
   CodeBuilder unionBuilder_;
   CodeBuilder controlBuilder_;
+  CodeBuilder apiBuilder_;
 };
 
 class CppProgram {

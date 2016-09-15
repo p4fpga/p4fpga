@@ -62,6 +62,9 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
     boost::filesystem::path unionFile("UnionGenerated.bsv");
     boost::filesystem::path unionPath = dir / unionFile;
 
+    boost::filesystem::path apiFile("APIGenerated.bsv");
+    boost::filesystem::path apiPath = dir / apiFile;
+
     boost::filesystem::path simFile("matchtable_model.cpp");
     boost::filesystem::path simPath = dir / simFile;
 
@@ -70,6 +73,7 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
     std::ofstream(structPath.native())   <<  bsv.getStructBuilder().toString();
     std::ofstream(controlPath.native())  <<  bsv.getControlBuilder().toString();
     std::ofstream(unionPath.native())    <<  bsv.getUnionBuilder().toString();
+    std::ofstream(apiPath.native())      <<  bsv.getAPIBuilder().toString();
 
     std::ofstream(simFile.native())      <<  cpp.getSimBuilder().toString();
 }

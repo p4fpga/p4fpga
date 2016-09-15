@@ -114,6 +114,7 @@ class FPGAControl { // : public FPGAObject {
     void emitTables(BSVProgram & bsv, CppProgram & cpp);
     void emitActions(BSVProgram & bsv);
     void emitActionTypes(BSVProgram & bsv);
+    void emitAPI(BSVProgram & bsv, cstring cbtype);
     bool build();
 };
 

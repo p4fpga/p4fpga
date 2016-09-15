@@ -325,6 +325,7 @@ void TableCodeGen::emit(const IR::P4Table* table) {
     append_line(bsv, "interface Client#(%sActionReq, %sActionRsp) next_control_state_%d;", type, type, idx);
     idx ++;
   }
+  append_line(bsv, "method Action add_entry(Bit#(SizeOf#(%sReqT)) key, Bit#(SizeOf#(%sRspT)) value);", type, type);
   append_line(bsv, "method Action set_verbosity(int verbosity);");
   decr_indent(bsv);
   append_line(bsv, "endinterface");
@@ -354,6 +355,11 @@ void TableCodeGen::emit(const IR::P4Table* table) {
     append_line(bsv, "interface next_control_state_%d = toClient(bbReqFifo[%d], bbRspFifo[%d]);", idx, idx, idx);
     idx ++;
   }
+  append_line(bsv, "method Action add_entry(Bit#(SizeOf#(%sReqT)) key, Bit#(SizeOf#(%sRspT)) value);", type, type);
+  incr_indent(bsv);
+  append_line(bsv, "matchTable.add_entry.put(tuple2(key, value));");
+  decr_indent(bsv);
+  append_line(bsv, "endmethod");
   append_line(bsv, "method Action set_verbosity(int verbosity);");
   incr_indent(bsv);
   append_line(bsv, "cf_verbosity <= verbosity;");
