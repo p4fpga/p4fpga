@@ -109,7 +109,7 @@ bool DeparserRuleVisitor::preorder(const IR::BSV::DeparseState* state) {
   // Rule: append bits to buffer
   append_format(bsv, "rule rl_deparse_%s_load if ((deparse_state_ff.first == StateDeparse%s) && (rg_buffered[0] < %d));", name, CamelCase(name), width);
   incr_indent(bsv);
-  append_format(bsv, );
+  append_format(bsv, "dbprint(3, $format(\"deparse load %s\"));", name);
   append_format(bsv, "rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];");
   append_format(bsv, "UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);");
   append_format(bsv, "UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;");
@@ -121,6 +121,7 @@ bool DeparserRuleVisitor::preorder(const IR::BSV::DeparseState* state) {
   // Rule: enough bits in buffer, send header
   append_format(bsv, "rule rl_deparse_%s_send if ((deparse_state_ff.first == StateDeparse%s) && (rg_buffered[0] > %d));", name, CamelCase(name), width);
   incr_indent(bsv);
+  append_format(bsv, "dbprint(3, $format(\"deparse send %s\"));", name);
   append_format(bsv, "succeed_and_next(%d);", width);
   append_line(bsv, "deparse_state_ff.deq;");
   append_line(bsv, "let metadata = meta[0];");

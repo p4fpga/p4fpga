@@ -384,6 +384,25 @@ void FPGAParser::emitTransitionRule(BSVProgram & bsv, const IR::BSV::ParseStep* 
 
 void FPGAParser::emitRules(BSVProgram & bsv) {
   append_line(bsv, "`ifdef PARSER_RULES");
+
+  // deparse rules are mutually exclusive
+  std::vector<cstring> exclusive_rules;
+  for (auto r : parseSteps) {
+    for (auto c : *r->cases) {
+      cstring rl = cstring("rl_") + r->name.toString() + cstring("_") + c->state->toString();
+      exclusive_rules.push_back(rl);
+    }
+  }
+  auto exclusive_annotation = cstring("(* mutually_exclusive=\"");
+  for (auto r : exclusive_rules) {
+    exclusive_annotation += r;
+    if (r != exclusive_rules.back()) {
+      exclusive_annotation += cstring(",");
+    }
+  }
+  exclusive_annotation += cstring("\" *)");
+  append_line(bsv, exclusive_annotation);
+
   for (auto s : parseSteps) {
     emitBufferRule(bsv, s);
     emitExtractionRule(bsv, s);
@@ -431,7 +450,6 @@ void FPGAParser::emitAcceptedHeaders(BSVProgram & bsv, const IR::Type_Struct* he
         auto structT = ftype->to<IR::Type_StructLike>();
         auto field = structT->getField(member->member);
         cstring fname = field->name.toString();
-        LOG1("### metadata " << m.second << ftype << structT);
         if (ftype == type) {
           append_format(bsv, "if (%s matches tagged Valid .d) begin", name);
           incr_indent(bsv);
