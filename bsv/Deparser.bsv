@@ -79,8 +79,8 @@ module mkDeparser (Deparser);
       endaction
    endfunction
 
-   FIFOF#(EtherData) data_in_ff <- mkFIFOF;
-   FIFOF#(EtherData) data_out_ff <- mkFIFOF;
+   FIFOF#(EtherData) data_in_ff <- printTimedTraceM("Deparser:data_in", mkFIFOF);
+   FIFOF#(EtherData) data_out_ff <- printTimedTraceM("Deparser:data_out", mkFIFOF);
    FIFOF#(MetadataT) meta_in_ff <- printTimedTraceM("Deparser:meta_in_ff", mkSizedFIFOF(16));
    FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
    FIFO#(DeparserState) deparse_state_ff <- mkPipelineFIFO();
@@ -132,26 +132,22 @@ module mkDeparser (Deparser);
   `include "DeparserGenerated.bsv"
   `undef DEPARSER_STATE
 
-  rule rl_start_state if (deparse_done[1] && sop_this_cycle);
-    rg_tmp[1] <= 0;
-    rg_buffered[2] <= 0;
-    rg_shift_amt[2] <= 0;
-    rg_processed[2] <= 0;
+  // key: we let rl_deparse_start preempts rl_deparse_payload
+  (* preempts = "rl_deparse_start, rl_deparse_payload" *)
+  rule rl_deparse_start if (deparse_done[1] && sop_this_cycle);
     deparse_done[1] <= False;
     header_done[1] <= False;
     let metadata = meta_in_ff.first;
-    meta[1] <= metadata;
     meta_in_ff.deq;
-    deparse_state_ff.enq(initState);
-    fetch_next_header(112);
+    meta[1] <= metadata;
+    transit_next_state(metadata);
     dbprint(4, $format("Deparser:rl_start_state start deparse %d", valueOf(SizeOf#(DeparserState))));
   endrule
 
-  rule rl_deparse_payload if (deparse_done[1] && !sop_this_cycle);
+  // process payload portion of packet, until last beat
+  rule rl_deparse_payload if (deparse_done[1] && !eop_this_cycle);
     let v = data_in_ff.first;
-    dbprint(4, $format("Deparser:rl_deparse_payload ", fshow(v)));
     data_in_ff.deq;
-    dbprint(4, $format("Deparser:rl_deparse_payload rh_shift_amt %d", rg_shift_amt[1]));
     if (rg_shift_amt[1] != 0) begin
       Bit#(128) data_mask = create_mask(cExtend(rg_shift_amt[1]));
       Bit#(16) mask_out = create_mask(cExtend(rg_shift_amt[1] >> 3));
@@ -166,11 +162,41 @@ module mkDeparser (Deparser);
     end
   endrule
 
+  // reset all temporary states at last beat
+  rule rl_reset if (deparse_done[1] && eop_this_cycle);
+    let v = data_in_ff.first;
+    data_in_ff.deq;
+    rg_tmp[1] <= 0;
+    rg_buffered[2] <= 0;
+    rg_shift_amt[2] <= 0;
+    rg_processed[2] <= 0;
+    dbprint(4, $format("Deparser:rl_reset"));
+    data_out_ff.enq(v);
+  endrule
+
+  // from deparse state, indicate header is all parsed
+  rule rl_deparse_done if (w_deparse_header_done);
+    fetch_next_header(0);
+    header_done[0] <= True;
+    dbprint(4, $format("Deparser:rl_deparse_header_done"));
+  endrule
+
+  // wait till all processed bits are sent, cont. to send payload.
+  // some data are buffered not processed.
+  rule rl_wait_till_processed_done if (!deparse_done[1] && header_done[1] && (rg_processed[1] == 0));
+    deparse_done[1] <= True;
+    dbprint(3, $format("Deparser:rl_wait_till_processed_done"));
+  endrule
+
+  // dequeue data_in_ff during header deparsing
   rule rl_data_ff_load if (!deparse_done[1] && (rg_buffered[2] < rg_next_header_len[2]));
     dbprint(4, $format("Deparser:rl_data_ff_load %d < %d", rg_buffered[2], rg_next_header_len[2]));
     data_in_ff.deq;
   endrule
 
+  // apply mask and send data
+  // use rg_processed to keep track how much data in buffer has been processed;
+  // use rg_shift_amt to keep track how much more data is yet to be processed;
   rule rl_deparse_send if (!deparse_done[1] && (rg_processed[1] > 0));
     let amt = 128;
     if (rg_processed[1] < 128) begin
@@ -186,19 +212,6 @@ module mkDeparser (Deparser);
     rg_shift_amt[1] <= rg_shift_amt[1] - amt;
     data_out_ff.enq(data);
     dbprint(4, $format("Deparser:rl_deparse_send rg_processed=%d rg_shift_amt=%d amt=%d", rg_processed[1], rg_shift_amt[1], amt, fshow(data)));
-  endrule
-
-  rule rl_deparse_header_done if (w_deparse_header_done);
-    fetch_next_header(0);
-    header_done[0] <= True;
-    dbprint(4, $format("Deparser:rl_deparse_header_done"));
-  endrule
-
-  // wait till all processed bits are sent, cont. to send payload.
-  // some data are buffered not processed.
-  rule rl_wait_till_processed_done if (!deparse_done[1] && header_done[1] && (rg_processed[1] == 0));
-    deparse_done[1] <= True;
-    dbprint(3, $format("Deparser:rl_wait_till_processed_done"));
   endrule
 
   `define DEPARSER_RULES
