@@ -1,10 +1,17 @@
-DPL_BENCHMARK=../../submodules/dpl-benchmark/
-P4FILE=$(DPL_BENCHMARK)/l2forwarding/p4src/l2forwarding.p4
+P4FILE=p4src/l2forwarding.p4
 CONNECTALFLAGS += -D PARSER=Parser
 CONNECTALFLAGS += -D DEPARSER=Deparser
-CONNECTALFLAGS += -D MATCHTABLE=l2forwarding
-CONNECTALFLAGS += -D TYPEDEF=StructGenerated
-CONNECTALFLAGS += --bscflags="-fdir $(P4FPGADIR)/examples/l2forwarding/generatedbsv"
+CONNECTALFLAGS += -D MATCHTABLE=Control
+CONNECTALFLAGS += -D TYPEDEF=StructDefines
+CONNECTALFLAGS += --bsvpath=generatedbsv
+CONNECTALFLAGS += -m matchtable_model.cpp
+CPPFILES = main.cpp $(SONICDIR)/sw/lpcap.c
+
+build:
+	p4fpga -o generatedbsv --p4-14 -v --top4 Evaluator -Tfcontrol:1,fparser:1 $(P4FILE)
+
+compile:
+	make build.bluesim -j8
 
 ########################################################
 # NFSUME SUPPORT
@@ -26,3 +33,4 @@ prebuild::
 endif
 
 include ../Makefile.common
+BSVFILES += generatedbsv/APITypeDefGenerated.bsv

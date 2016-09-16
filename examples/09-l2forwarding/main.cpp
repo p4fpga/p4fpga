@@ -184,7 +184,7 @@ int main(int argc, char **argv)
     device = new MainRequestProxy(IfcNames_MainRequestS2H);
 
     parse_options(argc, argv, &pcap_file, &intf, &outf, 0);
-    device->set_verbosity(4);
+    device->set_verbosity(6);
     device->read_version();
 
     device->forward_tbl_add_entry(0x3417EB96BF1C,0x200);
