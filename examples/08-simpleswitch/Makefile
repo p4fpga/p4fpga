@@ -5,8 +5,9 @@ CONNECTALFLAGS += -D MATCHTABLE=simple_router
 CONNECTALFLAGS += -D TYPEDEF=StructDefines
 
 build:
-	#p4fpga -o generatedbsv --p4-14 -v -Tdeparser:1,action:1 $(P4FILE)
-	make build.bluesim
+	p4fpga -o generatedbsv --p4-14 -v -Tdeparser:1,action:1 $(P4FILE)
+	#make build.bluesim
 
 #CONNECTALFLAGS += --bscflags="-fdir $(P4FPGADIR)/examples/multiproto/generatedbsv"
 include ../Makefile.common
+BSVFILES += generatedbsv/APITypeDefGenerated.bsv
