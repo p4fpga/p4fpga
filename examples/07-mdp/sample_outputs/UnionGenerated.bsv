@@ -14,7 +14,7 @@ typedef union tagged {
 typedef union tagged {
   struct {
     PacketInstance pkt;
-    Bit#(32) mdp$msgSeqNum;
+    Bool forward;
   } DedupRspT;
   struct {
     PacketInstance pkt;

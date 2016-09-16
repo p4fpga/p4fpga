@@ -21,7 +21,7 @@ typedef enum {
 } DeparserState deriving (Bits, Eq, FShow);
 `endif // DEPARSER_STRUCT
 `ifdef DEPARSER_RULES
-(* mutually_exclusive="rl_deparse_ethernet_next, rl_deparse_ipv4_next, rl_deparse_udp_next, rl_deparse_mdp_next, rl_deparse_mdp_msg_next, rl_deparse_mdp_refreshbook_next, rl_deparse_mdp_sbe_next, rl_deparse_group0_next, rl_deparse_group1_next, rl_deparse_group2_next, rl_deparse_group3_next, rl_deparse_group4_next, rl_deparse_group5_next, rl_deparse_group6_next, rl_deparse_group7_next, rl_deparse_group8_next, rl_deparse_group9_next" *)
+(* mutually_exclusive="rl_start_state, rl_deparse_ethernet_next, rl_deparse_ipv4_next, rl_deparse_udp_next, rl_deparse_mdp_next, rl_deparse_mdp_msg_next, rl_deparse_mdp_refreshbook_next, rl_deparse_mdp_sbe_next, rl_deparse_group0_next, rl_deparse_group1_next, rl_deparse_group2_next, rl_deparse_group3_next, rl_deparse_group4_next, rl_deparse_group5_next, rl_deparse_group6_next, rl_deparse_group7_next, rl_deparse_group8_next, rl_deparse_group9_next, rl_deparse_header_done" *)
 rule rl_deparse_ethernet_next if (w_deparse_ethernet);
   deparse_state_ff.enq(StateDeparseEthernet);
   fetch_next_header(112);
@@ -57,7 +57,6 @@ rule rl_deparse_ipv4_send if ((deparse_state_ff.first == StateDeparseIpv4) && (r
   metadata.ipv4 = tagged NotPresent;
   transit_next_state(metadata);
   meta[0] <= metadata;
-  dbprint(3, $format("***deparse ipv4 send %h", rg_tmp[0]));
 endrule
 rule rl_deparse_udp_next if (w_deparse_udp);
   deparse_state_ff.enq(StateDeparseUdp);
@@ -68,7 +67,6 @@ rule rl_deparse_udp_load if ((deparse_state_ff.first == StateDeparseUdp) && (rg_
   UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
   UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
   move_buffered_amt(cExtend(n_bits_used));
-  dbprint(3, $format("***deparse udp load"));
 endrule
 rule rl_deparse_udp_send if ((deparse_state_ff.first == StateDeparseUdp) && (rg_buffered[0] >= 64));
   succeed_and_next(64);
@@ -77,7 +75,6 @@ rule rl_deparse_udp_send if ((deparse_state_ff.first == StateDeparseUdp) && (rg_
   metadata.udp = tagged NotPresent;
   transit_next_state(metadata);
   meta[0] <= metadata;
-  dbprint(3, $format("***deparse udp send %h", rg_tmp[0]));
 endrule
 rule rl_deparse_mdp_next if (w_deparse_mdp);
   deparse_state_ff.enq(StateDeparseMdp);
@@ -316,7 +313,6 @@ endrule
 rule rl_deparse_group9_next if (w_deparse_group9);
   deparse_state_ff.enq(StateDeparseGroup9);
   fetch_next_header(256);
-  dbprint(3, fshow("deparse state 9??"));
 endrule
 rule rl_deparse_group9_load if ((deparse_state_ff.first == StateDeparseGroup9) && (rg_buffered[0] < 256));
   rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
@@ -352,7 +348,7 @@ PulseWire w_deparse_group7 <- mkPulseWire();
 PulseWire w_deparse_group8 <- mkPulseWire();
 PulseWire w_deparse_group9 <- mkPulseWire();
 
-function DeparserState nextDeparseState(MetadataT metadata);
+function Bit#(18) nextDeparseState(MetadataT metadata);
    Vector#(18, Bool) headerValid;
    headerValid[0]  = False;
    headerValid[1]  = metadata.ethernet         matches tagged Forward ? True : False;
@@ -373,38 +369,41 @@ function DeparserState nextDeparseState(MetadataT metadata);
    headerValid[16] = metadata.group[8]         matches tagged Forward ? True : False;
    headerValid[17] = metadata.group[9]         matches tagged Forward ? True : False;
    let vec = pack(headerValid);
-   let nextHeader = pack(countZerosLSB(vec));
-   return unpack(nextHeader);
+   return vec;
 endfunction
 
 function Action transit_next_state(MetadataT metadata);
   action
-  let nextState = nextDeparseState(metadata);
-  dbprint(3, $format(fshow(metadata)));
-  dbprint(3, $format("next parse state ", fshow(nextState)));
-  case (nextState) matches
-    StateDeparseIpv4: w_deparse_ipv4.send();
-    StateDeparseUdp:  w_deparse_udp.send();
-    StateDeparseMdp:  w_deparse_mdp.send();
-    StateDeparseMdpMsg: w_deparse_mdp_msg.send();
-    StateDeparseMdpSbe: w_deparse_mdp_sbe.send();
-    StateDeparseMdpRefreshbook: w_deparse_mdp_refreshbook.send();
-    StateDeparseGroup0: w_deparse_group0.send();
-    StateDeparseGroup1: w_deparse_group1.send();
-    StateDeparseGroup2: w_deparse_group2.send();
-    StateDeparseGroup3: w_deparse_group3.send();
-    StateDeparseGroup4: w_deparse_group4.send();
-    StateDeparseGroup5: w_deparse_group5.send();
-    StateDeparseGroup6: w_deparse_group6.send();
-    StateDeparseGroup7: w_deparse_group7.send();
-    StateDeparseGroup8: w_deparse_group8.send();
-    StateDeparseGroup9: w_deparse_group9.send();
-    default: begin
-       fetch_next_header(0);
-       header_done[0] <= True;
-    end
-  endcase
+  let vec = nextDeparseState(metadata);
+  if (vec == 0) begin
+    w_deparse_header_done.send();
+  end
+  else begin
+    let nextHeader = pack(countZerosLSB(vec));
+    DeparserState nextState = unpack(nextHeader);
+    dbprint(4, $format("next parse state ", fshow(nextState)));
+    case (nextState) matches
+      StateDeparseIpv4: w_deparse_ipv4.send();
+      StateDeparseUdp:  w_deparse_udp.send();
+      StateDeparseMdp:  w_deparse_mdp.send();
+      StateDeparseMdpMsg: w_deparse_mdp_msg.send();
+      StateDeparseMdpSbe: w_deparse_mdp_sbe.send();
+      StateDeparseMdpRefreshbook: w_deparse_mdp_refreshbook.send();
+      StateDeparseGroup0: w_deparse_group0.send();
+      StateDeparseGroup1: w_deparse_group1.send();
+      StateDeparseGroup2: w_deparse_group2.send();
+      StateDeparseGroup3: w_deparse_group3.send();
+      StateDeparseGroup4: w_deparse_group4.send();
+      StateDeparseGroup5: w_deparse_group5.send();
+      StateDeparseGroup6: w_deparse_group6.send();
+      StateDeparseGroup7: w_deparse_group7.send();
+      StateDeparseGroup8: w_deparse_group8.send();
+      StateDeparseGroup9: w_deparse_group9.send();
+      default: $display("Should never happen");
+    endcase
+  end
   endaction
 endfunction
 
+let initState = StateDeparseEthernet;
 `endif // DEPARSER_STATE

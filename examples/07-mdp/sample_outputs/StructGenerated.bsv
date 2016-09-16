@@ -42,7 +42,6 @@ function EthernetT extract_ethernet_t(Bit#(112) data);
   return unpack(byteSwap(data));
 endfunction
 
-
 typedef struct {
   Bit#(4) version;
   Bit#(4) ihl;
@@ -217,23 +216,23 @@ function Mdincrementalrefreshbook32Group extract_mdIncrementalRefreshBook32Group
 endfunction
 
 
-typedef struct {
-  PacketInstance pkt;
-  MetadataT meta;
-} MetadataRequest deriving (Bits, Eq, FShow);
-typedef struct {
-  PacketInstance pkt;
-  MetadataT meta;
-} MetadataResponse deriving (Bits, Eq, FShow);
-
-typedef union tagged {
-  void NotPresent;
-  void Forward;
-  void Delete;
-  void Insert;
-  void Processed;
-  } HeaderState
-deriving (Bits, Eq, FShow);
+//typedef struct {
+//  PacketInstance pkt;
+//  MetadataT meta;
+//} MetadataRequest deriving (Bits, Eq, FShow);
+//typedef struct {
+//  PacketInstance pkt;
+//  MetadataT meta;
+//} MetadataResponse deriving (Bits, Eq, FShow);
+//
+//typedef union tagged {
+//  void NotPresent;
+//  void Forward;
+//  void Delete;
+//  void Insert;
+//  void Processed;
+//  } HeaderState
+//deriving (Bits, Eq, FShow);
 
 typedef union tagged {
   struct {
@@ -256,6 +255,7 @@ typedef union tagged {
 typedef struct {
   Maybe#(Bit#(1)) dedup$notPresent;
   Maybe#(Bit#(32)) mdp$msgSeqNum;
+  Maybe#(Bool) forward;
   HeaderState ethernet;
   HeaderState ipv4;
   HeaderState udp;
