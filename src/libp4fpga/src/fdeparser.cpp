@@ -85,11 +85,11 @@ bool DeparserBuilder::preorder(const IR::Member* member) {
 class DeparserRuleVisitor : public Inspector {
   public:
     DeparserRuleVisitor(const FPGADeparser* deparser, BSVProgram& bsv) :
-      bsv_(bsv) {}
+      bsv(bsv) {}
     bool preorder(const IR::BSV::DeparseState* state) override;
   private:
     const FPGAProgram* program;
-    BSVProgram & bsv_;
+    BSVProgram & bsv;
 };
 
 bool DeparserRuleVisitor::preorder(const IR::BSV::DeparseState* state) {
@@ -98,54 +98,55 @@ bool DeparserRuleVisitor::preorder(const IR::BSV::DeparseState* state) {
   auto name = hdr->name.name;
 
   // Rule: next deparse state
-  append_format(bsv_, "rule rl_deparse_%s_next if (w_%s);", name, name);
-  incr_indent(bsv_);
-  append_format(bsv_, "deparse_state_ff.enq(StateDeparse%s);", CamelCase(name));
-  append_format(bsv_, "fetch_next_header(%d);", width);
-  decr_indent(bsv_);
-  append_line(bsv_, "endrule");
-  append_line(bsv_, "");
+  append_format(bsv, "rule rl_deparse_%s_next if (w_%s);", name, name);
+  incr_indent(bsv);
+  append_format(bsv, "deparse_state_ff.enq(StateDeparse%s);", CamelCase(name));
+  append_format(bsv, "fetch_next_header(%d);", width);
+  decr_indent(bsv);
+  append_line(bsv, "endrule");
+  append_line(bsv, "");
 
   // Rule: append bits to buffer
-  append_format(bsv_, "rule rl_deparse_%s_load if ((deparse_state_ff.first == StateDeparse%s) && (rg_buffered[0] < %d));", name, CamelCase(name), width);
-  incr_indent(bsv_);
-  append_format(bsv_, "rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];");
-  append_format(bsv_, "UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);");
-  append_format(bsv_, "UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;");
-  append_format(bsv_, "move_buffered_amt(cExtend(n_bits_used));");
-  decr_indent(bsv_);
-  append_line(bsv_, "endrule");
-  append_line(bsv_, "");
+  append_format(bsv, "rule rl_deparse_%s_load if ((deparse_state_ff.first == StateDeparse%s) && (rg_buffered[0] < %d));", name, CamelCase(name), width);
+  incr_indent(bsv);
+  append_format(bsv, );
+  append_format(bsv, "rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];");
+  append_format(bsv, "UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);");
+  append_format(bsv, "UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;");
+  append_format(bsv, "move_buffered_amt(cExtend(n_bits_used));");
+  decr_indent(bsv);
+  append_line(bsv, "endrule");
+  append_line(bsv, "");
 
   // Rule: enough bits in buffer, send header
-  append_format(bsv_, "rule rl_deparse_%s_send if ((deparse_state_ff.first == StateDeparse%s) && (rg_buffered[0] > %d));", name, CamelCase(name), width);
-  incr_indent(bsv_);
-  append_format(bsv_, "succeed_and_next(%d);", width);
-  append_line(bsv_, "deparse_state_ff.deq;");
-  append_line(bsv_, "let metadata = meta[0];");
-  append_format(bsv_, "metadata.%s = tagged StructDefines::NotPresent;", name);
-  append_line(bsv_, "transit_next_state(metadata);");
-  append_line(bsv_, "meta[0] <= metadata;");
-  decr_indent(bsv_);
-  append_line(bsv_, "endrule");
-  append_line(bsv_, "");
+  append_format(bsv, "rule rl_deparse_%s_send if ((deparse_state_ff.first == StateDeparse%s) && (rg_buffered[0] > %d));", name, CamelCase(name), width);
+  incr_indent(bsv);
+  append_format(bsv, "succeed_and_next(%d);", width);
+  append_line(bsv, "deparse_state_ff.deq;");
+  append_line(bsv, "let metadata = meta[0];");
+  append_format(bsv, "metadata.%s = tagged StructDefines::NotPresent;", name);
+  append_line(bsv, "transit_next_state(metadata);");
+  append_line(bsv, "meta[0] <= metadata;");
+  decr_indent(bsv);
+  append_line(bsv, "endrule");
+  append_line(bsv, "");
   return false;
 }
 
 class DeparserStateVisitor : public Inspector {
   public:
     DeparserStateVisitor(const FPGADeparser* deparser, BSVProgram& bsv) :
-      bsv_(bsv) {}
+      bsv(bsv) {}
     bool preorder(const IR::BSV::DeparseState* state) override;
   private:
     const FPGAProgram* program;
-    BSVProgram & bsv_;
+    BSVProgram & bsv;
 };
 
 bool DeparserStateVisitor::preorder(const IR::BSV::DeparseState* state) {
   auto hdr = state->to<IR::Type_Header>();
   auto name = hdr->name.name;
-  append_format(bsv_, "PulseWire w_%s <- mkPulseWire();", name);
+  append_format(bsv, "PulseWire w_%s <- mkPulseWire();", name);
   return false;
 }
 
@@ -179,6 +180,22 @@ void FPGADeparser::emitEnums(BSVProgram & bsv) {
 void FPGADeparser::emitRules(BSVProgram & bsv) {
   append_line(bsv, "`ifdef DEPARSER_RULES");
   // deparse rules are mutually exclusive
+  std::vector<cstring> exclusive_rules;
+  exclusive_rules.push_back("rl_start_state");
+  exclusive_rules.push_back("rl_deparse_header_done");
+  for (auto r : states) {
+    cstring rl = cstring("rl_deparse_") + r->name.toString() + cstring("_next");
+    exclusive_rules.push_back(rl);
+  }
+  auto exclusive_annotation = cstring("(* mutually_exclusive=\"");
+  for (auto r : exclusive_rules) {
+    exclusive_annotation += r;
+    if (r != exclusive_rules.back()) {
+      exclusive_annotation += cstring(",");
+    }
+  }
+  exclusive_annotation += cstring("\" *)");
+  append_line(bsv, exclusive_annotation);
   DeparserRuleVisitor visitor(this, bsv);
   for (auto r : states) {
     r->apply(visitor);
