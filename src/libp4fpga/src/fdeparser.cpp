@@ -182,9 +182,6 @@ void FPGADeparser::emitRules(BSVProgram & bsv) {
   append_line(bsv, "`ifdef DEPARSER_RULES");
   // deparse rules are mutually exclusive
   std::vector<cstring> exclusive_rules;
-  exclusive_rules.push_back("rl_deparse_start");
-  exclusive_rules.push_back("rl_deparse_payload");
-  exclusive_rules.push_back("rl_reset");
   for (auto r : states) {
     cstring rl = cstring("rl_deparse_") + r->name.toString() + cstring("_next");
     exclusive_rules.push_back(rl);
