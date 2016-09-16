@@ -5,6 +5,7 @@ CONNECTALFLAGS += -D MATCHTABLE=Control
 CONNECTALFLAGS += -D TYPEDEF=StructDefines
 CONNECTALFLAGS += -m matchtable_model.cpp
 
+CONNECTALFLAGS += --bsvpath=generatedbsv
 CPPFILES = main.cpp $(SONICDIR)/sw/lpcap.c
 
 build:

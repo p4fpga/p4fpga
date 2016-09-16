@@ -1,4 +1,4 @@
-#define DLB_PROTOC0L 0x9999
+#define DLB_PROTOC0L 0x0800
 
 header_type ethernet_t {
     fields {
