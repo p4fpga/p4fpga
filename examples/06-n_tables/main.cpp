@@ -188,6 +188,7 @@ int main(int argc, char **argv)
     device->read_version();
 
     device->forward_tbl_add_entry(0x0001005E002002,0x200);
+    device->forward_tbl_add_entry(0x003417eb96bf1c,0x200);
 
     if (intf) {
         printf("Opening device %s\n", intf); 

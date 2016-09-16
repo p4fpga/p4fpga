@@ -6,13 +6,13 @@ CONNECTALFLAGS += -D MATCHTABLE=Control
 CONNECTALFLAGS += -D TYPEDEF=StructDefines
 CONNECTALFLAGS += -m matchtable_model.cpp
 
-CPPFILES = generatedcpp/main.cpp $(SONICDIR)/sw/lpcap.c
+CPPFILES = main.cpp $(SONICDIR)/sw/lpcap.c
 
 build:
 	p4fpga -o generatedbsv --p4-14 -v --top4 Evaluator -Tfcontrol:1,fparser:1 $(P4FILE)
 
 compile:
-	make build.bluesim
+	make build.bluesim -j8
 
 include ../Makefile.common
 BSVFILES += generatedbsv/APITypeDefGenerated.bsv
