@@ -111,8 +111,9 @@ table drop_tbl {
 }
 
 control ingress {
-    if (valid(ipv4))
+    if (valid(ipv4)) {
         apply(forward_tbl);
+	}
 
     if (valid(paxos)) {
         apply(round_tbl);
