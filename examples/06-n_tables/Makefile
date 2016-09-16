@@ -1,5 +1,4 @@
-DPL_BENCHMARK=../../submodules/dpl-benchmark/
-P4FILE=$(DPL_BENCHMARK)/n_tables/p4src/n_tables.p4
+P4FILE=p4src/n_tables.p4
 CONNECTALFLAGS += -D PARSER=Parser
 CONNECTALFLAGS += -D DEPARSER=Deparser
 CONNECTALFLAGS += -D MATCHTABLE=Control
