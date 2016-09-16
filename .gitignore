@@ -1,10 +1,9 @@
 *.pyc
-generatedbsv/
-generatedcpp/
 bluesim/
 *.dot
 *.png
-
+generatedbsv/
+generatedcpp/
 *.o
 *.d
 *~
