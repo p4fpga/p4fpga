@@ -97,6 +97,10 @@ action _drop2() {
     drop();
 }
 
+action _drop3() {
+    drop();
+}
+
 header_type routing_metadata_t {
     fields {
         nhop_ipv4 : 32;
@@ -147,7 +151,7 @@ table send_frame {
     }
     actions {
         rewrite_mac;
-        _drop;
+        _drop3;
     }
     size: 256;
 }
