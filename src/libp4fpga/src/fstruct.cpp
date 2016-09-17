@@ -24,9 +24,17 @@ namespace FPGA {
 
 using namespace Struct;
 
-bool StructCodeGen::preorder(const IR::Type_Header* type) {
+bool StructCodeGen::preorder(const IR::Type_Header* hdr) {
+  cstring name = hdr->name.toString();
+  cstring header_type = CamelCase(name);
+  auto it = header_map.find(name);
+  if (it != header_map.end()) {
+    // already in map, skip
+    return false;
+  }
+  header_map.emplace(name, hdr);
+  // do code gen
   append_line(bsv, "import DefaultValue::*;");
-  auto hdr = type->to<IR::Type_Header>();
   append_line(bsv, "typedef struct {");
   incr_indent(bsv);
   auto header_width = 0;
@@ -39,8 +47,6 @@ bool StructCodeGen::preorder(const IR::Type_Header* type) {
     }
   }
   decr_indent(bsv);
-  auto name = hdr->name.toString();
-  auto header_type = CamelCase(name);
   append_format(bsv, "} %s deriving (Bits, Eq);", header_type);
   append_format(bsv, "function %s extract_%s(Bit#(%d) data);", header_type, name, header_width);
   incr_indent(bsv);

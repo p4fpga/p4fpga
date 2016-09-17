@@ -66,15 +66,6 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
   bsv.getConnectalTypeBuilder().newline();
   append_format(bsv, "} %sReqT deriving (Bits, Eq, FShow);", type);
 
-  // auto remainder = key_width % 9;
-  // if (remainder != 0) {
-  //   auto rounded = key_width + 9 - remainder;
-  //   bsv.getConnectalTypeBuilder().appendFormat("typedef Bit#(%d) %sReqSize;", rounded, type);
-  // } else {
-  //   bsv.getConnectalTypeBuilder().appendFormat("typedef Bit#(%d) %sReqSize;", key_width, type);
-  // }
-  // bsv.getConnectalTypeBuilder().newline();
-
   // action enum
   append_line(bsv, "typedef enum {");
   incr_indent(bsv);
