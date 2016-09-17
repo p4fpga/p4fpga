@@ -34,7 +34,6 @@ class MetadataExtractor : public Inspector {
   explicit MetadataExtractor () {}
 
   bool preorder(const IR::Member* expr) {
-    LOG1("member " << expr);
     if (expr->member == "isValid") return false;
     bsv.push_back(cstring("let ") + expr->member.toString() +
            cstring("_isValid = meta.") + expr->member.toString() +
@@ -267,7 +266,6 @@ void FPGAControl::emitCondRule(BSVProgram & bsv, const CFG::IfNode* node) {
   append_line(bsv, "let meta = _req.meta;");
 
   MetadataExtractor metadataVisitor;
-  LOG1("cond " << stmt->condition);
   stmt->condition->apply(metadataVisitor);
   for (auto str : metadataVisitor.bsv) {
     append_line(bsv, str);

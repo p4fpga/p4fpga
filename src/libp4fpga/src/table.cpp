@@ -106,6 +106,8 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
   incr_indent(bsv);
   append_line(bsv, "%sActionT _action;", type);
   // if there is any params
+  // map to remove duplicated params from different actions
+  std::map<cstring, const IR::Type_Bits*> action_map;
   for (auto action : *actionList) {
     auto elem = action->to<IR::ActionListElement>();
     if (elem->expression->is<IR::MethodCallExpression>()) {
@@ -117,13 +119,18 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
         auto params = k->second->parameters;
         for (auto p : *params->parameters) {
           auto type = p->type->to<IR::Type_Bits>();
-          append_line(bsv, "Bit#(%d) %s;", type->size, p->name.toString());
-          action_size += type->size;
+          action_map[p->name.toString()] = type;
         }
       }
     } else {
       ::warning("unhandled action type", action);
     }
+  }
+  for (auto f : action_map) {
+    auto name = f.first;
+    auto action = f.second;
+    append_line(bsv, "Bit#(%d) %s;", action->size, name);
+    action_size += action->size;
   }
   action_size += ceil(log2(actionList->size()));
   decr_indent(bsv);
