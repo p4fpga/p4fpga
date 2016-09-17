@@ -188,7 +188,7 @@ header_type erspan_header_t3_t {
     fields {
         version : 4;
         vlan : 12;
-        priority : 6;
+        _priority : 6;
         span_id : 10;
         timestamp : 32;
         sgt_other : 32;

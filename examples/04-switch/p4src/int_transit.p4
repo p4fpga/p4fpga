@@ -451,7 +451,7 @@ action int_sink (mirror_id) {
 
 action int_sink_gpe (mirror_id) {
     // convert the word len from gpe-shim header to byte_cnt
-    //shift_left(int_metadata.insert_byte_cnt, int_metadata.gpe_int_hdr_len, 2);
+    shift_left(int_metadata.insert_byte_cnt, int_metadata.gpe_int_hdr_len, 2);
     int_sink(mirror_id);
 
 }
@@ -539,7 +539,7 @@ action int_transit(switch_id) {
     subtract(int_metadata.insert_cnt, int_header.max_hop_cnt,
                                             int_header.total_hop_cnt);
     modify_field(int_metadata.switch_id, switch_id);
-    //shift_left(int_metadata.insert_byte_cnt, int_metadata.instruction_cnt, 2);
+    shift_left(int_metadata.insert_byte_cnt, int_metadata.instruction_cnt, 2);
     modify_field(int_metadata.gpe_int_hdr_len8, int_header.ins_cnt);
 }
 #endif

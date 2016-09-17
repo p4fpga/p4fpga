@@ -893,16 +893,16 @@ parser parse_fabric_payload_header {
 #define CONTROL_TRAFFIC_PRIO_7         7
 
 parser parse_set_prio_med {
-    set_metadata(intrinsic_metadata.priority, CONTROL_TRAFFIC_PRIO_3);
+    set_metadata(intrinsic_metadata._priority, CONTROL_TRAFFIC_PRIO_3);
     return ingress;
 }
 
 parser parse_set_prio_high {
-    set_metadata(intrinsic_metadata.priority, CONTROL_TRAFFIC_PRIO_5);
+    set_metadata(intrinsic_metadata._priority, CONTROL_TRAFFIC_PRIO_5);
     return ingress;
 }
 
 parser parse_set_prio_max {
-    set_metadata(intrinsic_metadata.priority, CONTROL_TRAFFIC_PRIO_7);
+    set_metadata(intrinsic_metadata._priority, CONTROL_TRAFFIC_PRIO_7);
     return ingress;
 }
