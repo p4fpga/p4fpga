@@ -33,9 +33,15 @@ namespace FPGA {
 using namespace Control;
 
 void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
-  // generate request typedef
+  // Typedef are emitted to two different files
+  // - ConnectalType is used by Connectal to generate API
+  // - Control is used by p4 pipeline
+  // TODO: we can probably just generate ConnectalType and import it in Control
   cstring name = nameFromAnnotation(table->annotations, table->name);
   cstring type = CamelCase(name);
+  bsv.getConnectalTypeBuilder().emitIndent();
+  bsv.getConnectalTypeBuilder().appendLine("typedef struct{");
+  bsv.getConnectalTypeBuilder().increaseIndent();
   append_line(bsv, "typedef struct {");
   incr_indent(bsv);
   if ((key_width % 9) != 0) {
@@ -49,18 +55,25 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
     int size = k.second;
     cstring fname = f->name.toString();
     append_line(bsv, "Bit#(%d) %s;", size, fname);
+    bsv.getConnectalTypeBuilder().emitIndent();
+    bsv.getConnectalTypeBuilder().appendFormat("Bit#(%d) %s;", size, fname);
+    bsv.getConnectalTypeBuilder().newline();
   }
+  bsv.getConnectalTypeBuilder().decreaseIndent();
   decr_indent(bsv);
+  bsv.getConnectalTypeBuilder().emitIndent();
+  bsv.getConnectalTypeBuilder().appendFormat("} %sReqT deriving (Bits, FShow);", type);
+  bsv.getConnectalTypeBuilder().newline();
   append_format(bsv, "} %sReqT deriving (Bits, Eq, FShow);", type);
 
-  auto remainder = key_width % 9;
-  if (remainder != 0) {
-    auto rounded = key_width + 9 - remainder;
-    bsv.getConnectalTypeBuilder().appendFormat("typedef Bit#(%d) %sReqSize;", rounded, type);
-  } else {
-    bsv.getConnectalTypeBuilder().appendFormat("typedef Bit#(%d) %sReqSize;", key_width, type);
-  }
-  bsv.getConnectalTypeBuilder().newline();
+  // auto remainder = key_width % 9;
+  // if (remainder != 0) {
+  //   auto rounded = key_width + 9 - remainder;
+  //   bsv.getConnectalTypeBuilder().appendFormat("typedef Bit#(%d) %sReqSize;", rounded, type);
+  // } else {
+  //   bsv.getConnectalTypeBuilder().appendFormat("typedef Bit#(%d) %sReqSize;", key_width, type);
+  // }
+  // bsv.getConnectalTypeBuilder().newline();
 
   // action enum
   append_line(bsv, "typedef enum {");
@@ -127,15 +140,28 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
     }
   }
   cstring tname = table->name.toString();
+  bsv.getConnectalTypeBuilder().appendFormat("typedef struct {");
+  bsv.getConnectalTypeBuilder().newline();
+  bsv.getConnectalTypeBuilder().increaseIndent();
+  bsv.getConnectalTypeBuilder().emitIndent();
+  int action_key_size = ceil(log2(actionList->size()));
+  LOG1("action list " << table->name << " " << actionList->size() << " " << action_key_size);
+  bsv.getConnectalTypeBuilder().appendFormat("Bit#(%d) _action;", action_key_size);
+  bsv.getConnectalTypeBuilder().newline();
   for (auto f : param_map) {
     cstring pname = f.first;
     const IR::Type_Bits* param = f.second;
     append_line(bsv, "Bit#(%d) %s;", param->size, pname);
-    bsv.getConnectalTypeBuilder().appendFormat("typedef Bit#(%d) %s_%s;", param->size, type, pname);
+    bsv.getConnectalTypeBuilder().emitIndent();
+    bsv.getConnectalTypeBuilder().appendFormat("Bit#(%d) %s;", param->size, pname);
     bsv.getConnectalTypeBuilder().newline();
     action_size += param->size;
   }
   action_size += ceil(log2(actionList->size()));
+  bsv.getConnectalTypeBuilder().decreaseIndent();
+  bsv.getConnectalTypeBuilder().emitIndent();
+  bsv.getConnectalTypeBuilder().appendFormat("} %sRspT deriving (Bits, FShow);", type);
+  bsv.getConnectalTypeBuilder().newline();
   decr_indent(bsv);
   append_line(bsv, "} %sRspT deriving (Bits, Eq, FShow);", type);
 }

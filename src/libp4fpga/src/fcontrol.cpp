@@ -424,7 +424,7 @@ void FPGAControl::emitAPI(BSVProgram & bsv, cstring cbname) {
     cstring name = nameFromAnnotation(tbl->annotations, tbl->name);
     cstring type = CamelCase(name);
     bsv.getAPIIntfDefBuilder().appendFormat("method Action %s(", name);
-    bsv.getAPIIntfDefBuilder().appendFormat("%sReqSize key", type);
+    bsv.getAPIIntfDefBuilder().appendFormat("%sReqT key", type);
 
     // TODO: refactor
     TableKeyExtractor key_extractor(program);
