@@ -164,10 +164,10 @@ header_type sctp_t {
 
 header_type gre_t {
     fields {
-        C : 1;
-        R : 1;
-        K : 1;
-        S : 1;
+        _C : 1;
+        _R : 1;
+        _K : 1;
+        _S : 1;
         s : 1;
         recurse : 3;
         flags : 5;
@@ -261,7 +261,7 @@ header_type vxlan_gpe_t {
 header_type nsh_t {
     fields {
         oam : 1;
-        context : 1;
+        _context : 1;
         flags : 6;
         reserved : 8;
         protoType: 16;
