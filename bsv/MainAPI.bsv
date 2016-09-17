@@ -24,7 +24,7 @@ endinterface
 interface MainAPI;
   interface MainRequest request;
 endinterface
-module mkMainAPI #(MainIndication indication,HostChannel hostchan,Ingress ingress,TxChannel txchan) (MainAPI);
+module mkMainAPI #(MainIndication indication,HostChannel hostchan,Ingress ingress, Egress egress, TxChannel txchan) (MainAPI);
   interface MainRequest request;
     method Action read_version ();
         let v = `NicVersion;

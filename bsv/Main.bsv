@@ -40,7 +40,7 @@ module mkMain #(MainIndication indication,ConnectalMemory::MemServerIndication m
      if (verbose) $display("(%0d) tx data ", $time, fshow(v));
   endrule
   `endif
-  MainAPI api <- mkMainAPI(indication, hostchan, ingress, txchan);
+  MainAPI api <- mkMainAPI(indication, hostchan, ingress, egress, txchan);
   interface request = api.request;
 endmodule
 // Copyright (c) 2016 P4FPGA Project
