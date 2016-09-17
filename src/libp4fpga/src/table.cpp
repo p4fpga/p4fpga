@@ -49,11 +49,18 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
     int size = k.second;
     cstring fname = f->name.toString();
     append_line(bsv, "Bit#(%d) %s;", size, fname);
-    bsv.getAPITypeDefBuilder().appendFormat("typedef Bit#(%d) %s_%s;", size, type, fname);
-    bsv.getAPITypeDefBuilder().newline();
   }
   decr_indent(bsv);
   append_format(bsv, "} %sReqT deriving (Bits, Eq, FShow);", type);
+
+  auto remainder = key_width % 9;
+  if (remainder != 0) {
+    auto rounded = key_width + 9 - remainder;
+    bsv.getAPITypeDefBuilder().appendFormat("typedef Bit#(%d) %sReqSize;", rounded, type);
+  } else {
+    bsv.getAPITypeDefBuilder().appendFormat("typedef Bit#(%d) %sReqSize;", key_width, type);
+  }
+  bsv.getAPITypeDefBuilder().newline();
 
   // action enum
   append_line(bsv, "typedef enum {");
@@ -312,6 +319,66 @@ void TableCodeGen::emitRspFifoMux(const IR::P4Table *table) {
   append_line(bsv, "end");
 }
 
+void TableCodeGen::emitIntfAddEntry(const IR::P4Table* table) {
+  auto name = nameFromAnnotation(table->annotations, table->name);
+  auto type = CamelCase(name);
+  bsv.getControlBuilder().emitIndent();
+  bsv.getControlBuilder().appendFormat("method Action add_entry(Bit#(SizeOf#(%sReqT)) key", type);
+
+  TableKeyExtractor key_extractor(control->program);
+  const IR::Key* key = table->getKey();
+  if (key != nullptr) {
+    for (auto k : *key->keyElements) {
+      k->apply(key_extractor);
+    }
+    for (auto f : key_extractor.keymap) {
+      const IR::StructField* field = f.second;
+      cstring member = f.first;
+      if (field->type->is<IR::Type_Bits>()) {
+        int size = field->type->to<IR::Type_Bits>()->size;
+        bsv.getControlBuilder().appendFormat(", Bit#(%d) %s", size, member);
+      }
+    }
+    bsv.getControlBuilder().appendLine(");");
+    incr_indent(bsv);
+
+    bsv.getControlBuilder().emitIndent();
+    bsv.getControlBuilder().appendFormat("%sRspT value = %sRspT{", type, type);
+    bsv.getControlBuilder().appendFormat("%sActionT _action: _action", type);
+    for (auto f : key_extractor.keymap) {
+      const IR::StructField* field = f.second;
+      cstring member = f.first;
+      if (field->type->is<IR::Type_Bits>()) {
+        int size = field->type->to<IR::Type_Bits>()->size;
+        bsv.getControlBuilder().appendFormat(", %s : %s", member, member);
+      }
+    }
+    bsv.getControlBuilder().appendLine("};");
+    append_line(bsv, "matchTable.add_entry.put(tuple2(key, pack(value)));");
+    decr_indent(bsv);
+  }
+  append_line(bsv, "endmethod");
+}
+
+void TableCodeGen::emitIntfControlFlow(const IR::P4Table* table) {
+  auto actionList = table->getActionList()->actionList;
+  append_line(bsv, "interface prev_control_state = toServer(rx_metadata.e, tx_metadata.e);");
+  int idx = 0;
+  for (auto action : *actionList) {
+    append_line(bsv, "interface next_control_state_%d = toClient(bbReqFifo[%d], bbRspFifo[%d]);", idx, idx, idx);
+    idx ++;
+  }
+}
+
+void TableCodeGen::emitIntfVerbosity(const IR::P4Table* table) {
+  append_line(bsv, "method Action set_verbosity(int verbosity);");
+  incr_indent(bsv);
+  append_line(bsv, "cf_verbosity <= verbosity;");
+  decr_indent(bsv);
+  append_line(bsv, "endmethod");
+  decr_indent(bsv);
+}
+
 void TableCodeGen::emit(const IR::P4Table* table) {
   auto name = nameFromAnnotation(table->annotations, table->name);
   auto type = CamelCase(name);
@@ -361,24 +428,9 @@ void TableCodeGen::emit(const IR::P4Table* table) {
   emitRuleHandleRequest(table);
   emitRuleHandleExecution(table);
   emitRuleHandleResponse(table);
-
-  append_line(bsv, "interface prev_control_state = toServer(rx_metadata.e, tx_metadata.e);");
-  idx = 0;
-  for (auto action : *actionList) {
-    append_line(bsv, "interface next_control_state_%d = toClient(bbReqFifo[%d], bbRspFifo[%d]);", idx, idx, idx);
-    idx ++;
-  }
-  append_line(bsv, "method Action add_entry(Bit#(SizeOf#(%sReqT)) key, Bit#(SizeOf#(%sRspT)) value);", type, type);
-  incr_indent(bsv);
-  append_line(bsv, "matchTable.add_entry.put(tuple2(key, value));");
-  decr_indent(bsv);
-  append_line(bsv, "endmethod");
-  append_line(bsv, "method Action set_verbosity(int verbosity);");
-  incr_indent(bsv);
-  append_line(bsv, "cf_verbosity <= verbosity;");
-  decr_indent(bsv);
-  append_line(bsv, "endmethod");
-  decr_indent(bsv);
+  emitIntfControlFlow(table);
+  emitIntfAddEntry(table);
+  emitIntfVerbosity(table);
   append_line(bsv, "endmodule");
 }
 

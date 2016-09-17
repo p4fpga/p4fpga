@@ -24,6 +24,32 @@
 
 namespace FPGA {
 
+class TableKeyExtractor : public Inspector {
+ public:
+  std::map<cstring, const IR::StructField*> keymap;
+  explicit TableKeyExtractor (FPGAProgram* program) :
+    program(program) {}
+
+  bool preorder(const IR::Member* member) {
+    if (member->member == "isValid") return false;
+    auto type = program->typeMap->getType(member->expr, true);
+    if (type->is<IR::Type_Struct>()) {
+      auto t = type->to<IR::Type_StructLike>();
+      auto f = t->getField(member->member);
+      keymap.emplace(member->member, f);
+    // from hdr
+    } else if (type->is<IR::Type_Header>()) {
+      auto t = type->to<IR::Type_StructLike>();
+      auto f = t->getField(member->member);
+      keymap.emplace(member->member, f);
+    }
+    return false;
+  }
+ private:
+  FPGAProgram*          program;
+};
+
+
 // per table code generator
 class TableCodeGen : public Inspector {
  public:
@@ -46,6 +72,9 @@ class TableCodeGen : public Inspector {
   void emitRuleHandleExecution(const IR::P4Table* table);
   void emitRuleHandleResponse(const IR::P4Table* table);
   void emitRspFifoMux(const IR::P4Table* table);
+  void emitIntfAddEntry(const IR::P4Table* table);
+  void emitIntfControlFlow(const IR::P4Table* table);
+  void emitIntfVerbosity(const IR::P4Table* table);
   void emitCpp(const IR::P4Table* table);
 };
 

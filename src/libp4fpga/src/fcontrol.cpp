@@ -147,28 +147,13 @@ bool FPGAControl::build() {
         continue;
       }
 
+      TableKeyExtractor key_extractor(program);
       for (auto key : *keys->keyElements) {
-        auto element = key->to<IR::KeyElement>();
-        if (element->expression->is<IR::Member>()) {
-          auto m = element->expression->to<IR::Member>();
-
-          // save to metadata set for parser to extract
-          program->metadata.insert(std::make_pair(m->toString(), m));
-
-          auto type = program->typeMap->getType(m->expr, true);
-          LOG1("meta type" << m);
-          // from meta
-          if (type->is<IR::Type_Struct>()) {
-            auto t = type->to<IR::Type_StructLike>();
-            auto f = t->getField(m->member);
-            metadata_to_table[f].insert(table);
-          // from hdr
-          } else if (type->is<IR::Type_Header>()) {
-            auto t = type->to<IR::Type_StructLike>();
-            auto f = t->getField(m->member);
-            metadata_to_table[f].insert(table);
-          }
-        }
+        key->apply(key_extractor);
+      }
+      for (auto f : key_extractor.keymap) {
+        const IR::StructField* field = f.second;
+        metadata_to_table[field].insert(table);
       }
     } else if (b->is<IR::ExternBlock>()) {
       auto ctrblk = b->to<IR::ExternBlock>();
@@ -442,31 +427,16 @@ void FPGAControl::emitAPI(BSVProgram & bsv, cstring cbname) {
     bsv.getAPIIntfDefBuilder().appendFormat("%sReqSize key", type);
 
     // TODO: refactor
+    TableKeyExtractor key_extractor(program);
     for (auto k : *key->keyElements) {
-      const IR::KeyElement* element = k->to<IR::KeyElement>();
-      if (element == nullptr) continue;
-      if (element->expression->is<IR::Member>()) {
-        const IR::Member* m = element->expression->to<IR::Member>();
-        auto type = program->typeMap->getType(m->expr, true);
-        if (type->is<IR::Type_Struct>()) {
-          auto t = type->to<IR::Type_StructLike>();
-          auto f = t->getField(m->member);
-          if (f->type->is<IR::Type_Bits>()) {
-            const IR::Type_Bits* bits = f->type->to<IR::Type_Bits>();
-            int f_size = bits->size;
-            cstring fname = m->member.toString();
-            bsv.getAPIIntfDefBuilder().appendFormat(", Bit#(%d) %s", f_size, fname);
-          }
-        } else if (type->is<IR::Type_Header>()){
-          auto t = type->to<IR::Type_Header>();
-          auto f = t->getField(m->member);
-          if (f->type->is<IR::Type_Bits>()) {
-            const IR::Type_Bits* bits = f->type->to<IR::Type_Bits>();
-            int f_size = bits->size;
-            cstring fname = m->member.toString();
-            bsv.getAPIIntfDefBuilder().appendFormat(", Bit#(%d) %s", f_size, fname);
-          }
-        }
+      key->apply(key_extractor);
+    }
+    for (auto f : key_extractor.keymap) {
+      const IR::StructField* field = f.second;
+      cstring member = f.first;
+      if (field->type->is<IR::Type_Bits>()) {
+        int size = field->type->to<IR::Type_Bits>()->size;
+        bsv.getAPIIntfDefBuilder().appendFormat(", Bit#(%d) %s", size, member);
       }
     }
     bsv.getAPIIntfDefBuilder().appendFormat(");");
