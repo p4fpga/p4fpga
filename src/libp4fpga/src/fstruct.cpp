@@ -53,7 +53,7 @@ bool StructCodeGen::preorder(const IR::Type_Header* type) {
 void StructCodeGen::emit() {
   append_line(bsv, "typedef struct {");
   incr_indent(bsv);
-  // metadata
+  // metadata used in table
   for (auto p : program->ingress->metadata_to_table) {
     auto name = nameFromAnnotation(p.first->annotations, p.first->name);
     auto size = p.first->type->to<IR::Type_Bits>()->size;
@@ -64,6 +64,8 @@ void StructCodeGen::emit() {
     auto size = p.first->type->to<IR::Type_Bits>()->size;
     append_line(bsv, "Maybe#(Bit#(%d)) %s;", size, name);
   }
+  // metadata used in control flow
+  // TODO:
   for (auto s : program->parser->parseSteps) {
     append_format(bsv, "HeaderState %s;", s->name.toString());
   }

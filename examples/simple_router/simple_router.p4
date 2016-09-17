@@ -89,7 +89,11 @@ parser parse_ipv4 {
 }
 
 
-action _drop() {
+action _drop1() {
+    drop();
+}
+
+action _drop2() {
     drop();
 }
 
@@ -113,7 +117,7 @@ table ipv4_lpm {
     }
     actions {
         set_nhop;
-        _drop;
+        _drop1;
     }
     size: 1024;
 }
@@ -128,7 +132,7 @@ table forward {
     }
     actions {
         set_dmac;
-        _drop;
+        _drop2;
     }
     size: 512;
 }

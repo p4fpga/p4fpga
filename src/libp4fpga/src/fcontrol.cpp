@@ -34,6 +34,8 @@ class MetadataExtractor : public Inspector {
   explicit MetadataExtractor () {}
 
   bool preorder(const IR::Member* expr) {
+    LOG1("member " << expr);
+    if (expr->member == "isValid") return false;
     bsv.push_back(cstring("let ") + expr->member.toString() +
            cstring("_isValid = meta.") + expr->member.toString() +
            cstring(" matches tagged Valid .d") +
@@ -265,6 +267,7 @@ void FPGAControl::emitCondRule(BSVProgram & bsv, const CFG::IfNode* node) {
   append_line(bsv, "let meta = _req.meta;");
 
   MetadataExtractor metadataVisitor;
+  LOG1("cond " << stmt->condition);
   stmt->condition->apply(metadataVisitor);
   for (auto str : metadataVisitor.bsv) {
     append_line(bsv, str);
@@ -433,6 +436,7 @@ void FPGAControl::emitAPI(BSVProgram & bsv, cstring cbname) {
   for (auto t : tables) {
     auto tname = t.first;
     auto type = CamelCase(tname);
+    LOG1("table " << t.first << " " << t.second);
     bsv.getAPIIntfDefBuilder().appendFormat("method Action %s_add_entry(%sReqSize key, %sRspSize value);", tname, type, type);
     bsv.getAPIIntfDefBuilder().newline();
   }
