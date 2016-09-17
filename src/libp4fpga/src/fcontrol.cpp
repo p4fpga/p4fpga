@@ -432,20 +432,26 @@ void FPGAControl::emitActionTypes(BSVProgram & bsv) {
 
 void FPGAControl::emitAPI(BSVProgram & bsv, cstring cbname) {
   for (auto t : tables) {
-    auto tbl = t.second;
-    auto name = nameFromAnnotation(tbl->annotations, tbl->name);
-    auto type = CamelCase(name);
-    bsv.getAPIIntfDefBuilder().appendFormat("method Action %s", name.c_str());
-    bsv.getAPIIntfDefBuilder().appendFormat("(%sReqSize key,", type.c_str());
-    bsv.getAPIIntfDefBuilder().appendFormat("%sRspSize value);", type.c_str());
+    const IR::Key* key = t.second->getKey();
+    if (key == nullptr) continue;
+
+    const IR::P4Table* tbl = t.second;
+    cstring name = nameFromAnnotation(tbl->annotations, tbl->name);
+    cstring type = CamelCase(name);
+    bsv.getAPIIntfDefBuilder().appendFormat("method Action %s", name);
+    bsv.getAPIIntfDefBuilder().appendFormat("(%sReqSize key,", type);
+    bsv.getAPIIntfDefBuilder().appendFormat("%sRspSize value);", type);
     bsv.getAPIIntfDefBuilder().newline();
   }
   for (auto t : tables) {
-    auto tbl = t.second;
-    auto name = nameFromAnnotation(tbl->annotations, tbl->name);
-    bsv.getAPIIntfDeclBuilder().appendFormat("method %s_add_entry", name.c_str());
-    bsv.getAPIIntfDeclBuilder().appendFormat("=%s", cbname.c_str());
-    bsv.getAPIIntfDeclBuilder().appendFormat(".%s_add_entry;", name.c_str());
+    const IR::Key* key = t.second->getKey();
+    if (key == nullptr) continue;
+
+    const IR::P4Table* tbl = t.second;
+    cstring name = nameFromAnnotation(tbl->annotations, tbl->name);
+    bsv.getAPIIntfDeclBuilder().appendFormat("method %s_add_entry", name);
+    bsv.getAPIIntfDeclBuilder().appendFormat("=%s", cbname);
+    bsv.getAPIIntfDeclBuilder().appendFormat(".%s_add_entry;", name);
     bsv.getAPIIntfDeclBuilder().newline();
   }
 }
