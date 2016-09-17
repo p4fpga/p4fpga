@@ -15,4 +15,4 @@ compile:
 	make build.bluesim -j8
 
 include ../Makefile.common
-BSVFILES += generatedbsv/APITypeDefGenerated.bsv
+BSVFILES += generatedbsv/ConnectalTypeGenerated.bsv

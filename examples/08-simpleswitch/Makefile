@@ -10,4 +10,4 @@ build:
 
 #CONNECTALFLAGS += --bscflags="-fdir $(P4FPGADIR)/examples/multiproto/generatedbsv"
 include ../Makefile.common
-BSVFILES += generatedbsv/APITypeDefGenerated.bsv
+BSVFILES += generatedbsv/ConnectalTypeGenerated.bsv

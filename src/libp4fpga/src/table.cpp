@@ -56,11 +56,11 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
   auto remainder = key_width % 9;
   if (remainder != 0) {
     auto rounded = key_width + 9 - remainder;
-    bsv.getAPITypeDefBuilder().appendFormat("typedef Bit#(%d) %sReqSize;", rounded, type);
+    bsv.getConnectalTypeBuilder().appendFormat("typedef Bit#(%d) %sReqSize;", rounded, type);
   } else {
-    bsv.getAPITypeDefBuilder().appendFormat("typedef Bit#(%d) %sReqSize;", key_width, type);
+    bsv.getConnectalTypeBuilder().appendFormat("typedef Bit#(%d) %sReqSize;", key_width, type);
   }
-  bsv.getAPITypeDefBuilder().newline();
+  bsv.getConnectalTypeBuilder().newline();
 
   // action enum
   append_line(bsv, "typedef enum {");
@@ -131,8 +131,8 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
     cstring pname = f.first;
     const IR::Type_Bits* param = f.second;
     append_line(bsv, "Bit#(%d) %s;", param->size, pname);
-    bsv.getAPITypeDefBuilder().appendFormat("typedef Bit#(%d) %s_%s;", param->size, type, pname);
-    bsv.getAPITypeDefBuilder().newline();
+    bsv.getConnectalTypeBuilder().appendFormat("typedef Bit#(%d) %s_%s;", param->size, type, pname);
+    bsv.getConnectalTypeBuilder().newline();
     action_size += param->size;
   }
   action_size += ceil(log2(actionList->size()));
