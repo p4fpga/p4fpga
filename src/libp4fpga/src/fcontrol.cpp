@@ -123,8 +123,8 @@ bool FPGAControl::build() {
       auto tblblk = b->to<IR::TableBlock>();
       auto table = tblblk->container;
       auto name = nameFromAnnotation(table->annotations, table->name);
-      LOG1("table " << name);
-      tables.emplace(name, table);
+      LOG1("add table " << name);
+      tables.emplace(name.c_str(), table);
 
       // populate map <Action, Table>
       for (auto act : *table->getActionList()->actionList) {
@@ -432,15 +432,20 @@ void FPGAControl::emitActionTypes(BSVProgram & bsv) {
 
 void FPGAControl::emitAPI(BSVProgram & bsv, cstring cbname) {
   for (auto t : tables) {
-    auto tname = t.first;
-    auto type = CamelCase(tname);
-    LOG1("table " << t.first << " " << t.second);
-    bsv.getAPIIntfDefBuilder().appendFormat("method Action %s_add_entry(%sReqSize key, %sRspSize value);", tname, type, type);
+    auto tbl = t.second;
+    auto name = nameFromAnnotation(tbl->annotations, tbl->name);
+    auto type = CamelCase(name);
+    bsv.getAPIIntfDefBuilder().appendFormat("method Action %s", name.c_str());
+    bsv.getAPIIntfDefBuilder().appendFormat("(%sReqSize key,", type.c_str());
+    bsv.getAPIIntfDefBuilder().appendFormat("%sRspSize value);", type.c_str());
     bsv.getAPIIntfDefBuilder().newline();
   }
   for (auto t : tables) {
-    auto tname = t.first;
-    bsv.getAPIIntfDeclBuilder().appendFormat("method %s_add_entry = %s.%s_add_entry;", tname, cbname, tname);
+    auto tbl = t.second;
+    auto name = nameFromAnnotation(tbl->annotations, tbl->name);
+    bsv.getAPIIntfDeclBuilder().appendFormat("method %s_add_entry", name.c_str());
+    bsv.getAPIIntfDeclBuilder().appendFormat("=%s", cbname.c_str());
+    bsv.getAPIIntfDeclBuilder().appendFormat(".%s_add_entry;", name.c_str());
     bsv.getAPIIntfDeclBuilder().newline();
   }
 }
