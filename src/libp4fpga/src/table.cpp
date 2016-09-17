@@ -34,33 +34,26 @@ using namespace Control;
 
 void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
   // generate request typedef
-  auto name = nameFromAnnotation(table->annotations, table->name);
-  auto type = CamelCase(name);
+  cstring name = nameFromAnnotation(table->annotations, table->name);
+  cstring type = CamelCase(name);
   append_line(bsv, "typedef struct {");
   incr_indent(bsv);
   if ((key_width % 9) != 0) {
-    auto pad = 9 - (key_width % 9);
+    int pad = 9 - (key_width % 9);
     //append_line(bsv, "`ifndef SIMULATION");
     append_line(bsv, "Bit#(%d) padding;", pad);
     //append_line(bsv, "`endif");
   }
   for (auto k : key_vec) {
-    auto f = k.first;
-    auto s = k.second;
-    append_line(bsv, "Bit#(%d) %s;", s, f->name.toString());
+    const IR::StructField* f = k.first;
+    int size = k.second;
+    cstring fname = f->name.toString();
+    append_line(bsv, "Bit#(%d) %s;", size, fname);
+    bsv.getAPITypeDefBuilder().appendFormat("typedef Bit#(%d) %s_%s;", size, type, fname);
+    bsv.getAPITypeDefBuilder().newline();
   }
   decr_indent(bsv);
   append_format(bsv, "} %sReqT deriving (Bits, Eq, FShow);", type);
-
-
-  auto remainder = key_width % 9;
-  if (remainder != 0) {
-    auto rounded = key_width + 9 - remainder;
-    bsv.getAPITypeDefBuilder().appendFormat("typedef Bit#(%d) %sReqSize;", rounded, type);
-  } else {
-    bsv.getAPITypeDefBuilder().appendFormat("typedef Bit#(%d) %sReqSize;", key_width, type);
-  }
-  bsv.getAPITypeDefBuilder().newline();
 
   // action enum
   append_line(bsv, "typedef enum {");
@@ -107,7 +100,7 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
   append_line(bsv, "%sActionT _action;", type);
   // if there is any params
   // map to remove duplicated params from different actions
-  std::map<cstring, const IR::Type_Bits*> action_map;
+  std::map<cstring, const IR::Type_Bits*> param_map;
   for (auto action : *actionList) {
     auto elem = action->to<IR::ActionListElement>();
     if (elem->expression->is<IR::MethodCallExpression>()) {
@@ -119,24 +112,25 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
         auto params = k->second->parameters;
         for (auto p : *params->parameters) {
           auto type = p->type->to<IR::Type_Bits>();
-          action_map[p->name.toString()] = type;
+          param_map[p->name.toString()] = type;
         }
       }
     } else {
       ::warning("unhandled action type", action);
     }
   }
-  for (auto f : action_map) {
-    auto name = f.first;
-    auto action = f.second;
-    append_line(bsv, "Bit#(%d) %s;", action->size, name);
-    action_size += action->size;
+  cstring tname = table->name.toString();
+  for (auto f : param_map) {
+    cstring pname = f.first;
+    const IR::Type_Bits* param = f.second;
+    append_line(bsv, "Bit#(%d) %s;", param->size, pname);
+    bsv.getAPITypeDefBuilder().appendFormat("typedef Bit#(%d) %s_%s;", param->size, type, pname);
+    bsv.getAPITypeDefBuilder().newline();
+    action_size += param->size;
   }
   action_size += ceil(log2(actionList->size()));
   decr_indent(bsv);
   append_line(bsv, "} %sRspT deriving (Bits, Eq, FShow);", type);
-  bsv.getAPITypeDefBuilder().appendFormat("typedef Bit#(%d) %sRspSize;", action_size, type);
-  bsv.getAPITypeDefBuilder().newline();
 }
 
 void TableCodeGen::emitSimulation(const IR::P4Table* table) {
@@ -445,7 +439,6 @@ bool TableCodeGen::preorder(const IR::P4Table* table) {
         auto t = type->to<IR::Type_StructLike>();
         auto f = t->getField(m->member);
         auto f_size = f->type->to<IR::Type_Bits>()->size;
-        //control->metadata_to_table[f].insert(tbl);
         key_vec.push_back(std::make_pair(f, f_size));
         key_width += f_size;
       } else if (type->is<IR::Type_Header>()){

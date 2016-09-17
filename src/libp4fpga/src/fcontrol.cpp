@@ -438,9 +438,38 @@ void FPGAControl::emitAPI(BSVProgram & bsv, cstring cbname) {
     const IR::P4Table* tbl = t.second;
     cstring name = nameFromAnnotation(tbl->annotations, tbl->name);
     cstring type = CamelCase(name);
-    bsv.getAPIIntfDefBuilder().appendFormat("method Action %s", name);
-    bsv.getAPIIntfDefBuilder().appendFormat("(%sReqSize key,", type);
-    bsv.getAPIIntfDefBuilder().appendFormat("%sRspSize value);", type);
+    bsv.getAPIIntfDefBuilder().appendFormat("method Action %s(", name);
+    bsv.getAPIIntfDefBuilder().appendFormat("%sReqSize key", type);
+
+    // TODO: refactor
+    for (auto k : *key->keyElements) {
+      const IR::KeyElement* element = k->to<IR::KeyElement>();
+      if (element == nullptr) continue;
+      if (element->expression->is<IR::Member>()) {
+        const IR::Member* m = element->expression->to<IR::Member>();
+        auto type = program->typeMap->getType(m->expr, true);
+        if (type->is<IR::Type_Struct>()) {
+          auto t = type->to<IR::Type_StructLike>();
+          auto f = t->getField(m->member);
+          if (f->type->is<IR::Type_Bits>()) {
+            const IR::Type_Bits* bits = f->type->to<IR::Type_Bits>();
+            int f_size = bits->size;
+            cstring fname = m->member.toString();
+            bsv.getAPIIntfDefBuilder().appendFormat(", Bit#(%d) %s", f_size, fname);
+          }
+        } else if (type->is<IR::Type_Header>()){
+          auto t = type->to<IR::Type_Header>();
+          auto f = t->getField(m->member);
+          if (f->type->is<IR::Type_Bits>()) {
+            const IR::Type_Bits* bits = f->type->to<IR::Type_Bits>();
+            int f_size = bits->size;
+            cstring fname = m->member.toString();
+            bsv.getAPIIntfDefBuilder().appendFormat(", Bit#(%d) %s", f_size, fname);
+          }
+        }
+      }
+    }
+    bsv.getAPIIntfDefBuilder().appendFormat(");");
     bsv.getAPIIntfDefBuilder().newline();
   }
   for (auto t : tables) {
