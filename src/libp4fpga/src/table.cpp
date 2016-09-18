@@ -110,25 +110,9 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
   incr_indent(bsv);
   append_line(bsv, "%sActionT _action;", type);
   // if there is any params
-  // map to remove duplicated params from different actions
-  std::map<cstring, const IR::Type_Bits*> param_map;
+  TableParamExtractor param_extractor(control);
   for (auto action : *actionList) {
-    auto elem = action->to<IR::ActionListElement>();
-    if (elem->expression->is<IR::MethodCallExpression>()) {
-      auto e = elem->expression->to<IR::MethodCallExpression>();
-      auto n = e->method->toString();
-      // from action name to actual action declaration
-      auto k = control->basicBlock.find(n);
-      if (k != control->basicBlock.end()) {
-        auto params = k->second->parameters;
-        for (auto p : *params->parameters) {
-          auto type = p->type->to<IR::Type_Bits>();
-          param_map[p->name.toString()] = type;
-        }
-      }
-    } else {
-      ::warning("unhandled action type", action);
-    }
+    action->apply(param_extractor);
   }
   cstring tname = table->name.toString();
   bsv.getConnectalTypeBuilder().appendFormat("typedef struct {");
@@ -139,7 +123,7 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
   LOG1("action list " << table->name << " " << actionList->size() << " " << action_key_size);
   bsv.getConnectalTypeBuilder().appendFormat("Bit#(%d) _action;", action_key_size);
   bsv.getConnectalTypeBuilder().newline();
-  for (auto f : param_map) {
+  for (auto f : param_extractor.param_map) {
     cstring pname = f.first;
     const IR::Type_Bits* param = f.second;
     append_line(bsv, "Bit#(%d) %s;", param->size, pname);
