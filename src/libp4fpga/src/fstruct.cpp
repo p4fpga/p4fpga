@@ -70,36 +70,8 @@ void StructCodeGen::emit() {
     auto size = p.first->type->to<IR::Type_Bits>()->size;
     append_line(bsv, "Maybe#(Bit#(%d)) %s;", size, name);
   }
-
-//  for (auto h : *program->program->getDeclarations()) {
-//    const IR::Type_Struct* stct = h->to<IR::Type_Struct>();
-//    if (stct == nullptr) continue;
-//    if (stct->name == "metadata") {
-//      // this struct contains all extracted metadata
-//      for (auto h : *stct->fields) {
-//        const IR::Node* node = h->getNode();
-//        auto type = program->typeMap->getType(node, true);
-//        if (type->is<IR::Type_Struct>()) {
-//          const IR::Type_Struct* hh = type->to<IR::Type_Struct>();
-//          for (auto f : *hh->fields) {
-//            cstring name = f->toString();
-//            if (f->type->is<IR::Type_Bits>()) {
-//              int size = f->type->to<IR::Type_Bits>()->size;
-//              append_line(bsv, "Maybe#(Bit#(%d)) %s;", size, name);
-//            }
-//          }
-//        } else if (type->is<IR::Type_Header>()){
-//          const IR::Type_Header *hh = type->to<IR::Type_Header>();
-//          for (auto f : *hh->fields) {
-//            cstring name = f->toString();
-//            append_line(bsv, "%s", name);
-//          }
-//        }
-//      }
-//    }
-//  }
-
   // metadata used in control flow
+  // TODO:
   for (auto s : program->parser->parseSteps) {
     append_format(bsv, "HeaderState %s;", s->name.toString());
   }

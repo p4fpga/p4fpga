@@ -423,8 +423,23 @@ void FPGAControl::emitAPI(BSVProgram & bsv, cstring cbname) {
     const IR::P4Table* tbl = t.second;
     cstring name = nameFromAnnotation(tbl->annotations, tbl->name);
     cstring type = CamelCase(name);
-    bsv.getAPIIntfDefBuilder().appendFormat("method Action %s_add_entry(", name);
-    bsv.getAPIIntfDefBuilder().appendFormat("%sReqT key, %sRspT val);", type, type);
+    bsv.getAPIIntfDefBuilder().appendFormat("method Action %s(", name);
+    bsv.getAPIIntfDefBuilder().appendFormat("%sReqT key", type);
+
+    // TODO: refactor
+    TableKeyExtractor key_extractor(program);
+    for (auto k : *key->keyElements) {
+      key->apply(key_extractor);
+    }
+    for (auto f : key_extractor.keymap) {
+      const IR::StructField* field = f.second;
+      cstring member = f.first;
+      if (field->type->is<IR::Type_Bits>()) {
+        int size = field->type->to<IR::Type_Bits>()->size;
+        bsv.getAPIIntfDefBuilder().appendFormat(", Bit#(%d) %s", size, member);
+      }
+    }
+    bsv.getAPIIntfDefBuilder().appendFormat(");");
     bsv.getAPIIntfDefBuilder().newline();
   }
   for (auto t : tables) {
@@ -448,7 +463,6 @@ void FPGAControl::emit(BSVProgram & bsv, CppProgram & cpp) {
 
   append_line(bsv, "import StructDefines::*;");
   append_line(bsv, "import UnionDefines::*;");
-  append_line(bsv, "import ConnectalTypes::*;");
   append_line(bsv, "import CPU::*;");
   append_line(bsv, "import IMem::*;");
   append_line(bsv, "import Lists::*;");
@@ -465,7 +479,7 @@ void FPGAControl::emit(BSVProgram & bsv, CppProgram & cpp) {
   for (auto t : tables) {
     auto tname = t.first;
     auto type = CamelCase(tname);
-    append_line(bsv, "method Action %s_add_entry(ConnectalTypes::%sReqT key, ConnectalTypes::%sRspT value);", tname, type, type);
+    append_line(bsv, "method Action %s_add_entry(Bit#(SizeOf#(%sReqT)) key, Bit#(SizeOf#(%sRspT)) value);", tname, type, type);
   }
   append_line(bsv, "method Action set_verbosity(int verbosity);");
   decr_indent(bsv);

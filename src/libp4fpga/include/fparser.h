@@ -98,7 +98,6 @@ class FPGAParser : public FPGAObject {
   ParseStepMap                 parseStateMap;
   std::vector<IR::BSV::ParseStep*> parseSteps;
   const IR::ParserState*             initState;
-  std::map<cstring, IR::SelectCase*> pulse_wire_map;
 
   explicit FPGAParser(FPGAProgram* program,
                       const IR::ParserBlock* block,

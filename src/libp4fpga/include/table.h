@@ -64,8 +64,6 @@ class TableCodeGen : public Inspector {
   int action_size = 0;
   std::vector<std::pair<const IR::StructField*, int>> key_vec;
   std::vector<cstring> action_vec;
-  std::map<cstring, const IR::Type_Bits*> param_map;
-
   cstring defaultActionName;
   void emit(const IR::P4Table* table);
   void emitTypedefs(const IR::P4Table* table);
