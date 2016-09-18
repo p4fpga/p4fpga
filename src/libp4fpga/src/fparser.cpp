@@ -241,6 +241,7 @@ void FPGAParser::emitFunctions(BSVProgram & bsv) {
       }
     }
     if (params.size() != 0) {
+      //TODO: fixme
       append_format(bsv, "function Action compute_next_state_%s(%s);", name, join(params, ","));
     } else {
       append_format(bsv, "function Action compute_next_state_%s();", name);
@@ -418,7 +419,16 @@ void FPGAParser::emitStateElements(BSVProgram & bsv) {
     if (state->cases == nullptr) continue;
     auto name = state->name.toString();
     for (auto c : *state->cases) {
-      append_line(bsv, "PulseWire w_%s_%s <- mkPulseWire;", name, c->state->toString());
+      // TODO: check pulse_wire_map
+      cstring w_name = name + c->state->toString();
+      auto it = pulse_wire_map.find(w_name);
+      if (it != pulse_wire_map.end()) {
+        continue;
+      } else {
+        append_line(bsv, "PulseWire w_%s_%s <- mkPulseWire;", name, c->state->toString());
+        LOG1("cstate " << c->state);
+        //pulse_wire_map.emplace(w_name, c->state);
+      }
     }
   }
   // dfifo to output parsed header

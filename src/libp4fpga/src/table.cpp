@@ -111,7 +111,6 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
   append_line(bsv, "%sActionT _action;", type);
   // if there is any params
   // map to remove duplicated params from different actions
-  std::map<cstring, const IR::Type_Bits*> param_map;
   for (auto action : *actionList) {
     auto elem = action->to<IR::ActionListElement>();
     if (elem->expression->is<IR::MethodCallExpression>()) {
@@ -219,7 +218,7 @@ void TableCodeGen::emitRuleHandleRequest(const IR::P4Table* table) {
   if (field_width % 9 != 0) {
     fields += ", padding: 0";
   }
-  append_format(bsv, "%sReqT req = %sReqT{%s};", type, type, fields);
+  append_line(bsv, "%sReqT req = %sReqT{%s};", type, type, fields);
   append_line(bsv, "matchTable.lookupPort.request.put(pack(req));");
   append_line(bsv, "packet_ff[0].enq(pkt);");
   append_line(bsv, "metadata_ff[0].enq(meta);");
@@ -340,40 +339,56 @@ void TableCodeGen::emitIntfAddEntry(const IR::P4Table* table) {
   auto name = nameFromAnnotation(table->annotations, table->name);
   auto type = CamelCase(name);
   bsv.getControlBuilder().emitIndent();
-  bsv.getControlBuilder().appendFormat("method Action add_entry(Bit#(SizeOf#(%sReqT)) key", type);
+  bsv.getControlBuilder().appendFormat("method Action add_entry(ConnectalTypes::%sReqT k, ConnectalTypes::%sRspT v);", type, type);
+  bsv.getControlBuilder().newline();
 
+  bsv.getControlBuilder().increaseIndent();
+  bsv.getControlBuilder().emitIndent();
+  bsv.getControlBuilder().appendFormat("let key = %sReqT {", type);
   TableKeyExtractor key_extractor(control->program);
   const IR::Key* key = table->getKey();
   if (key != nullptr) {
     for (auto k : *key->keyElements) {
       k->apply(key_extractor);
     }
-    for (auto f : key_extractor.keymap) {
-      const IR::StructField* field = f.second;
-      cstring member = f.first;
-      if (field->type->is<IR::Type_Bits>()) {
-        int size = field->type->to<IR::Type_Bits>()->size;
-        bsv.getControlBuilder().appendFormat(", Bit#(%d) %s", size, member);
-      }
+    if ((key_width % 9) != 0) {
+      bsv.getControlBuilder().appendFormat("padding : 0, ");
     }
-    bsv.getControlBuilder().appendLine(");");
-    incr_indent(bsv);
-
-    bsv.getControlBuilder().emitIndent();
-    bsv.getControlBuilder().appendFormat("%sRspT value = %sRspT{", type, type);
-    bsv.getControlBuilder().appendFormat("%sActionT _action: _action", type);
-    for (auto f : key_extractor.keymap) {
-      const IR::StructField* field = f.second;
-      cstring member = f.first;
+    auto final_iter = key_extractor.keymap.end();
+    --final_iter;
+    for (auto it = key_extractor.keymap.begin(); it != key_extractor.keymap.end(); ++it) {
+      const IR::StructField* field = it->second;
+      cstring member = it->first;
       if (field->type->is<IR::Type_Bits>()) {
         int size = field->type->to<IR::Type_Bits>()->size;
-        bsv.getControlBuilder().appendFormat(", %s : %s", member, member);
+        bsv.getControlBuilder().appendFormat("%s: k.%s", member, member);
+        if (it != final_iter) {
+          bsv.getControlBuilder().appendFormat(", ");
+        }
       }
     }
     bsv.getControlBuilder().appendLine("};");
-    append_line(bsv, "matchTable.add_entry.put(tuple2(key, pack(value)));");
-    decr_indent(bsv);
+
+    bsv.getControlBuilder().emitIndent();
+    bsv.getControlBuilder().appendFormat("let value = %sRspT{", type);
+    bsv.getControlBuilder().appendFormat("_action: unpack(v._action)");
+    if (action_vec.size() != 0) {
+      bsv.getControlBuilder().appendFormat(",");
+    }
+    auto param_iter = param_map.end();
+    --param_iter;
+    for (auto it = param_map.begin(); it != param_map.end(); ++it) {
+      const IR::Type_Bits* bits = it->second;
+      cstring pname = it->first;
+      bsv.getControlBuilder().appendFormat("%s: v.%s", pname, pname);
+      if (it != param_iter) {
+        bsv.getControlBuilder().appendFormat(", ");
+      }
+    }
+    bsv.getControlBuilder().appendLine("};");
+    append_line(bsv, "matchTable.add_entry.put(tuple2(pack(key), pack(value)));");
   }
+  decr_indent(bsv);
   append_line(bsv, "endmethod");
 }
 
@@ -422,7 +437,7 @@ void TableCodeGen::emit(const IR::P4Table* table) {
     append_line(bsv, "interface Client#(%sActionReq, %sActionRsp) next_control_state_%d;", type, type, idx);
     idx ++;
   }
-  append_line(bsv, "method Action add_entry(Bit#(SizeOf#(%sReqT)) key, Bit#(SizeOf#(%sRspT)) value);", type, type);
+  append_line(bsv, "method Action add_entry(ConnectalTypes::%sReqT key, ConnectalTypes::%sRspT value);", type, type);
   append_line(bsv, "method Action set_verbosity(int verbosity);");
   decr_indent(bsv);
   append_line(bsv, "endinterface");
