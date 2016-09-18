@@ -27,6 +27,7 @@ namespace FPGA {
 class TableKeyExtractor : public Inspector {
  public:
   std::map<cstring, const IR::StructField*> keymap;
+  int key_width = 0;
   explicit TableKeyExtractor (FPGAProgram* program) :
     program(program) {}
 
@@ -34,14 +35,18 @@ class TableKeyExtractor : public Inspector {
     if (member->member == "isValid") return false;
     auto type = program->typeMap->getType(member->expr, true);
     if (type->is<IR::Type_Struct>()) {
-      auto t = type->to<IR::Type_StructLike>();
-      auto f = t->getField(member->member);
+      const IR::Type_StructLike* t = type->to<IR::Type_StructLike>();
+      const IR::StructField* f = t->getField(member->member);
+      int f_size = f->type->to<IR::Type_Bits>()->size;
       keymap.emplace(member->member, f);
+      key_width += f_size;
     // from hdr
     } else if (type->is<IR::Type_Header>()) {
-      auto t = type->to<IR::Type_StructLike>();
-      auto f = t->getField(member->member);
+      const IR::Type_StructLike* t = type->to<IR::Type_StructLike>();
+      const IR::StructField* f = t->getField(member->member);
+      int f_size = f->type->to<IR::Type_Bits>()->size;
       keymap.emplace(member->member, f);
+      key_width += f_size;
     }
     return false;
   }
@@ -49,6 +54,25 @@ class TableKeyExtractor : public Inspector {
   FPGAProgram*          program;
 };
 
+class TableParamExtractor : public Inspector {
+ public:
+  std::map<cstring, const IR::Type_Bits*> param_map;
+  explicit TableParamExtractor (FPGAControl* control) :
+    control(control) {}
+  bool preorder(const IR::MethodCallExpression* methodcall) {
+    auto k = control->basicBlock.find(methodcall->method->toString());
+    if (k != control->basicBlock.end()) {
+      auto params = k->second->parameters;
+      for (auto p : *params->parameters) {
+        auto type = p->type->to<IR::Type_Bits>();
+        param_map[p->name.toString()] = type;
+      }
+    }
+    return false;
+  }
+ private:
+  FPGAControl*          control;
+};
 
 // per table code generator
 class TableCodeGen : public Inspector {

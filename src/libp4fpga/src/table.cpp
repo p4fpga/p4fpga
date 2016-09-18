@@ -343,20 +343,26 @@ void TableCodeGen::emitIntfAddEntry(const IR::P4Table* table) {
   bsv.getControlBuilder().appendFormat("method Action add_entry(ConnectalTypes::%sReqT k, ConnectalTypes::%sRspT v);", type, type);
   bsv.getControlBuilder().newline();
 
-  bsv.getControlBuilder().emitIndent();
-  bsv.getControlBuilder().appendFormat("let key = %sReqT{", type);
-
   TableKeyExtractor key_extractor(control->program);
   const IR::Key* key = table->getKey();
   if (key != nullptr) {
+    bsv.getControlBuilder().increaseIndent();
+    bsv.getControlBuilder().emitIndent();
+    bsv.getControlBuilder().appendFormat("let key = %sReqT{", type);
     for (auto k : *key->keyElements) {
       k->apply(key_extractor);
+    }
+    if ((key_extractor.key_width % 9) != 0) {
+      bsv.getControlBuilder().appendFormat("padding: 0, ");
     }
     for (auto it = key_extractor.keymap.begin(); it != key_extractor.keymap.end(); ++it) {
       const IR::StructField* field = it->second;
       cstring member = it->first;
       if (field->type->is<IR::Type_Bits>()) {
         int size = field->type->to<IR::Type_Bits>()->size;
+        if (it != key_extractor.keymap.begin()) {
+          bsv.getControlBuilder().appendFormat(", ");
+        }
         bsv.getControlBuilder().appendFormat("%s: k.%s", member, member);
       }
     }
@@ -367,29 +373,17 @@ void TableCodeGen::emitIntfAddEntry(const IR::P4Table* table) {
     bsv.getControlBuilder().append("_action: unpack(v._action)");
 
     auto actionList = table->getActionList()->actionList;
-    std::map<cstring, const IR::Type_Bits*> param_map;
+    TableParamExtractor param_extractor(control);
     for (auto action : *actionList) {
-      auto elem = action->to<IR::ActionListElement>();
-      if (elem->expression->is<IR::MethodCallExpression>()) {
-        auto e = elem->expression->to<IR::MethodCallExpression>();
-        auto n = e->method->toString();
-        auto k = control->basicBlock.find(n);
-        if (k != control->basicBlock.end()) {
-          auto params = k->second->parameters;
-          for (auto p : *params->parameters) {
-            auto type = p->type->to<IR::Type_Bits>();
-            param_map[p->name.toString()] = type;
-          }
-        }
-      }
+      action->apply(param_extractor);
     }
-    for (auto f : param_map) {
-      const IR::Type_Bits* bits = f.second;
+    for (auto f : param_extractor.param_map) {
       cstring pname = f.first;
-      bsv.getControlBuilder().appendFormat("%s : v.%s", pname, pname);
+      bsv.getControlBuilder().appendFormat(", %s : v.%s", pname, pname);
     }
     bsv.getControlBuilder().appendLine("};");
     append_line(bsv, "matchTable.add_entry.put(tuple2(pack(key), pack(value)));");
+    bsv.getControlBuilder().decreaseIndent();
   }
   append_line(bsv, "endmethod");
 }
