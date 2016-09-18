@@ -34,7 +34,7 @@ typedef union tagged {
         PacketInstance pkt;
         MetadataT meta;
         Bit#(32) nhop_ipv4;
-        Bit#(9) port;
+        Bit#(9) _port;
     } SetNhopReqT;
     struct {
         PacketInstance pkt;

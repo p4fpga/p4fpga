@@ -187,6 +187,10 @@ int main(int argc, char **argv)
     device->set_verbosity(6);
     device->read_version();
 
+    ForwardReqT key = {0xfffffff};
+    ForwardRspT val = {1, 0xfffff};
+    device->forward_add_entry(key, val);
+
     if (intf) {
         printf("Opening device %s\n", intf); 
         /* Open device in promiscuous mode */ 

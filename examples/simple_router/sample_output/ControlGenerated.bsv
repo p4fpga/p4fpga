@@ -1,5 +1,6 @@
 import StructDefines::*;
 import UnionDefines::*;
+import ConnectalTypes::*;
 import CPU::*;
 import IMem::*;
 import Lists::*;
@@ -46,7 +47,7 @@ interface Forward;
     interface Client#(ForwardActionReq, ForwardActionRsp) next_control_state_0;
     interface Client#(ForwardActionReq, ForwardActionRsp) next_control_state_1;
     interface Client#(ForwardActionReq, ForwardActionRsp) next_control_state_2;
-    method Action add_entry(Bit#(SizeOf#(ForwardReqT)) key, Bit#(SizeOf#(ForwardRspT)) value);
+    method Action add_entry(ConnectalTypes::ForwardReqT key, ConnectalTypes::ForwardRspT value);
     method Action set_verbosity(int verbosity);
 endinterface
 (* synthesize *)
@@ -131,8 +132,10 @@ module mkForward (Control::Forward);
     interface next_control_state_0 = toClient(bbReqFifo[0], bbRspFifo[0]);
     interface next_control_state_1 = toClient(bbReqFifo[1], bbRspFifo[1]);
     interface next_control_state_2 = toClient(bbReqFifo[2], bbRspFifo[2]);
-    method Action add_entry(Bit#(SizeOf#(ForwardReqT)) key, Bit#(SizeOf#(ForwardRspT)) value);
-        matchTable.add_entry.put(tuple2(key, value));
+    method Action add_entry(ConnectalTypes::ForwardReqT k, ConnectalTypes::ForwardRspT v);
+        let key = ForwardReqT { padding: 0, nhop_ipv4: k.nhop_ipv4};
+        let value = ForwardRspT { _action: unpack(v._action), dmac: v.dmac};
+        matchTable.add_entry.put(tuple2(pack(key), pack(value)));
     endmethod
     method Action set_verbosity(int verbosity);
         cf_verbosity <= verbosity;
@@ -149,8 +152,8 @@ typedef enum {
 } Ipv4LpmActionT deriving (Bits, Eq, FShow);
 typedef struct {
     Ipv4LpmActionT _action;
+    Bit#(9) _port;
     Bit#(32) nhop_ipv4;
-    Bit#(9) port;
 } Ipv4LpmRspT deriving (Bits, Eq, FShow);
 `ifndef SVDPI
 import "BDPI" function ActionValue#(Bit#(43)) matchtable_read_ipv4lpm(Bit#(36) msgtype);
@@ -181,7 +184,7 @@ interface Ipv4Lpm;
     interface Client#(Ipv4LpmActionReq, Ipv4LpmActionRsp) next_control_state_0;
     interface Client#(Ipv4LpmActionReq, Ipv4LpmActionRsp) next_control_state_1;
     interface Client#(Ipv4LpmActionReq, Ipv4LpmActionRsp) next_control_state_2;
-    method Action add_entry(Bit#(SizeOf#(Ipv4LpmReqT)) key, Bit#(SizeOf#(Ipv4LpmRspT)) value);
+    method Action add_entry(ConnectalTypes::Ipv4LpmReqT key, ConnectalTypes::Ipv4LpmRspT value);
     method Action set_verbosity(int verbosity);
 endinterface
 (* synthesize *)
@@ -231,7 +234,7 @@ module mkIpv4Lpm (Control::Ipv4Lpm);
             Ipv4LpmRspT resp = unpack(data);
             case (resp._action) matches
                 SETNHOP: begin
-                    Ipv4LpmActionReq req = tagged SetNhopReqT {pkt: pkt, meta: meta , nhop_ipv4: resp.nhop_ipv4, port: resp.port};
+                    Ipv4LpmActionReq req = tagged SetNhopReqT {pkt: pkt, meta: meta , nhop_ipv4: resp.nhop_ipv4, _port: resp._port};
                     bbReqFifo[0].enq(req);
                 end
                 DROP1: begin
@@ -266,8 +269,10 @@ module mkIpv4Lpm (Control::Ipv4Lpm);
     interface next_control_state_0 = toClient(bbReqFifo[0], bbRspFifo[0]);
     interface next_control_state_1 = toClient(bbReqFifo[1], bbRspFifo[1]);
     interface next_control_state_2 = toClient(bbReqFifo[2], bbRspFifo[2]);
-    method Action add_entry(Bit#(SizeOf#(Ipv4LpmReqT)) key, Bit#(SizeOf#(Ipv4LpmRspT)) value);
-        matchTable.add_entry.put(tuple2(key, value));
+    method Action add_entry(ConnectalTypes::Ipv4LpmReqT k, ConnectalTypes::Ipv4LpmRspT v);
+        let key = Ipv4LpmReqT { padding: 0, dstAddr : k.dstAddr};
+        let value = Ipv4LpmRspT { _action: unpack(v._action), _port: v._port, nhop_ipv4: v.nhop_ipv4};
+        matchTable.add_entry.put(tuple2(pack(key), pack(value)));
     endmethod
     method Action set_verbosity(int verbosity);
         cf_verbosity <= verbosity;
@@ -430,7 +435,7 @@ module mkSetDmac (Control::SetDmac);
     endmethod
 endmodule
 // INST (32) <Path>(55365):meta.routing_metadata.nhop_ipv4; = <Path>(55369):nhop_ipv4;
-// INST (9) <Path>(55375):standard_metadata.egress_port; = <Path>(55379):port;
+// INST (9) <Path>(55375):standard_metadata.egress_port; = <Path>(55379):_port;
 // INST (8) <Path>(55386):hdr.ipv4.ttl; = <Path>(55386):hdr.ipv4.ttl + 255;
 // =============== action set_nhop ==============
 interface SetNhop;
@@ -482,8 +487,8 @@ endmodule
 // =============== control ingress ==============
 interface Ingress;
     interface Client#(MetadataRequest, MetadataResponse) next;
-    method Action forward_add_entry(Bit#(SizeOf#(ForwardReqT)) key, Bit#(SizeOf#(ForwardRspT)) value);
-    method Action ipv4_lpm_add_entry(Bit#(SizeOf#(Ipv4LpmReqT)) key, Bit#(SizeOf#(Ipv4LpmRspT)) value);
+    method Action forward_add_entry(ConnectalTypes::ForwardReqT key, ConnectalTypes::ForwardRspT value);
+    method Action ipv4_lpm_add_entry(ConnectalTypes::Ipv4LpmReqT key, ConnectalTypes::Ipv4LpmRspT value);
     method Action set_verbosity(int verbosity);
 endinterface
 module mkIngress #(Vector#(numClients, Client#(MetadataRequest, MetadataResponse)) mdc) (Ingress);
@@ -631,7 +636,7 @@ interface SendFrame;
     interface Client#(SendFrameActionReq, SendFrameActionRsp) next_control_state_0;
     interface Client#(SendFrameActionReq, SendFrameActionRsp) next_control_state_1;
     interface Client#(SendFrameActionReq, SendFrameActionRsp) next_control_state_2;
-    method Action add_entry(Bit#(SizeOf#(SendFrameReqT)) key, Bit#(SizeOf#(SendFrameRspT)) value);
+    method Action add_entry(ConnectalTypes::SendFrameReqT key, ConnectalTypes::SendFrameRspT value);
     method Action set_verbosity(int verbosity);
 endinterface
 (* synthesize *)
@@ -716,8 +721,10 @@ module mkSendFrame (Control::SendFrame);
     interface next_control_state_0 = toClient(bbReqFifo[0], bbRspFifo[0]);
     interface next_control_state_1 = toClient(bbReqFifo[1], bbRspFifo[1]);
     interface next_control_state_2 = toClient(bbReqFifo[2], bbRspFifo[2]);
-    method Action add_entry(Bit#(SizeOf#(SendFrameReqT)) key, Bit#(SizeOf#(SendFrameRspT)) value);
-        matchTable.add_entry.put(tuple2(key, value));
+    method Action add_entry(ConnectalTypes::SendFrameReqT k, ConnectalTypes::SendFrameRspT v);
+       let key = SendFrameReqT {egress_port : k.egress_port};
+       let value = SendFrameRspT {_action : unpack(v._action), smac: v.smac};
+        matchTable.add_entry.put(tuple2(pack(key), pack(value)));
     endmethod
     method Action set_verbosity(int verbosity);
         cf_verbosity <= verbosity;
@@ -828,7 +835,7 @@ endmodule
 // =============== control egress ==============
 interface Egress;
     interface Client#(MetadataRequest, MetadataResponse) next;
-    method Action send_frame_add_entry(Bit#(SizeOf#(SendFrameReqT)) key, Bit#(SizeOf#(SendFrameRspT)) value);
+    method Action send_frame_add_entry(ConnectalTypes::SendFrameReqT key, ConnectalTypes::SendFrameRspT value);
     method Action set_verbosity(int verbosity);
 endinterface
 module mkEgress #(Vector#(numClients, Client#(MetadataRequest, MetadataResponse)) mdc) (Egress);
