@@ -492,25 +492,25 @@ bool TableCodeGen::preorder(const IR::P4Table* table) {
 
   // visit keys
   auto keys = tbl->getKey();
-  if (keys == nullptr) return false;
-
-  for (auto key : *keys->keyElements) {
-    auto element = key->to<IR::KeyElement>();
-    if (element->expression->is<IR::Member>()) {
-      auto m = element->expression->to<IR::Member>();
-      auto type = control->program->typeMap->getType(m->expr, true);
-      if (type->is<IR::Type_Struct>()) {
-        auto t = type->to<IR::Type_StructLike>();
-        auto f = t->getField(m->member);
-        auto f_size = f->type->to<IR::Type_Bits>()->size;
-        key_vec.push_back(std::make_pair(f, f_size));
-        key_width += f_size;
-      } else if (type->is<IR::Type_Header>()){
-        auto t = type->to<IR::Type_Header>();
-        auto f = t->getField(m->member);
-        auto f_size = f->type->to<IR::Type_Bits>()->size;
-        key_vec.push_back(std::make_pair(f, f_size));
-        key_width += f_size;
+  if (keys != nullptr) {
+    for (auto key : *keys->keyElements) {
+      auto element = key->to<IR::KeyElement>();
+      if (element->expression->is<IR::Member>()) {
+        auto m = element->expression->to<IR::Member>();
+        auto type = control->program->typeMap->getType(m->expr, true);
+        if (type->is<IR::Type_Struct>()) {
+          auto t = type->to<IR::Type_StructLike>();
+          auto f = t->getField(m->member);
+          auto f_size = f->type->to<IR::Type_Bits>()->size;
+          key_vec.push_back(std::make_pair(f, f_size));
+          key_width += f_size;
+        } else if (type->is<IR::Type_Header>()){
+          auto t = type->to<IR::Type_Header>();
+          auto f = t->getField(m->member);
+          auto f_size = f->type->to<IR::Type_Bits>()->size;
+          key_vec.push_back(std::make_pair(f, f_size));
+          key_width += f_size;
+        }
       }
     }
   }
