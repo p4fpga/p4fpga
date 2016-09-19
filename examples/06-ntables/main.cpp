@@ -171,6 +171,11 @@ void *sendThread(void *pcapt) {
     return NULL;
 }
 
+#define DUMMY_TABLE_ADD_ENTRY(id) \
+    ApplyDummyTablesDummy##id##ReqT dummy##id##_key = {0x45}; \
+    ApplyDummyTablesDummy##id##RspT dummy##id##_act = {1}; \
+    device->apply_dummy_tables_dummy_##id##_add_entry(dummy##id##_key, dummy##id##_act);
+
 int main(int argc, char **argv)
 {
     char *pcap_file=NULL;
@@ -187,8 +192,28 @@ int main(int argc, char **argv)
     device->set_verbosity(6);
     device->read_version();
 
-    device->forward_tbl_add_entry(0x0001005E002002,0x200);
-    device->forward_tbl_add_entry(0x003417eb96bf1c,0x200);
+    ForwardTblReqT key = {0x0001005E002002};
+    ForwardTblRspT action = {1, 1};
+    device->forward_tbl_add_entry(key, action);
+
+    DUMMY_TABLE_ADD_ENTRY(1);
+    DUMMY_TABLE_ADD_ENTRY(2);
+    DUMMY_TABLE_ADD_ENTRY(3);
+    DUMMY_TABLE_ADD_ENTRY(4);
+    DUMMY_TABLE_ADD_ENTRY(5);
+    DUMMY_TABLE_ADD_ENTRY(6);
+    DUMMY_TABLE_ADD_ENTRY(7);
+    DUMMY_TABLE_ADD_ENTRY(8);
+    DUMMY_TABLE_ADD_ENTRY(9);
+    DUMMY_TABLE_ADD_ENTRY(10);
+    DUMMY_TABLE_ADD_ENTRY(11);
+    DUMMY_TABLE_ADD_ENTRY(12);
+    DUMMY_TABLE_ADD_ENTRY(13);
+    DUMMY_TABLE_ADD_ENTRY(14);
+    DUMMY_TABLE_ADD_ENTRY(15);
+
+    //device->forward_tbl_add_entry(0x003417eb96bf1c,0x200);
+    //device->forward_tbl_add_entry(0x003417eb96bf1c,0x200);
 
     if (intf) {
         printf("Opening device %s\n", intf); 
