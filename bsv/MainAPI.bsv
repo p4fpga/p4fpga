@@ -9,7 +9,7 @@ import PacketBuffer::*;
 import TxChannel::*;
 import Vector::*;
 import Control::*;
-import APITypeDefGenerated::*;
+import ConnectalTypes::*;
 `include "ConnectalProjectConfig.bsv"
 
 interface MainRequest;

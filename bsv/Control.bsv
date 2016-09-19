@@ -27,4 +27,7 @@ import Vector::*;
 import StructDefines::*;
 import UnionDefines::*;
 
+export Ingress(..), mkIngress;
+export Egress(..), mkEgress;
+
 `include "ControlGenerated.bsv"
