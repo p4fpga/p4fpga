@@ -68,7 +68,7 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
     boost::filesystem::path apiIntfDeclFile("APIDeclGenerated.bsv");
     boost::filesystem::path apiIntfDeclPath = dir / apiIntfDeclFile;
 
-    boost::filesystem::path apiTypeDefFile("ConnectalTypeGenerated.bsv");
+    boost::filesystem::path apiTypeDefFile("ConnectalTypes.bsv");
     boost::filesystem::path apiTypeDefPath = dir / apiTypeDefFile;
 
     boost::filesystem::path simFile("matchtable_model.cpp");

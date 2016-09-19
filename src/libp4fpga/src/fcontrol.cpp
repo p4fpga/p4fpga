@@ -147,13 +147,27 @@ bool FPGAControl::build() {
         continue;
       }
 
-      TableKeyExtractor key_extractor(program);
       for (auto key : *keys->keyElements) {
-        key->apply(key_extractor);
-      }
-      for (auto f : key_extractor.keymap) {
-        const IR::StructField* field = f.second;
-        metadata_to_table[field].insert(table);
+        auto element = key->to<IR::KeyElement>();
+        if (element->expression->is<IR::Member>()) {
+          auto m = element->expression->to<IR::Member>();
+
+          program->metadata.insert(std::make_pair(m->toString(), m));
+
+          auto type = program->typeMap->getType(m->expr, true);
+          LOG1("meta type" << m);
+          // from meta
+          if (type->is<IR::Type_Struct>()) {
+            auto t = type->to<IR::Type_StructLike>();
+            auto f = t->getField(m->member);
+            metadata_to_table[f].insert(table);
+            // from hdr
+          } else if (type->is<IR::Type_Header>()) {
+            auto t = type->to<IR::Type_StructLike>();
+            auto f = t->getField(m->member);
+            metadata_to_table[f].insert(table);
+          }
+        }
       }
     } else if (b->is<IR::ExternBlock>()) {
       auto ctrblk = b->to<IR::ExternBlock>();

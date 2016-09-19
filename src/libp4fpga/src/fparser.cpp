@@ -108,7 +108,7 @@ bool ParserBuilder::preorder(const IR::ParserState* state) {
   //auto name = state->name.toString();
   // FIXME: set parseStep name to header_name because we assume each step extracts a header.
   auto name = header_name->toString();
-  LOG1("create parse step " << fields);
+  LOG1("create parse step " << fields << header_name << state);
   auto step = new IR::BSV::ParseStep(name, fields, header_width, header_type_name, select, cases, statements);
   parser->parseSteps.push_back(step);
   parser->parseStateMap[state] = step;

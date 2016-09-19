@@ -59,7 +59,7 @@ class FPGAProgram : public FPGAObject {
     FPGADeparser*             deparser;
     // TODO: flexible pipeline should have a map of these controlblocks
     ExpressionTranslator*     tr;
-    std::map<cstring, const IR::Member *> metadata;
+    std::map<cstring, const IR::Member*> metadata;
 
     // write program as bluespec source code
     void emit(BSVProgram & bsv, CppProgram & cpp); // override;
