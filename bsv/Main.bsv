@@ -9,11 +9,20 @@ import SharedBuff::*;
 import Sims::*;
 import TxChannel::*;
 import Control::*;
+import HostInterface::*;
+
 `include "ConnectalProjectConfig.bsv"
+
+`ifdef BOARD_nfsume
+import XilinxEthPhy::*;
+import NfsumePins::*;
+`endif
+
 interface Main;
   interface MainRequest request;
+  interface `PinType pins;
 endinterface
-module mkMain #(MainIndication indication,ConnectalMemory::MemServerIndication memServerInd) (Main);
+module mkMain #(HostInterface host,MainIndication indication,ConnectalMemory::MemServerIndication memServerInd) (Main);
   let verbose = True;
   Clock defaultClock <- exposeCurrentClock();
   Reset defaultReset <- exposeCurrentReset();
@@ -28,6 +37,17 @@ module mkMain #(MainIndication indication,ConnectalMemory::MemServerIndication m
   Reset mgmtReset <- mkSyncReset(2, defaultReset, mgmtClock);
   Reset rxReset = txReset;
   `endif
+  `ifdef BOARD_nfsume
+  Clock mgmtClock = host.tsys_clk_200mhz_buf;
+  EthPhyIfc phys <- mkXilinxEthPhy(mgmtClock);
+  Clock txClock = phys.tx_clkout;
+  Reset txReset <- mkSyncReset(2, defaultReset, txClock);
+  Clock rxClock = txClock;
+  Reset rxReset = txReset;
+  NfsumeLeds leds <- mkNfsumeLeds(mgmtClock, txClock);
+  NfsumeSfpCtrl sfpctrl <- mkNfsumeSfpCtrl(phys);
+  `endif
+
   HostChannel hostchan <- mkHostChannel();
   Ingress ingress <- mkIngress(vec(hostchan.next));
   Egress egress <- mkEgress(vec(ingress.next));
@@ -42,6 +62,10 @@ module mkMain #(MainIndication indication,ConnectalMemory::MemServerIndication m
   `endif
   MainAPI api <- mkMainAPI(indication, hostchan, ingress, egress, txchan);
   interface request = api.request;
+
+`ifdef BOARD_nfsume
+  interface pins = mkNfsumePins(defaultClock, phys, leds, sfpctrl);
+`endif
 endmodule
 // Copyright (c) 2016 P4FPGA Project
 
