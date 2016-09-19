@@ -108,9 +108,6 @@ rule rl_accept if (delay_ff.notEmpty);
     if (isValid(ipv4)) begin
         meta.ipv4 = tagged Forward;
     end
-    if (ipv4 matches tagged Valid .d) begin
-        meta.dstAddr = tagged Valid d.dstAddr;
-    end
     rg_tmp[0] <= 0;
     rg_shift_amt[0] <= 0;
     rg_buffered[0] <= 0;

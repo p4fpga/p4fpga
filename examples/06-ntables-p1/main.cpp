@@ -171,6 +171,11 @@ void *sendThread(void *pcapt) {
     return NULL;
 }
 
+#define DUMMY_TABLE_ADD_ENTRY(id) \
+    ApplyDummyTablesDummy##id##ReqT dummy##id##_key = {0x45}; \
+    ApplyDummyTablesDummy##id##RspT dummy##id##_act = {1}; \
+    device->apply_dummy_tables_dummy_##id##_add_entry(dummy##id##_key, dummy##id##_act);
+
 int main(int argc, char **argv)
 {
     char *pcap_file=NULL;
@@ -184,12 +189,17 @@ int main(int argc, char **argv)
     device = new MainRequestProxy(IfcNames_MainRequestS2H);
 
     parse_options(argc, argv, &pcap_file, &intf, &outf, 0);
-    device->set_verbosity(6);
+    device->set_verbosity(4);
     device->read_version();
 
-    ForwardReqT key = {0xfffffff};
-    ForwardRspT val = {1, 0xfffff};
-    device->forward_add_entry(key, val);
+    ForwardTblReqT key = {0x0001005E002002};
+    ForwardTblRspT action = {1, 1};
+    device->forward_tbl_add_entry(key, action);
+
+    DUMMY_TABLE_ADD_ENTRY(1);
+    DUMMY_TABLE_ADD_ENTRY(2);
+    DUMMY_TABLE_ADD_ENTRY(3);
+    DUMMY_TABLE_ADD_ENTRY(4);
 
     if (intf) {
         printf("Opening device %s\n", intf); 

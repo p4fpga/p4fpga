@@ -68,7 +68,7 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
     boost::filesystem::path apiIntfDeclFile("APIDeclGenerated.bsv");
     boost::filesystem::path apiIntfDeclPath = dir / apiIntfDeclFile;
 
-    boost::filesystem::path apiTypeDefFile("APITypeDefGenerated.bsv");
+    boost::filesystem::path apiTypeDefFile("ConnectalTypes.bsv");
     boost::filesystem::path apiTypeDefPath = dir / apiTypeDefFile;
 
     boost::filesystem::path simFile("matchtable_model.cpp");
@@ -81,7 +81,7 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
     std::ofstream(unionPath.native())    <<  bsv.getUnionBuilder().toString();
     std::ofstream(apiIntfDefPath.native())  <<  bsv.getAPIIntfDefBuilder().toString();
     std::ofstream(apiIntfDeclPath.native())   <<  bsv.getAPIIntfDeclBuilder().toString();
-    std::ofstream(apiTypeDefPath.native()) << bsv.getAPITypeDefBuilder().toString();
+    std::ofstream(apiTypeDefPath.native()) << bsv.getConnectalTypeBuilder().toString();
 
     std::ofstream(simFile.native())      <<  cpp.getSimBuilder().toString();
 }

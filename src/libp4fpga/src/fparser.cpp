@@ -108,7 +108,7 @@ bool ParserBuilder::preorder(const IR::ParserState* state) {
   //auto name = state->name.toString();
   // FIXME: set parseStep name to header_name because we assume each step extracts a header.
   auto name = header_name->toString();
-  LOG1("create parse step " << fields);
+  LOG1("create parse step " << fields << header_name << state);
   auto step = new IR::BSV::ParseStep(name, fields, header_width, header_type_name, select, cases, statements);
   parser->parseSteps.push_back(step);
   parser->parseStateMap[state] = step;
@@ -200,15 +200,14 @@ void FPGAParser::emitStructs(BSVProgram & bsv) {
   if (htype == nullptr)
     return;
 
+  StructCodeGen visitor(program, bsv);
   for (auto f : *htype->to<IR::Type_Struct>()->fields) {
     auto ftype = typeMap->getType(f);
     if (ftype->is<IR::Type_Header>()) {
-      StructCodeGen visitor(program, bsv);
       ftype->apply(visitor);
     } else if (ftype->is<IR::Type_Stack>()) {
       auto hstack = ftype->to<IR::Type_Stack>();
       auto header = hstack->elementType->to<IR::Type_Header>();
-      StructCodeGen visitor(program, bsv);
       header->apply(visitor);
     }
   }

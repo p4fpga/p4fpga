@@ -33,4 +33,4 @@ prebuild::
 endif
 
 include ../Makefile.common
-BSVFILES += generatedbsv/APITypeDefGenerated.bsv
+BSVFILES += generatedbsv/ConnectalTypeGenerated.bsv

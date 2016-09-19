@@ -71,6 +71,7 @@ class StructCodeGen : public Inspector {
  private:
   BSVProgram & bsv;
   const FPGAProgram* program;
+  std::map<cstring, const IR::Type_Header*> header_map;
 };
 
 }  // namespace FPGA

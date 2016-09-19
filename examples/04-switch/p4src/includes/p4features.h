@@ -14,13 +14,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#define FABRIC_ENABLE
-#define EGRESS_FILTER
-#define INT_EP_ENABLE
-#define INT_TRANSIT_ENABLE
+//#define FABRIC_ENABLE
+//#define EGRESS_FILTER
+//#define INT_EP_ENABLE
+//#define INT_TRANSIT_ENABLE
 #define OUTER_PIM_BIDIR_OPTIMIZATION
 #define PIM_BIDIR_OPTIMIZATION
-#define SFLOW_ENABLE
+//#define SFLOW_ENABLE
+
+#define L2_DISABLE
+#define MULTICAST_DISABLE
+#define METER_DISABLE
+#define ACL_DISABLE
+#define STORM_CONTROL_DISABLE
+#define STATS_DISABLE
+#define TUNNEL_DISABLE
 
 #ifdef MULTICAST_DISABLE
 #define L2_MULTICAST_DISABLE

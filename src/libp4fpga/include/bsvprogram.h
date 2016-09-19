@@ -14,7 +14,7 @@ class BSVProgram {
   CodeBuilder& getControlBuilder() { return controlBuilder_; }
   CodeBuilder& getAPIIntfDefBuilder() { return apiIntfDefBuilder_; }
   CodeBuilder& getAPIIntfDeclBuilder() { return apiIntfDeclBuilder_; }
-  CodeBuilder& getAPITypeDefBuilder() { return apiTypeDefBuilder_; }
+  CodeBuilder& getConnectalTypeBuilder() { return connectalTypeBuilder_; }
 
  private:
   CodeBuilder parserBuilder_;
@@ -24,7 +24,7 @@ class BSVProgram {
   CodeBuilder controlBuilder_;
   CodeBuilder apiIntfDefBuilder_;
   CodeBuilder apiIntfDeclBuilder_;
-  CodeBuilder apiTypeDefBuilder_;
+  CodeBuilder connectalTypeBuilder_;
 };
 
 class CppProgram {

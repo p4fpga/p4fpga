@@ -1,4 +1,4 @@
-P4FILE=simple_router.p4
+P4FILE=p4src/simple_router.p4
 CONNECTALFLAGS += -D PARSER=Parser
 CONNECTALFLAGS += -D DEPARSER=Deparser
 CONNECTALFLAGS += -D MATCHTABLE=Control
@@ -15,4 +15,4 @@ compile:
 	make build.bluesim -j8
 
 include ../Makefile.common
-BSVFILES += generatedbsv/APITypeDefGenerated.bsv
+BSVFILES += generatedbsv/ConnectalTypes.bsv

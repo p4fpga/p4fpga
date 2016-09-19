@@ -152,7 +152,6 @@ bool FPGAControl::build() {
         if (element->expression->is<IR::Member>()) {
           auto m = element->expression->to<IR::Member>();
 
-          // save to metadata set for parser to extract
           program->metadata.insert(std::make_pair(m->toString(), m));
 
           auto type = program->typeMap->getType(m->expr, true);
@@ -162,7 +161,7 @@ bool FPGAControl::build() {
             auto t = type->to<IR::Type_StructLike>();
             auto f = t->getField(m->member);
             metadata_to_table[f].insert(table);
-          // from hdr
+            // from hdr
           } else if (type->is<IR::Type_Header>()) {
             auto t = type->to<IR::Type_StructLike>();
             auto f = t->getField(m->member);
@@ -438,9 +437,10 @@ void FPGAControl::emitAPI(BSVProgram & bsv, cstring cbname) {
     const IR::P4Table* tbl = t.second;
     cstring name = nameFromAnnotation(tbl->annotations, tbl->name);
     cstring type = CamelCase(name);
-    bsv.getAPIIntfDefBuilder().appendFormat("method Action %s", name);
-    bsv.getAPIIntfDefBuilder().appendFormat("(%sReqSize key,", type);
-    bsv.getAPIIntfDefBuilder().appendFormat("%sRspSize value);", type);
+    bsv.getAPIIntfDefBuilder().appendFormat("method Action %s_add_entry(", name);
+    bsv.getAPIIntfDefBuilder().appendFormat("%sReqT key, ", type);
+    bsv.getAPIIntfDefBuilder().appendFormat("%sRspT val", type);
+    bsv.getAPIIntfDefBuilder().appendFormat(");");
     bsv.getAPIIntfDefBuilder().newline();
   }
   for (auto t : tables) {
@@ -464,6 +464,7 @@ void FPGAControl::emit(BSVProgram & bsv, CppProgram & cpp) {
 
   append_line(bsv, "import StructDefines::*;");
   append_line(bsv, "import UnionDefines::*;");
+  append_line(bsv, "import ConnectalTypes::*;");
   append_line(bsv, "import CPU::*;");
   append_line(bsv, "import IMem::*;");
   append_line(bsv, "import Lists::*;");
@@ -480,7 +481,7 @@ void FPGAControl::emit(BSVProgram & bsv, CppProgram & cpp) {
   for (auto t : tables) {
     auto tname = t.first;
     auto type = CamelCase(tname);
-    append_line(bsv, "method Action %s_add_entry(Bit#(SizeOf#(%sReqT)) key, Bit#(SizeOf#(%sRspT)) value);", tname, type, type);
+    append_line(bsv, "method Action %s_add_entry(ConnectalTypes::%sReqT key, ConnectalTypes::%sRspT value);", tname, type, type);
   }
   append_line(bsv, "method Action set_verbosity(int verbosity);");
   decr_indent(bsv);

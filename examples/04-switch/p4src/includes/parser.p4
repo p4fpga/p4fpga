@@ -351,7 +351,7 @@ parser parse_udp_v6 {
 
 parser parse_gre_v6 {
     extract(gre);
-    return select(latest.C, latest.R, latest.K, latest.S, latest.s,
+    return select(latest._C, latest._R, latest._K, latest._S, latest.s,
                   latest.recurse, latest.flags, latest.ver, latest.proto) {
         ETHERTYPE_IPV4 : parse_gre_ipv4;
         default: ingress;
@@ -536,7 +536,7 @@ header gre_t gre;
 
 parser parse_gre {
     extract(gre);
-    return select(latest.C, latest.R, latest.K, latest.S, latest.s,
+    return select(latest._C, latest._R, latest._K, latest._S, latest.s,
                   latest.recurse, latest.flags, latest.ver, latest.proto) {
         GRE_PROTOCOLS_NVGRE : parse_nvgre;
         ETHERTYPE_IPV4 : parse_gre_ipv4;
@@ -893,16 +893,16 @@ parser parse_fabric_payload_header {
 #define CONTROL_TRAFFIC_PRIO_7         7
 
 parser parse_set_prio_med {
-    set_metadata(intrinsic_metadata.priority, CONTROL_TRAFFIC_PRIO_3);
+    set_metadata(intrinsic_metadata._priority, CONTROL_TRAFFIC_PRIO_3);
     return ingress;
 }
 
 parser parse_set_prio_high {
-    set_metadata(intrinsic_metadata.priority, CONTROL_TRAFFIC_PRIO_5);
+    set_metadata(intrinsic_metadata._priority, CONTROL_TRAFFIC_PRIO_5);
     return ingress;
 }
 
 parser parse_set_prio_max {
-    set_metadata(intrinsic_metadata.priority, CONTROL_TRAFFIC_PRIO_7);
+    set_metadata(intrinsic_metadata._priority, CONTROL_TRAFFIC_PRIO_7);
     return ingress;
 }

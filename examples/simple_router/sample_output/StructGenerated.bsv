@@ -34,12 +34,12 @@ instance DefaultValue#(Headers);
 endinstance
 typedef struct {
     Maybe#(Bit#(32)) dstAddr;
-    Maybe#(Bit#(32)) nhop_ipv4;
     Maybe#(Bit#(9)) egress_port;
+    Maybe#(Bit#(32)) nhop_ipv4;
     Maybe#(Bit#(8)) ttl;
+    Headers hdr;
     HeaderState ethernet;
     HeaderState ipv4;
-    Headers hdr;
 } MetadataT deriving (Bits, Eq, FShow);
 instance DefaultValue#(MetadataT);
     defaultValue = unpack(0);

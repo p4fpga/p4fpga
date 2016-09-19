@@ -24,6 +24,56 @@
 
 namespace FPGA {
 
+class TableKeyExtractor : public Inspector {
+ public:
+  std::map<cstring, const IR::StructField*> keymap;
+  int key_width = 0;
+  explicit TableKeyExtractor (FPGAProgram* program) :
+    program(program) {}
+
+  bool preorder(const IR::Member* member) {
+    if (member->member == "isValid") return false;
+    auto type = program->typeMap->getType(member->expr, true);
+    if (type->is<IR::Type_Struct>()) {
+      const IR::Type_StructLike* t = type->to<IR::Type_StructLike>();
+      const IR::StructField* f = t->getField(member->member);
+      int f_size = f->type->to<IR::Type_Bits>()->size;
+      keymap.emplace(member->member, f);
+      key_width += f_size;
+    // from hdr
+    } else if (type->is<IR::Type_Header>()) {
+      const IR::Type_StructLike* t = type->to<IR::Type_StructLike>();
+      const IR::StructField* f = t->getField(member->member);
+      int f_size = f->type->to<IR::Type_Bits>()->size;
+      keymap.emplace(member->member, f);
+      key_width += f_size;
+    }
+    return false;
+  }
+ private:
+  FPGAProgram*          program;
+};
+
+class TableParamExtractor : public Inspector {
+ public:
+  std::map<cstring, const IR::Type_Bits*> param_map;
+  explicit TableParamExtractor (FPGAControl* control) :
+    control(control) {}
+  bool preorder(const IR::MethodCallExpression* methodcall) {
+    auto k = control->basicBlock.find(methodcall->method->toString());
+    if (k != control->basicBlock.end()) {
+      auto params = k->second->parameters;
+      for (auto p : *params->parameters) {
+        auto type = p->type->to<IR::Type_Bits>();
+        param_map[p->name.toString()] = type;
+      }
+    }
+    return false;
+  }
+ private:
+  FPGAControl*          control;
+};
+
 // per table code generator
 class TableCodeGen : public Inspector {
  public:
@@ -46,6 +96,9 @@ class TableCodeGen : public Inspector {
   void emitRuleHandleExecution(const IR::P4Table* table);
   void emitRuleHandleResponse(const IR::P4Table* table);
   void emitRspFifoMux(const IR::P4Table* table);
+  void emitIntfAddEntry(const IR::P4Table* table);
+  void emitIntfControlFlow(const IR::P4Table* table);
+  void emitIntfVerbosity(const IR::P4Table* table);
   void emitCpp(const IR::P4Table* table);
 };
 

@@ -33,34 +33,38 @@ namespace FPGA {
 using namespace Control;
 
 void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
-  // generate request typedef
-  auto name = nameFromAnnotation(table->annotations, table->name);
-  auto type = CamelCase(name);
+  // Typedef are emitted to two different files
+  // - ConnectalType is used by Connectal to generate API
+  // - Control is used by p4 pipeline
+  // TODO: we can probably just generate ConnectalType and import it in Control
+  cstring name = nameFromAnnotation(table->annotations, table->name);
+  cstring type = CamelCase(name);
+  bsv.getConnectalTypeBuilder().emitIndent();
+  bsv.getConnectalTypeBuilder().appendLine("typedef struct{");
+  bsv.getConnectalTypeBuilder().increaseIndent();
   append_line(bsv, "typedef struct {");
   incr_indent(bsv);
   if ((key_width % 9) != 0) {
-    auto pad = 9 - (key_width % 9);
+    int pad = 9 - (key_width % 9);
     //append_line(bsv, "`ifndef SIMULATION");
     append_line(bsv, "Bit#(%d) padding;", pad);
     //append_line(bsv, "`endif");
   }
   for (auto k : key_vec) {
-    auto f = k.first;
-    auto s = k.second;
-    append_line(bsv, "Bit#(%d) %s;", s, f->name.toString());
+    const IR::StructField* f = k.first;
+    int size = k.second;
+    cstring fname = f->name.toString();
+    append_line(bsv, "Bit#(%d) %s;", size, fname);
+    bsv.getConnectalTypeBuilder().emitIndent();
+    bsv.getConnectalTypeBuilder().appendFormat("Bit#(%d) %s;", size, fname);
+    bsv.getConnectalTypeBuilder().newline();
   }
+  bsv.getConnectalTypeBuilder().decreaseIndent();
   decr_indent(bsv);
+  bsv.getConnectalTypeBuilder().emitIndent();
+  bsv.getConnectalTypeBuilder().appendFormat("} %sReqT deriving (Bits, FShow);", type);
+  bsv.getConnectalTypeBuilder().newline();
   append_format(bsv, "} %sReqT deriving (Bits, Eq, FShow);", type);
-
-
-  auto remainder = key_width % 9;
-  if (remainder != 0) {
-    auto rounded = key_width + 9 - remainder;
-    bsv.getAPITypeDefBuilder().appendFormat("typedef Bit#(%d) %sReqSize;", rounded, type);
-  } else {
-    bsv.getAPITypeDefBuilder().appendFormat("typedef Bit#(%d) %sReqSize;", key_width, type);
-  }
-  bsv.getAPITypeDefBuilder().newline();
 
   // action enum
   append_line(bsv, "typedef enum {");
@@ -106,37 +110,35 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
   incr_indent(bsv);
   append_line(bsv, "%sActionT _action;", type);
   // if there is any params
-  // map to remove duplicated params from different actions
-  std::map<cstring, const IR::Type_Bits*> action_map;
+  TableParamExtractor param_extractor(control);
   for (auto action : *actionList) {
-    auto elem = action->to<IR::ActionListElement>();
-    if (elem->expression->is<IR::MethodCallExpression>()) {
-      auto e = elem->expression->to<IR::MethodCallExpression>();
-      auto n = e->method->toString();
-      // from action name to actual action declaration
-      auto k = control->basicBlock.find(n);
-      if (k != control->basicBlock.end()) {
-        auto params = k->second->parameters;
-        for (auto p : *params->parameters) {
-          auto type = p->type->to<IR::Type_Bits>();
-          action_map[p->name.toString()] = type;
-        }
-      }
-    } else {
-      ::warning("unhandled action type", action);
-    }
+    action->apply(param_extractor);
   }
-  for (auto f : action_map) {
-    auto name = f.first;
-    auto action = f.second;
-    append_line(bsv, "Bit#(%d) %s;", action->size, name);
-    action_size += action->size;
+  cstring tname = table->name.toString();
+  bsv.getConnectalTypeBuilder().appendFormat("typedef struct {");
+  bsv.getConnectalTypeBuilder().newline();
+  bsv.getConnectalTypeBuilder().increaseIndent();
+  bsv.getConnectalTypeBuilder().emitIndent();
+  int action_key_size = ceil(log2(actionList->size()));
+  LOG1("action list " << table->name << " " << actionList->size() << " " << action_key_size);
+  bsv.getConnectalTypeBuilder().appendFormat("Bit#(%d) _action;", action_key_size);
+  bsv.getConnectalTypeBuilder().newline();
+  for (auto f : param_extractor.param_map) {
+    cstring pname = f.first;
+    const IR::Type_Bits* param = f.second;
+    append_line(bsv, "Bit#(%d) %s;", param->size, pname);
+    bsv.getConnectalTypeBuilder().emitIndent();
+    bsv.getConnectalTypeBuilder().appendFormat("Bit#(%d) %s;", param->size, pname);
+    bsv.getConnectalTypeBuilder().newline();
+    action_size += param->size;
   }
   action_size += ceil(log2(actionList->size()));
+  bsv.getConnectalTypeBuilder().decreaseIndent();
+  bsv.getConnectalTypeBuilder().emitIndent();
+  bsv.getConnectalTypeBuilder().appendFormat("} %sRspT deriving (Bits, FShow);", type);
+  bsv.getConnectalTypeBuilder().newline();
   decr_indent(bsv);
   append_line(bsv, "} %sRspT deriving (Bits, Eq, FShow);", type);
-  bsv.getAPITypeDefBuilder().appendFormat("typedef Bit#(%d) %sRspSize;", action_size, type);
-  bsv.getAPITypeDefBuilder().newline();
 }
 
 void TableCodeGen::emitSimulation(const IR::P4Table* table) {
@@ -201,7 +203,7 @@ void TableCodeGen::emitRuleHandleRequest(const IR::P4Table* table) {
   if (field_width % 9 != 0) {
     fields += ", padding: 0";
   }
-  append_format(bsv, "%sReqT req = %sReqT{%s};", type, type, fields);
+  append_line(bsv, "%sReqT req = %sReqT{%s};", type, type, fields);
   append_line(bsv, "matchTable.lookupPort.request.put(pack(req));");
   append_line(bsv, "packet_ff[0].enq(pkt);");
   append_line(bsv, "metadata_ff[0].enq(meta);");
@@ -318,6 +320,77 @@ void TableCodeGen::emitRspFifoMux(const IR::P4Table *table) {
   append_line(bsv, "end");
 }
 
+void TableCodeGen::emitIntfAddEntry(const IR::P4Table* table) {
+  auto name = nameFromAnnotation(table->annotations, table->name);
+  auto type = CamelCase(name);
+  bsv.getControlBuilder().emitIndent();
+  bsv.getControlBuilder().appendFormat("method Action add_entry(ConnectalTypes::%sReqT k, ConnectalTypes::%sRspT v);", type, type);
+  bsv.getControlBuilder().newline();
+
+  TableKeyExtractor key_extractor(control->program);
+  const IR::Key* key = table->getKey();
+  if (key != nullptr) {
+    bsv.getControlBuilder().increaseIndent();
+    bsv.getControlBuilder().emitIndent();
+    bsv.getControlBuilder().appendFormat("let key = %sReqT{", type);
+    for (auto k : *key->keyElements) {
+      k->apply(key_extractor);
+    }
+    if ((key_extractor.key_width % 9) != 0) {
+      bsv.getControlBuilder().appendFormat("padding: 0, ");
+    }
+    for (auto it = key_extractor.keymap.begin(); it != key_extractor.keymap.end(); ++it) {
+      const IR::StructField* field = it->second;
+      cstring member = it->first;
+      if (field->type->is<IR::Type_Bits>()) {
+        int size = field->type->to<IR::Type_Bits>()->size;
+        if (it != key_extractor.keymap.begin()) {
+          bsv.getControlBuilder().appendFormat(", ");
+        }
+        bsv.getControlBuilder().appendFormat("%s: k.%s", member, member);
+      }
+    }
+    bsv.getControlBuilder().appendLine("};");
+
+    bsv.getControlBuilder().emitIndent();
+    bsv.getControlBuilder().appendFormat("let value = %sRspT{", type);
+    bsv.getControlBuilder().append("_action: unpack(v._action)");
+
+    auto actionList = table->getActionList()->actionList;
+    TableParamExtractor param_extractor(control);
+    for (auto action : *actionList) {
+      action->apply(param_extractor);
+    }
+    for (auto f : param_extractor.param_map) {
+      cstring pname = f.first;
+      bsv.getControlBuilder().appendFormat(", %s : v.%s", pname, pname);
+    }
+    bsv.getControlBuilder().appendLine("};");
+    append_line(bsv, "matchTable.add_entry.put(tuple2(pack(key), pack(value)));");
+    bsv.getControlBuilder().decreaseIndent();
+  }
+  append_line(bsv, "endmethod");
+}
+
+void TableCodeGen::emitIntfControlFlow(const IR::P4Table* table) {
+  auto actionList = table->getActionList()->actionList;
+  append_line(bsv, "interface prev_control_state = toServer(rx_metadata.e, tx_metadata.e);");
+  int idx = 0;
+  for (auto action : *actionList) {
+    append_line(bsv, "interface next_control_state_%d = toClient(bbReqFifo[%d], bbRspFifo[%d]);", idx, idx, idx);
+    idx ++;
+  }
+}
+
+void TableCodeGen::emitIntfVerbosity(const IR::P4Table* table) {
+  append_line(bsv, "method Action set_verbosity(int verbosity);");
+  incr_indent(bsv);
+  append_line(bsv, "cf_verbosity <= verbosity;");
+  decr_indent(bsv);
+  append_line(bsv, "endmethod");
+  decr_indent(bsv);
+}
+
 void TableCodeGen::emit(const IR::P4Table* table) {
   auto name = nameFromAnnotation(table->annotations, table->name);
   auto type = CamelCase(name);
@@ -344,7 +417,7 @@ void TableCodeGen::emit(const IR::P4Table* table) {
     append_line(bsv, "interface Client#(%sActionReq, %sActionRsp) next_control_state_%d;", type, type, idx);
     idx ++;
   }
-  append_line(bsv, "method Action add_entry(Bit#(SizeOf#(%sReqT)) key, Bit#(SizeOf#(%sRspT)) value);", type, type);
+  append_line(bsv, "method Action add_entry(ConnectalTypes::%sReqT key, ConnectalTypes::%sRspT value);", type, type);
   append_line(bsv, "method Action set_verbosity(int verbosity);");
   decr_indent(bsv);
   append_line(bsv, "endinterface");
@@ -367,24 +440,9 @@ void TableCodeGen::emit(const IR::P4Table* table) {
   emitRuleHandleRequest(table);
   emitRuleHandleExecution(table);
   emitRuleHandleResponse(table);
-
-  append_line(bsv, "interface prev_control_state = toServer(rx_metadata.e, tx_metadata.e);");
-  idx = 0;
-  for (auto action : *actionList) {
-    append_line(bsv, "interface next_control_state_%d = toClient(bbReqFifo[%d], bbRspFifo[%d]);", idx, idx, idx);
-    idx ++;
-  }
-  append_line(bsv, "method Action add_entry(Bit#(SizeOf#(%sReqT)) key, Bit#(SizeOf#(%sRspT)) value);", type, type);
-  incr_indent(bsv);
-  append_line(bsv, "matchTable.add_entry.put(tuple2(key, value));");
-  decr_indent(bsv);
-  append_line(bsv, "endmethod");
-  append_line(bsv, "method Action set_verbosity(int verbosity);");
-  incr_indent(bsv);
-  append_line(bsv, "cf_verbosity <= verbosity;");
-  decr_indent(bsv);
-  append_line(bsv, "endmethod");
-  decr_indent(bsv);
+  emitIntfControlFlow(table);
+  emitIntfAddEntry(table);
+  emitIntfVerbosity(table);
   append_line(bsv, "endmodule");
 }
 
@@ -445,7 +503,6 @@ bool TableCodeGen::preorder(const IR::P4Table* table) {
         auto t = type->to<IR::Type_StructLike>();
         auto f = t->getField(m->member);
         auto f_size = f->type->to<IR::Type_Bits>()->size;
-        //control->metadata_to_table[f].insert(tbl);
         key_vec.push_back(std::make_pair(f, f_size));
         key_width += f_size;
       } else if (type->is<IR::Type_Header>()){

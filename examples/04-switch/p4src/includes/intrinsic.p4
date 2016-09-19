@@ -47,7 +47,7 @@ header_type ingress_intrinsic_metadata_t {
         mcast_hash : 13;                // multicast hashing
         egress_rid : 16;                // Replication ID for multicast
         lf_field_list : 32;             // Learn filter field list
-        priority : 3;                   // set packet priority
+        _priority : 3;                   // set packet priority
     }
 }
 metadata ingress_intrinsic_metadata_t intrinsic_metadata;
