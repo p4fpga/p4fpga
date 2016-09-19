@@ -118,6 +118,14 @@ int main(int argc, char **argv)
     device->set_verbosity(4);
     device->read_version();
 
+    DropTblReqT drop_tbl_req = {0};
+    DropTblRspT drop_tbl_rsp = {1};
+    device->drop_tbl_add_entry(drop_tbl_req, drop_tbl_rsp);
+
+    ForwardTblReqT fwd_tbl_req = {0};
+    ForwardTblRspT fwd_tbl_rsp = {1};
+    device->forward_tbl_add_entry(fwd_tbl_req, fwd_tbl_rsp);
+
     if (pcap_file) {
         fprintf(stderr, "Attempts to read pcap file %s\n", pcap_file);
         load_pcap_file(pcap_file, &pcap_info);
