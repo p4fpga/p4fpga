@@ -340,7 +340,7 @@ void FPGAParser::emitExtractionRule(BSVProgram & bsv, const IR::BSV::ParseStep* 
     }
     append_line(bsv, "compute_next_state_%s(%s);", name, params);
     append_format(bsv, "rg_tmp[0] <= zeroExtend(data >> %d);", state->width_bits);
-    append_format(bsv, "succeed_and_next(%d);", 0);
+    append_format(bsv, "succeed_and_next(%d);", state->width_bits);
     append_line(bsv, "parse_state_ff.deq;");
     append_format(bsv, "%s_out_ff.enq(tagged Valid %s);", name, name);
     decr_indent(bsv);
@@ -349,47 +349,61 @@ void FPGAParser::emitExtractionRule(BSVProgram & bsv, const IR::BSV::ParseStep* 
 }
 
 void FPGAParser::emitTransitionRule(BSVProgram & bsv, const IR::BSV::ParseStep* state) {
-    auto name = state->name.toString();
-    auto type = state->type->toString();
-    if (state->cases == nullptr) {
-      // direct transition path
-      ::warning("directly transit to next state", state->toString());
-    } else {
-      for (auto c : *state->cases) {
-        auto rl_name = name + "_" + c->state->toString();
-        append_line(bsv, "rule rl_%s if (w_%s);", rl_name, rl_name);
-        auto type = typeMap->getType(c->state, true);
-        auto decl = refMap->getDeclaration(c->state->path, true);
-        incr_indent(bsv);
-        if (c->state->toString() == IR::ParserState::accept) {
-          append_line(bsv, "parse_done[0] <= True;");
-          append_line(bsv, "w_parse_done.send();");
-          append_line(bsv, "fetch_next_header0(0);");
-        } else {
-          // ParserState* -> BSV::ParseStep --> width_bits
-          // LOG1("decl" << decl << " " << c->state << " " << decl->node_type_name());
-          if (decl->is<IR::ParserState>()) {
-            auto s = decl->to<IR::ParserState>();
-            auto bsv_parse_state = parseStateMap[s];
-            append_format(bsv, "parse_state_ff.enq(State%s);", CamelCase(bsv_parse_state->name.toString()));
-            append_line(bsv, "fetch_next_header0(%d);", bsv_parse_state->width_bits);
-          }
-        }
-        decr_indent(bsv);
-        append_line(bsv, "endrule");
+  auto name = state->name.toString();
+  auto type = state->type->toString();
+  std::set<cstring> rule_set;
+  if (state->cases == nullptr) {
+    // direct transition path
+    ::warning("directly transit to next state", state->toString());
+  } else {
+    for (auto c : *state->cases) {
+      auto rl_name = name + "_" + c->state->toString();
+      if (rule_set.find(rl_name) != rule_set.end()) {
+        // already generated.
+        continue;
+      } else {
+        rule_set.insert(rl_name);
       }
+      append_line(bsv, "rule rl_%s if (w_%s);", rl_name, rl_name);
+      auto type = typeMap->getType(c->state, true);
+      auto decl = refMap->getDeclaration(c->state->path, true);
+      incr_indent(bsv);
+      if (c->state->toString() == IR::ParserState::accept) {
+        append_line(bsv, "parse_done[0] <= True;");
+        append_line(bsv, "w_parse_done.send();");
+        append_line(bsv, "fetch_next_header0(0);");
+      } else {
+        // ParserState* -> BSV::ParseStep --> width_bits
+        // LOG1("decl" << decl << " " << c->state << " " << decl->node_type_name());
+        if (decl->is<IR::ParserState>()) {
+          auto s = decl->to<IR::ParserState>();
+          auto bsv_parse_state = parseStateMap[s];
+          append_format(bsv, "parse_state_ff.enq(State%s);", CamelCase(bsv_parse_state->name.toString()));
+          append_line(bsv, "fetch_next_header0(%d);", bsv_parse_state->width_bits);
+        }
+      }
+      decr_indent(bsv);
+      append_line(bsv, "endrule");
     }
+  }
 }
 
 void FPGAParser::emitRules(BSVProgram & bsv) {
   append_line(bsv, "`ifdef PARSER_RULES");
-
   // deparse rules are mutually exclusive
   std::vector<cstring> exclusive_rules;
+  std::set<cstring> rule_set;
   for (auto r : parseSteps) {
     for (auto c : *r->cases) {
-      cstring rl = cstring("rl_") + r->name.toString() + cstring("_") + c->state->toString();
-      exclusive_rules.push_back(rl);
+      cstring name = r->name.toString();
+      cstring rl_name = "rl_" + name + "_" + c->state->toString();
+      if (rule_set.find(rl_name) != rule_set.end()) {
+        // already generated.
+        continue;
+      } else {
+        rule_set.insert(rl_name);
+        exclusive_rules.push_back(rl);
+      }
     }
   }
   auto exclusive_annotation = cstring("(* mutually_exclusive=\"");
@@ -416,10 +430,14 @@ void FPGAParser::emitStateElements(BSVProgram & bsv) {
   // pulsewire to communicate between different parse parseSteps
   for (auto state : parseSteps) {
     if (state->cases == nullptr) continue;
-    auto name = state->name.toString();
+    cstring name = state->name.toString();
     for (auto c : *state->cases) {
-      append_line(bsv, "PulseWire w_%s_%s <- mkPulseWire;", name, c->state->toString());
+      cstring wire_name = "w_" + name + "_" + c->state->toString();
+      pulse_wire_set.insert(wire_name);
     }
+  }
+  for (auto n : pulse_wire_set) {
+    append_line(bsv, "PulseWire %s <- mkPulseWire;", n);
   }
   // dfifo to output parsed header
   for (auto state : parseSteps) {

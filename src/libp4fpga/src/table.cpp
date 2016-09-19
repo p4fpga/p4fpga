@@ -514,7 +514,7 @@ bool TableCodeGen::preorder(const IR::P4Table* table) {
       }
     }
   }
-
+  //FIXME: switch.p4 does not like this.
   emitTypedefs(tbl);
   emitSimulation(tbl);
   emit(tbl);

@@ -95,9 +95,10 @@ class FPGAParser : public FPGAObject {
   // map from IR::ParserState to IR::BSV::ParseStep
   // the latter subclasses Type_Header, from which we
   // compute bit width of next parse state.
-  ParseStepMap                 parseStateMap;
+  ParseStepMap                  parseStateMap;
   std::vector<IR::BSV::ParseStep*> parseSteps;
-  const IR::ParserState*             initState;
+  std::set<cstring>             pulse_wire_set;
+  const IR::ParserState*        initState;
 
   explicit FPGAParser(FPGAProgram* program,
                       const IR::ParserBlock* block,
