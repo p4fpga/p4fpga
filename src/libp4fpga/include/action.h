@@ -36,6 +36,8 @@ class ActionCodeGen : public Inspector {
  private:
   FPGAControl* control;
   BSVProgram & bsv;
+  cstring table_name;
+  cstring table_type;
   void emitForwardRule(const IR::P4Action* action);
   void emitDropRule(const IR::P4Action* action);
   void emitModifyRule(const IR::P4Action* action);

@@ -64,11 +64,12 @@ bool ActionCodeGen::preorder(const IR::MethodCallExpression* expression) {
 
   auto ext = mi->to<P4::ExternMethod>();
   if (ext != nullptr) {
+    LOG1("MethodCall extern type");
     // ext->type : register
     // ext->method : read / write
     // ext->expr : register name
     // ext->getParameters : index value or result index
-    // append_line(bsv, "// INST extern %s %s %s %s", ext->method->name.toString(), ext->type->toString(), ext->expr->toString(), ext->getParameters()->toString());
+    append_line(bsv, "// INST extern %s %s %s %s", ext->method->name.toString(), ext->type->toString(), ext->expr->toString(), ext->getParameters()->toString());
     return false;
   }
 
@@ -149,8 +150,8 @@ void ActionCodeGen::emitActionBegin(const IR::P4Action* action) {
   if (table == nullptr) {
     ::error("unable to find table from action %s", orig_name);
   }
-  auto table_name = nameFromAnnotation(table->annotations, table->name);
-  auto table_type = CamelCase(table_name);
+  table_name = nameFromAnnotation(table->annotations, table->name);
+  table_type = CamelCase(table_name);
   append_line(bsv, "interface %s;", type);
   incr_indent(bsv);
   append_format(bsv, "interface Server#(%sActionReq, %sActionRsp) prev_control_state;", table_type, table_type);
@@ -184,6 +185,18 @@ void ActionCodeGen::emitDropRule(const IR::P4Action* action) {
   incr_indent(bsv);
   append_line(bsv, "let v = rx_info_prev_control_state.first;");
   append_line(bsv, "rx_info_prev_control_state.deq;");
+  append_line(bsv, "case (v) matches");
+  incr_indent(bsv);
+  auto name = action->name;
+  auto type = CamelCase(name);
+  append_format(bsv, "tagged %sReqT {pkt: .pkt, meta: .meta} : begin", type);
+  incr_indent(bsv);
+  append_line(bsv, "%sActionRsp rsp = taggeed %sRspT {pkt: pkt, meta: meta};", table_type, type);
+  append_line(bsv, "tx_info_prev_control_state.enq(v);");
+  decr_indent(bsv);
+  append_line(bsv, "end");
+  decr_indent(bsv);
+  append_line(bsv, "endcase");
   decr_indent(bsv);
   append_line(bsv, "endrule");
   append_line(bsv, "FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;");

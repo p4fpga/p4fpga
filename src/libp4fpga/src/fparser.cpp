@@ -402,7 +402,7 @@ void FPGAParser::emitRules(BSVProgram & bsv) {
         continue;
       } else {
         rule_set.insert(rl_name);
-        exclusive_rules.push_back(rl);
+        exclusive_rules.push_back(rl_name);
       }
     }
   }
@@ -459,6 +459,7 @@ void FPGAParser::emitAcceptedHeaders(BSVProgram & bsv, const IR::Type_Struct* he
       append_format(bsv, "if (isValid(%s)) begin", name);
       incr_indent(bsv);
       append_format(bsv, "meta.%s = tagged Forward;", name);
+      append_format(bsv, "meta.hdr.%s = tagged Valid;", name);
       decr_indent(bsv);
       append_line(bsv, "end");
       for (auto m : program->metadata) {

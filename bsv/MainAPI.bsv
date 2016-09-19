@@ -42,6 +42,7 @@ module mkMainAPI #(MainIndication indication,HostChannel hostchan,Ingress ingres
         hostchan.set_verbosity(unpack(verbosity));
         txchan.set_verbosity(unpack(verbosity));
         ingress.set_verbosity(unpack(verbosity));
+        egress.set_verbosity(unpack(verbosity));
     endmethod
 `include "APIDeclGenerated.bsv"
   endinterface
