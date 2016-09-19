@@ -43,9 +43,18 @@ action _nop() {
 
 }
 
-action _drop() {
+action _drop1() {
     drop();
 }
+
+action _drop2() {
+    drop();
+}
+
+action _drop3() {
+    drop();
+}
+
 
 // Copying Paxos-fields from the register to meta-data structure. The index
 // (i.e., paxos instance number) is read from the current packet. Could be
@@ -84,11 +93,11 @@ action handle_2a(learner_port) {
 
 table acceptor_tbl {
     reads   { paxos.msgtype : exact; }
-    actions { handle_1a; handle_2a; _drop; }
+    actions { handle_1a; handle_2a; _drop1; }
 }
 
-action forward(port) {
-    modify_field(standard_metadata.egress_spec, port);
+action forward(_port) {
+    modify_field(standard_metadata.egress_spec, _port);
 }
 
 table forward_tbl {
@@ -97,7 +106,7 @@ table forward_tbl {
     }
     actions {
         forward;
-        _drop;
+        _drop2;
     }
     size : 48;
 }
@@ -106,7 +115,7 @@ table drop_tbl {
     reads {
         local_metadata.set_drop : exact;
     }
-    actions { _drop; _nop; }
+    actions { _drop3; _nop; }
     size : 2;
 }
 

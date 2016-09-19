@@ -9,7 +9,7 @@ CONNECTALFLAGS += --bsvpath=generatedbsv
 CPPFILES = main.cpp $(SONICDIR)/sw/lpcap.c
 
 build:
-	p4fpga -o generatedbsv --p4-14 -v --top4 Evaluator -Tfcontrol:1,fparser:1 $(P4FILE)
+	p4fpga -o generatedbsv --p4-14 -v --top4 Evaluator -Tfcontrol:1,fparser:1,table:1 $(P4FILE)
 
 compile:
 	make build.bluesim -j8
