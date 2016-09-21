@@ -9,7 +9,7 @@ import PacketBuffer::*;
 import TxChannel::*;
 import Vector::*;
 import Control::*;
-import ConnectalTypes::*;
+//import ConnectalTypes::*;
 import PktGenChannel::*;
 import PktCapChannel::*;
 import DbgDefs::*;

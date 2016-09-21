@@ -71,7 +71,7 @@ module mkMain #(HostInterface host,MainIndication indication,ConnectalMemory::Me
   rule drain_mac;
      let v <- toGet(txchan.macTx).get;
      if (verbose) $display("(%0d) tx data ", $time, fshow(v));
-     pktcap.macRx.put(v);
+     //pktcap.macRx.put(v);
   endrule
   rule drain_pkgen;
      let v <- toGet(pktgen.macTx).get;
