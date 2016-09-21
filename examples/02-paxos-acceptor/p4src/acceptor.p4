@@ -75,7 +75,7 @@ action handle_1a(learner_port) {
     register_read(paxos.vrnd, vrounds_register, paxos.inst);        // paxos.vrnd = vrounds_register[paxos.inst]
     register_read(paxos.paxosval, values_register, paxos.inst);     // paxos.paxosval  = values_register[paxos.inst]
     register_read(paxos.acptid, datapath_id, 0);                    // paxos.acptid = datapath_id
-    register_write(rounds_register, paxos.inst, paxos.rnd);         // rounds_register[paxos.inst] = paxos.rnd
+    register_write(rounds_register, paxos.inst, paxos.vrnd);         // rounds_register[paxos.inst] = paxos.rnd
     modify_field(udp.dstPort, learner_port);
     modify_field(udp.checksum, 0);
 }

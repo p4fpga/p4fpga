@@ -20,4 +20,3 @@ run-thru:
 include ../Makefile.common
 BSVFILES += generatedbsv/ConnectalTypes.bsv
 BSVFILES += $(SONICDIR)/hw/bsv/DbgDefs.bsv
-#BSVFILES += $(SONICDIR)/hw/bsv/DbgTypes.bsv
