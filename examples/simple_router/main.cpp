@@ -38,6 +38,8 @@ char* p=NULL;
 int size = 0;
 static bool tosend = false;
 
+extern void app_init(MainRequestProxy* device);
+
 void device_writePacketData(uint64_t* data, uint8_t* mask, int sop, int eop) {
     device->writePacketData(data, mask, sop, eop);
 }
@@ -61,6 +63,9 @@ public:
         if (eop == 1) {
             tosend = true;
         }
+    }
+    virtual void read_pktcap_perf_info_resp(PktCapRec a) {
+        fprintf(stderr, "perf: pktcap data_bytes=%ld idle_cycle=%ld total_cycle=%ld\n", a.data_bytes, a.idle_cycles, a.total_cycles);
     }
     MainIndication(unsigned int id): MainIndicationWrapper(id) {}
 };
@@ -187,9 +192,7 @@ int main(int argc, char **argv)
     device->set_verbosity(6);
     device->read_version();
 
-    ForwardReqT key = {0xfffffff};
-    ForwardRspT val = {1, 0xfffff};
-    device->forward_add_entry(key, val);
+    app_init(device);
 
     if (intf) {
         printf("Opening device %s\n", intf); 

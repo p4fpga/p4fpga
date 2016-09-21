@@ -28,8 +28,8 @@ import CBus::*;
 import ClientServer::*;
 import ConfigReg::*;
 import Connectable::*;
-import DbgDefs::*;
 import DefaultValue::*;
+import DbgDefs::*;
 import Ethernet::*;
 import FIFO::*;
 import FIFOF::*;
@@ -79,9 +79,9 @@ module mkDeparser (Deparser);
       endaction
    endfunction
 
-   FIFOF#(EtherData) data_in_ff <- printTimedTraceM("Deparser:data_in", mkFIFOF);
-   FIFOF#(EtherData) data_out_ff <- printTimedTraceM("Deparser:data_out", mkFIFOF);
-   FIFOF#(MetadataT) meta_in_ff <- printTimedTraceM("Deparser:meta_in_ff", mkSizedFIFOF(16));
+   FIFOF#(EtherData) data_in_ff <- mkFIFOF;
+   FIFOF#(EtherData) data_out_ff <- mkFIFOF;
+   FIFOF#(MetadataT) meta_in_ff <- mkSizedFIFOF(16);
    FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
    FIFO#(DeparserState) deparse_state_ff <- mkPipelineFIFO();
    Array#(Reg#(Bit#(32))) rg_next_header_len <- mkCReg(3, 0);
@@ -142,6 +142,7 @@ module mkDeparser (Deparser);
     meta[1] <= metadata;
     transit_next_state(metadata);
     dbprint(4, $format("Deparser:rl_start_state start deparse %d", valueOf(SizeOf#(DeparserState))));
+    dbprint(1, $format("START deparse pkt"));
   endrule
 
   // process payload portion of packet, until last beat

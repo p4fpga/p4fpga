@@ -31,6 +31,7 @@
 #define DATA_WIDTH 128
 #define MAXBYTES2CAPTURE 2048 
 #define BUFFSIZE 4096
+#define LINK_SPEED 10
 
 static MainRequestProxy *device = 0;
 char* pktbuf=NULL;
@@ -38,8 +39,16 @@ char* p=NULL;
 int size = 0;
 static bool tosend = false;
 
+bool hwpktgen = false;
+
+extern void app_init(MainRequestProxy* device);
+
 void device_writePacketData(uint64_t* data, uint8_t* mask, int sop, int eop) {
-    device->writePacketData(data, mask, sop, eop);
+    if (hwpktgen) {
+      device->writePktGenData(data, mask, sop, eop);
+    } else {
+      device->writePacketData(data, mask, sop, eop);
+    }
 }
 
 class MainIndication : public MainIndicationWrapper
@@ -47,6 +56,9 @@ class MainIndication : public MainIndicationWrapper
 public:
     virtual void read_version_rsp(uint32_t a) {
         fprintf(stderr, "version %x\n", a);
+    }
+    virtual void read_pktcap_perf_info_resp(PktCapRec a) {
+        fprintf(stderr, "perf: pktcap data_bytes=%ld idle_cycle=%ld total_cycle=%ld\n", a.data_bytes, a.idle_cycles, a.total_cycles);
     }
     virtual void readPacketData(const uint64_t data, const uint8_t mask, const uint8_t sop, const uint8_t eop) {
         //fprintf(stderr, "Rdata %016lx, mask %02x, sop %x eop %x\n", data, mask, sop, eop);
@@ -90,8 +102,14 @@ void usage (const char *program_name) {
     printf("\nOther options:\n"
     " -p, --parser=FILE                pcap trace to run\n"
     " -I, --intf=interface             listen on interface\n"
+    " -r, --rate=x                     packet generation rate\n"
     );
 }
+
+struct arg_info {
+    double rate;
+    uint64_t tracelen;
+};
 
 static void 
 parse_options(int argc, char *argv[], char **pcap_file, char **intf, char **outf, struct arg_info* info) {
@@ -102,6 +120,8 @@ parse_options(int argc, char *argv[], char **pcap_file, char **intf, char **outf
         {"pcap",                required_argument, 0, 'p'},
         {"intf",                required_argument, 0, 'I'},
         {"outf",                required_argument, 0, 'O'},
+        {"pktgen-rate",         required_argument, 0, 'r'},
+        {"pktgen-count",        required_argument, 0, 'n'},
         {0, 0, 0, 0}
     };
 
@@ -128,6 +148,12 @@ parse_options(int argc, char *argv[], char **pcap_file, char **intf, char **outf
             case 'O':
                 fprintf(stderr, "%s", optarg);
                 *outf = optarg;
+                break;
+            case 'r':
+                info->rate = strtod(optarg, NULL);
+                break;
+            case 'n':
+                info->tracelen = strtol(optarg, NULL, 0);
                 break;
             default:
                 break;
@@ -175,6 +201,7 @@ int main(int argc, char **argv)
 {
     char *pcap_file=NULL;
     pcap_t *handle = NULL, *handle2=NULL; 
+    struct arg_info arguments = {0.0, 0};
     pthread_t t_cap, t_snd;
     char errbuf[PCAP_ERRBUF_SIZE], *intf=NULL, *outf=NULL; 
     memset(errbuf,0,PCAP_ERRBUF_SIZE); 
@@ -183,9 +210,13 @@ int main(int argc, char **argv)
     MainIndication echoindication(IfcNames_MainIndicationH2S);
     device = new MainRequestProxy(IfcNames_MainRequestS2H);
 
-    parse_options(argc, argv, &pcap_file, &intf, &outf, 0);
-    device->set_verbosity(4);
+    parse_options(argc, argv, &pcap_file, &intf, &outf, &arguments);
+    device->set_verbosity(1);
     device->read_version();
+
+    // application specific call
+    // e.g. insert table entries here.
+    app_init(device);
 
     if (intf) {
         printf("Opening device %s\n", intf); 
@@ -214,12 +245,25 @@ int main(int argc, char **argv)
         //}
     }
 
+    if (arguments.rate && arguments.tracelen) {
+        hwpktgen = true;
+    }
 
     if (pcap_file) {
         fprintf(stderr, "Attempts to read pcap file %s\n", pcap_file);
         load_pcap_file(pcap_file, &pcap_info);
     }
 
+    if (arguments.rate && arguments.tracelen) {
+        fprintf(stderr, "%lx %llx\n", pcap_info.packet_count, pcap_info.byte_count);
+        int idle = compute_idle(&pcap_info, arguments.rate, LINK_SPEED);
+        fprintf(stderr, "IDLE=%d\n", idle);
+        device->pktcap_start(arguments.tracelen);
+        device->pktgen_start(arguments.tracelen, idle);
+    }
+
     sleep(3);
+
+    device->read_pktcap_perf_info();
     return 0;
 }

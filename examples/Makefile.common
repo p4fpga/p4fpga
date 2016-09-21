@@ -37,6 +37,7 @@ CONNECTALFLAGS += --bscflags="-fdir $(CURDIR)/sample_input"
 CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/bsv/
 CONNECTALFLAGS += --nocache
 CONNECTALFLAGS += --cxxflags=-std=c++11
+CONNECTALFLAGS += --bsvpath=$(SONICDIR)/p4/bsv
 
 CONNECTALFLAGS += -D ClockDefaultParam
 

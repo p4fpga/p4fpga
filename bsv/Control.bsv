@@ -4,7 +4,6 @@ import CBus::*;
 import ClientServer::*;
 import ConfigReg::*;
 import Connectable::*;
-import DbgDefs::*;
 import DefaultValue::*;
 import Ethernet::*;
 import FIFO::*;

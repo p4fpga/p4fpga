@@ -149,6 +149,7 @@ module mkParser  (Parser);
       rg_shift_amt[2] <= 0;
       parse_done[1] <= False;
       parse_state_ff.enq(initState);
+      dbprint(1, $format("START parse pkt"));
    endrule
 
    rule rl_start_state_idle if (parse_done[1] && (!sop_this_cycle || w_parse_header_done));

@@ -10,6 +10,10 @@ import Sims::*;
 import TxChannel::*;
 import Control::*;
 import HostInterface::*;
+import RxChannel::*;
+import PktGenChannel::*;
+import PktCapChannel::*;
+import PktGen::*;
 
 `include "ConnectalProjectConfig.bsv"
 
@@ -49,18 +53,33 @@ module mkMain #(HostInterface host,MainIndication indication,ConnectalMemory::Me
   `endif
 
   HostChannel hostchan <- mkHostChannel();
-  Ingress ingress <- mkIngress(vec(hostchan.next));
+  RxChannel rxchan <- mkRxChannel(rxClock, rxReset);
+  Ingress ingress <- mkIngress(vec(hostchan.next, rxchan.next));
   Egress egress <- mkEgress(vec(ingress.next));
   TxChannel txchan <- mkTxChannel(txClock, txReset);
-  SharedBuffer#(12, 128, 1) mem <- mkSharedBuffer(vec(txchan.readClient), vec(txchan.freeClient), vec(hostchan.writeClient), vec(hostchan.mallocClient), memServerInd);
+  SharedBuffer#(12, 128, 1) mem <- mkSharedBuffer(vec(txchan.readClient),
+                                                  vec(txchan.freeClient),
+                                                  vec(hostchan.writeClient, rxchan.writeClient),
+                                                  vec(hostchan.mallocClient, rxchan.mallocClient),
+                                                  memServerInd);
   mkConnection(egress.next, txchan.prev);
+
+  PktGenChannel pktgen <- mkPktGenChannel(txClock, txReset);
+  PktCapChannel pktcap <- mkPktCapChannel(rxClock, rxReset);
+
   `ifdef SIMULATION
   rule drain_mac;
      let v <- toGet(txchan.macTx).get;
      if (verbose) $display("(%0d) tx data ", $time, fshow(v));
+     pktcap.macRx.put(v);
+  endrule
+  rule drain_pkgen;
+     let v <- toGet(pktgen.macTx).get;
+     if (verbose) $display("(%0d) pktgen data", $time, fshow(v));
+     rxchan.macRx.put(v);
   endrule
   `endif
-  MainAPI api <- mkMainAPI(indication, hostchan, ingress, egress, txchan);
+  MainAPI api <- mkMainAPI(indication, hostchan, ingress, egress, txchan, pktgen, pktcap);
   interface request = api.request;
 
 `ifdef BOARD_nfsume
