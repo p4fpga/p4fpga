@@ -1,6 +1,3 @@
-### Compiler Organization 
-
-
 
 ### Generated Bluespec Organization
 
@@ -41,3 +38,35 @@
 - include ALU / Bluespec operator / DSP-based action engine
 
 
+### Compiler Organization 
+
+**main.cpp** :
+- generate Main.bsv
+- Main(runtime, program)
+
+**runtime.cpp** :
+- generate Runtime.bsv
+- Runtime()
+
+**program.cpp** :
+- generate Program.bsv
+- Program(arch, runtime)
+
+**pipeline.cpp** :
+- generate Pipeline.bsv based on arch.p4
+- arch specifies sequence of parser, deparser and control blocks
+- v1model : parser -> ingress -> egress -> deparser
+
+**control.cpp** :
+- generate Control.bsv
+- Control.bsv contain Ingress and Egress
+- Ingress/Egress implement control flow for tables and actions
+- Table/action can be empty to evaluate cost of pipeline.
+
+**table.cpp** :
+- implement p4 table (bcam, tcam)
+
+**action.cpp** :
+- implement p4 action
+- dsp optimizes arithmetic and logic operations
+- bluespec operator implement boolean operations
