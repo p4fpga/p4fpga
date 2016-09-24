@@ -2,25 +2,26 @@
 
 # Build P4FPGA from Source
 
-First, checkout this repository
+You will need p4fpga and p4c repository
 ```
 git clone https://github.com/hanw/p4fpga.git
+git clone https://github.com/p4lang/p4c.git
 ```
 
-
-Checkout P4FPGA depedencies
+Run bootstrap.sh in p4c
 ```
-cd {P4FPGA-DIR}
-git submodule init
-git submodule update
+cd p4c
+./bootstrap.sh
 ```
 
-The compiler requires pyaml package
+Create a soft-link to p4fpga source code in p4c
 ```
-sudo pip install pyaml
+ln -s extensions/c++ <path-to-p4fpga>/c++
 ```
 
-Install p4c_bm
+Build p4c with p4fpga backend
 ```
-sudo python {P4FPGA-DIR}/submodules/p4c_bm/setup.py install
+cd build
+make -j8
 ```
+
