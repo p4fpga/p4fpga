@@ -29,7 +29,7 @@ p4fpga_SOURCES = \
 	extensions/c++/libp4fpga/src/fdeparser.cpp \
 	extensions/c++/libp4fpga/include/fcontrol.h \
 	extensions/c++/libp4fpga/src/fcontrol.cpp \
-	extensions/c++/libp4fpga/src/fprogram.cpp \
+	extensions/c++/libp4fpga/src/program.cpp \
 	extensions/c++/libp4fpga/include/translator.h \
 	extensions/c++/libp4fpga/src/translator.cpp \
 	extensions/c++/libp4fpga/include/ftest.h \

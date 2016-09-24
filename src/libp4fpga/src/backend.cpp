@@ -8,7 +8,7 @@
 #include "lib/path.h"
 #include "frontends/p4/evaluator/evaluator.h"
 #include "frontends/p4/toP4/toP4.h"
-#include "fprogram.h"
+#include "program.h"
 #include "ftest.h"
 #include "ftype.h"
 #include "bsvprogram.h"

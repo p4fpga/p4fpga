@@ -4,7 +4,7 @@
 
 #include "lib/algorithm.h"
 #include "lib/sourceCodeBuilder.h"
-#include "fprogram.h"
+#include "program.h"
 #include "ir/ir.h"
 
 namespace FPGA {

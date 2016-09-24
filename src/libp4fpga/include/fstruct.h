@@ -18,7 +18,7 @@
 #define EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FSTRUCT_H_
 
 #include "ir/ir.h"
-#include "fprogram.h"
+#include "program.h"
 #include "bsvprogram.h"
 #include "string_utils.h"
 

@@ -18,7 +18,7 @@
 #define _BACKENDS_FPGA_FPGADEPARSER_H_
 
 #include "ir/ir.h"
-#include "fprogram.h"
+#include "program.h"
 
 namespace FPGA {
 

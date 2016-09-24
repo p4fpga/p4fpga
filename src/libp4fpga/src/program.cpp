@@ -16,7 +16,7 @@ limitations under the License.
 
 #include "frontends/p4/coreLibrary.h"
 #include "fstruct.h"
-#include "fprogram.h"
+#include "program.h"
 #include "fparser.h"
 #include "fcontrol.h"
 #include "fdeparser.h"
