@@ -466,8 +466,11 @@ module mkSetNhop (Control::SetNhop);
         let v = rx_info_prev_control_state.first;
         rx_info_prev_control_state.deq;
         case (v) matches
-            tagged SetNhopReqT {pkt: .pkt, meta: .meta} : begin
-                metadata <= meta;
+            tagged SetNhopReqT {pkt: .pkt, meta: .meta, nhop_ipv4: .nhop_ipv4, _port: ._port} : begin
+                let meta_out = meta;
+                meta_out.nhop_ipv4 = tagged Valid nhop_ipv4;
+                meta_out.egress_port = tagged Valid _port;
+                metadata <= meta_out;
                 curr_packet_ff.enq(pkt);
             end
         endcase

@@ -52,7 +52,7 @@ rule rl_ethernet_extract if ((parse_state_ff.first == StateEthernet) && (rg_buff
     let ethernet = extract_ethernet_t(truncate(data));
     compute_next_state_ethernet(ethernet.etherType);
     rg_tmp[0] <= zeroExtend(data >> 112);
-    succeed_and_next(0);
+    succeed_and_next(112);
     parse_state_ff.deq;
     ethernet_out_ff.enq(tagged Valid ethernet);
 endrule
@@ -86,7 +86,7 @@ rule rl_ipv4_extract if ((parse_state_ff.first == StateIpv4) && (rg_buffered[0] 
     let ipv4 = extract_ipv4_t(truncate(data));
     compute_next_state_ipv4();
     rg_tmp[0] <= zeroExtend(data >> 160);
-    succeed_and_next(0);
+    succeed_and_next(160);
     parse_state_ff.deq;
     ipv4_out_ff.enq(tagged Valid ipv4);
 endrule
@@ -103,10 +103,19 @@ rule rl_accept if (delay_ff.notEmpty);
     let ethernet <- toGet(ethernet_out_ff).get;
     if (isValid(ethernet)) begin
         meta.ethernet = tagged Forward;
+        meta.hdr.ethernet = tagged Valid;
+    end
+    if (ethernet matches tagged Valid .d) begin
     end
     let ipv4 <- toGet(ipv4_out_ff).get;
     if (isValid(ipv4)) begin
         meta.ipv4 = tagged Forward;
+        meta.hdr.ipv4 = tagged Valid;
+    end
+    if (ipv4 matches tagged Valid .d) begin
+        $display(fshow(ipv4));
+        meta.ttl = tagged Valid d.ttl;
+        meta.dstAddr = tagged Valid d.dstAddr;
     end
     rg_tmp[0] <= 0;
     rg_shift_amt[0] <= 0;

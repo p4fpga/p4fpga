@@ -21,7 +21,7 @@ typedef struct {
     Bit#(16) hdrChecksum;
     Bit#(32) srcAddr;
     Bit#(32) dstAddr;
-} Ipv4T deriving (Bits, Eq);
+} Ipv4T deriving (Bits, Eq, FShow);
 function Ipv4T extract_ipv4_t(Bit#(160) data);
     return unpack(byteSwap(data));
 endfunction
