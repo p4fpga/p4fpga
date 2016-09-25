@@ -11,11 +11,12 @@
 #include "program.h"
 #include "ftest.h"
 #include "ftype.h"
+#include "foptions.h"
 #include "bsvprogram.h"
 
 namespace FPGA {
-void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
-                      P4::ReferenceMap* refMap, const P4::TypeMap* typeMap) {
+void run_fpga_backend(const FPGAOptions& options, const IR::ToplevelBlock* toplevel,
+                      P4::ReferenceMap* refMap, P4::TypeMap* typeMap) {
     if (toplevel == nullptr)
         return;
 
@@ -96,7 +97,7 @@ void generate_metadata_profile(const IR::P4Program* program) {
     // std::ofstream(graphPath.native()) << graph.getGraphBuilder().toString();
 }
 
-void generate_table_profile(const Options& options, FPGA::Profiler* profgen) {
+void generate_table_profile(const FPGAOptions& options, FPGA::Profiler* profgen) {
     boost::filesystem::path dir(options.outputFile);
     boost::filesystem::create_directory(dir);
     boost::filesystem::path profileFile("table.prof");
@@ -104,7 +105,7 @@ void generate_table_profile(const Options& options, FPGA::Profiler* profgen) {
     std::ofstream(profilePath.native()) << profgen->getTableProfiler().toString();
 }
 
-void generate_partition(const Options& options, const IR::P4Program* program, cstring idx) {
+void generate_partition(const FPGAOptions& options, const IR::P4Program* program, cstring idx) {
     Util::PathName pathname(options.file);
     auto filename = pathname.getBasename() + idx + cstring(".p4");
     boost::filesystem::path dir(options.outputFile);

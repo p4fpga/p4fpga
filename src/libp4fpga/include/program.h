@@ -50,7 +50,7 @@ class FPGAProgram : public FPGAObject {
     const IR::P4Program*      program;
     const IR::ToplevelBlock*  toplevel;
     P4::ReferenceMap*         refMap;
-    const P4::TypeMap*        typeMap;
+    P4::TypeMap*              typeMap;
     // FIXME: dependency on v1model
     P4V1::V1Model&            v1model;
     FPGAParser*               parser;
@@ -66,7 +66,7 @@ class FPGAProgram : public FPGAObject {
     bool build();  // return 'true' on success
 
     FPGAProgram(const IR::P4Program* program, P4::ReferenceMap* refMap,
-                const P4::TypeMap* typeMap, const IR::ToplevelBlock* toplevel) :
+                P4::TypeMap* typeMap, const IR::ToplevelBlock* toplevel) :
             program(program), toplevel(toplevel),
             refMap(refMap), typeMap(typeMap),
             v1model(P4V1::V1Model::instance),
