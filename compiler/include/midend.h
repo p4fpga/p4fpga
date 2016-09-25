@@ -3,7 +3,7 @@
 #define EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_MIDEND_H_
 
 #include "ir/ir.h"
-#include "options.h"
+#include "foptions.h"
 #include "frontends/common/resolveReferences/referenceMap.h"
 #include "frontends/p4/typeMap.h"
 
@@ -16,7 +16,7 @@ class MidEnd {
     P4::TypeMap            typeMap;
 
     void addDebugHook(DebugHook hook) { hooks.push_back(hook); }
-    const IR::P4Program* run(Options& options, const IR::P4Program* program);
+    const IR::P4Program* run(const FPGAOptions& options, const IR::P4Program* program);
 };
 
 }  // namespace FPGA

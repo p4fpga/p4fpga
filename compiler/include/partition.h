@@ -11,12 +11,12 @@ namespace P4 {
 class DoPartition : public Transform {
     int n_table;
     bool start_partition;
-    const ReferenceMap* refMap;
-    const TypeMap*      typeMap;
+    ReferenceMap* refMap;
+    TypeMap*      typeMap;
     int tbegin;
     int tend;
  public:
-    DoPartition(const ReferenceMap* refMap, const TypeMap* typeMap, const int tbegin, const int tend) :
+    DoPartition(ReferenceMap* refMap, TypeMap* typeMap, const int tbegin, const int tend) :
             refMap(refMap), typeMap(typeMap), tbegin(tbegin), tend(tend)
     { CHECK_NULL(refMap); CHECK_NULL(typeMap); setName("DoPartition"); }
     const IR::Node* preorder(IR::BlockStatement* statement) override;

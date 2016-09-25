@@ -55,7 +55,6 @@ bool ActionCodeGen::preorder(const IR::MethodCallExpression* expression) {
   auto mi = P4::MethodInstance::resolve(expression,
                                         control->program->refMap,
                                         control->program->typeMap);
-  LOG1("MethodCall " << mi << " " << mi->methodType);
   auto apply = mi->to<P4::ApplyMethod>();
   if (apply != nullptr) {
     LOG1("handle apply");
@@ -66,10 +65,8 @@ bool ActionCodeGen::preorder(const IR::MethodCallExpression* expression) {
   if (ext != nullptr) {
     LOG1("MethodCall extern type");
     // ext->type : register
-    // ext->method : read / write
     // ext->expr : register name
-    // ext->getParameters : index value or result index
-    append_line(bsv, "// INST extern %s %s %s %s", ext->method->name.toString(), ext->type->toString(), ext->expr->toString(), ext->getParameters()->toString());
+    append_line(bsv, "// INST extern %s %s", ext->method->name.toString(), ext->expr->toString());
     return false;
   }
 

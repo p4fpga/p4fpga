@@ -14,20 +14,4 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Target
-
-#include <lib/cstring.h>
-
-namespace {
-
-class Target {
- protected:
-    cstring name;
-    explicit Target(cstring name) : name(name) {}
-    Target() = delete;
-    virtual ~Target() {}
- public:
-  virtual void emit() {}
-};
-
-}
+// pipeline: implement 

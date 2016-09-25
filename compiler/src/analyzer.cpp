@@ -95,16 +95,16 @@ namespace {
 // This visitor "converts" IR::Node* into EdgeSets
 // Since we cannot return EdgeSets, we place them in the 'after' map.
 class CFGBuilder : public Inspector {
-    CFG*                                           cfg;
-    const CFG::EdgeSet*                            current;  // predecessors of current node
+    CFG*                    cfg;
+    const CFG::EdgeSet*     current;  // predecessors of current node
     std::map<const IR::Statement*, const CFG::EdgeSet*> after;  // successors of each statement
-    const P4::ReferenceMap*                     refMap;
-    const P4::TypeMap*                          typeMap;
+    P4::ReferenceMap*       refMap;
+    P4::TypeMap*            typeMap;
 
     void setAfter(const IR::Statement* statement, const CFG::EdgeSet* value) {
         LOG1("After " << statement << " " << value);
         CHECK_NULL(statement);
-        if (value == nullptr) {
+        if (value == nullptr){
             // This can happen when an error is signaled
             // one cause is assignmentStatement
             return;
@@ -113,11 +113,10 @@ class CFGBuilder : public Inspector {
         current = value;
     }
 
-    const CFG::EdgeSet* get(const IR::Statement* statement) {
-      return ::get(after, statement);
-    }
+    const CFG::EdgeSet* get(const IR::Statement* statement)
+    { return ::get(after, statement); }
     bool preorder(const IR::Statement* statement) override {
-        //::error("%1%: not supported in control block on this architecture", statement);
+        // ::error("%1%: not supported in control block on this architecture", statement);
         return false;
     }
     bool preorder(const IR::ReturnStatement* statement) override {
@@ -149,7 +148,6 @@ class CFGBuilder : public Inspector {
             return false;
         }
         auto tc = am->object->to<IR::P4Table>();
-        LOG1("table << " << tc);
         auto node = cfg->makeNode(tc, statement->methodCall);
         if (current != nullptr) {
           node->addPredecessors(current);
@@ -165,7 +163,6 @@ class CFGBuilder : public Inspector {
         CFG::Node* node;
         if (tc != nullptr) {
             // hit-miss case.
-            LOG1("if << " << tc);
             node = cfg->makeNode(tc, statement->condition);
         } else {
             node = cfg->makeNode(statement);
@@ -181,7 +178,6 @@ class CFGBuilder : public Inspector {
         if (ifTrue == nullptr)
             return false;
         auto result = new CFG::EdgeSet(ifTrue);
-
         // Else branch
         if (statement->ifFalse != nullptr) {
             current = new CFG::EdgeSet(new CFG::Edge(node, false));
@@ -215,7 +211,6 @@ class CFGBuilder : public Inspector {
         auto tc = P4::TableApplySolver::isActionRun(statement->expression, refMap, typeMap);
         BUG_CHECK(tc != nullptr, "%1%: unexpected switch statement expression",
                   statement->expression);
-        LOG1("switch << " << tc);
         auto node = cfg->makeNode(tc, statement->expression);
         if (current != nullptr) {
           node->addPredecessors(current);
@@ -246,13 +241,11 @@ class CFGBuilder : public Inspector {
     }
 
  public:
-    CFGBuilder(CFG* cfg, const P4::ReferenceMap* refMap, const P4::TypeMap* typeMap) :
+    CFGBuilder(CFG* cfg, P4::ReferenceMap* refMap, P4::TypeMap* typeMap) :
             cfg(cfg), current(nullptr), refMap(refMap), typeMap(typeMap) {}
     const CFG::EdgeSet* run(const IR::Statement* startNode, const CFG::EdgeSet* predecessors) {
         CHECK_NULL(startNode); CHECK_NULL(predecessors);
         current = predecessors;
-        LOG1("start " << startNode->node_type_name());
-        LOG1("pred " << predecessors);
         startNode->apply(*this);
         return current;
     }
@@ -260,7 +253,7 @@ class CFGBuilder : public Inspector {
 }  // end anonymous namespace
 
 void CFG::build(const IR::P4Control* cc,
-                const P4::ReferenceMap* refMap, const P4::TypeMap* typeMap) {
+                P4::ReferenceMap* refMap, P4::TypeMap* typeMap) {
     container = cc;
     entryPoint = makeNode("entry");
     exitPoint = makeNode("exit");

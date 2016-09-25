@@ -72,6 +72,16 @@ bool FPGAProgram::build() {
 }
 
 void FPGAProgram::emit(BSVProgram & bsv, CppProgram & cpp) {
+
+  // instantiate Runtime
+  // runtime->emit();
+
+  // instantiate Pipeline
+  // pipeline->emit();
+
+  // instantiate API
+  // api->emit();
+
   LOG1("Emitting FPGA program");
   for (auto f : parser->parseStateMap) {
     LOG1(f.first << f.second);
