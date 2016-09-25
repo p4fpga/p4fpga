@@ -5,15 +5,24 @@
 - Runtime.bsv
 - Program.bsv
 
-**Runtime.bsv** : contains runtime environment for p4 program
+**Board.bsv** : contains runtime environment for p4 program
 - PHY + MAC
-- Stream Arbitration (maybe part of program.bsv)
+
+**Channels.bsv** : contains various in/out channels to pipeline
+- RxChannel : uses Parser.bsv
+- TxChannel : uses Deparser.bsv
+- DMAChannel/HostChannel : uses Parser.bsv
+- ReEntryChannel : uses Parser.bsv
+- DropChannel
+- PktGenChannel
+- PktCapChannel
+
+**Memory.bsv** :
 - Shared memory (optional)
-- Stream Demultiplexer (maybe part of program.bsv)
 
 **Program.bsv** : contains p4 program according to architecture specification in arch.p4
-- Parser.bsv
-- Deparser.bsv
+- Stream Arbitration (maybe part of program.bsv)
+- Stream Demultiplexer (maybe part of program.bsv)
 - Control.bsv
 - Table.bsv
 - Action.bsv
@@ -40,13 +49,15 @@
 
 ### Compiler Organization 
 
-**main.cpp** :
-- generate Main.bsv
-- Main(runtime, program)
+**backend.cpp**:
+- entry point to fpga backend
+- translate IR::TopLevelBlock to FPGA program
+- generate Top.bsv
+- Top : Platform, Runtime, Pipeline, API
 
-**runtime.cpp** :
-- generate Runtime.bsv
-- Runtime()
+**channel.cpp** :
+- generate Channel.bsv
+- Supported channels: RxChannel, TxChannel, DMAChannel, ReEntryChannel*, DropChannel*, PktGenChannel, PktCapChannel
 
 **program.cpp** :
 - generate Program.bsv
