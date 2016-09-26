@@ -7,7 +7,12 @@ namespace BSV {
 
 class Rule : Type {
 #nodbprint
-  const IR::Type* getP4Type() const override { return nullptr; }
+  const IR::Type* getP4Type() const override { return this; }
+}
+
+class Runtime : Type {
+#nodbprint
+  const IR::Type* getP4Type() const override { return this; }
 }
 
 class DeparseState : IR::Type_Header {

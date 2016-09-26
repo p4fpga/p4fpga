@@ -15,30 +15,25 @@
 #include "bsvprogram.h"
 
 namespace FPGA {
+
 void run_fpga_backend(const FPGAOptions& options, const IR::ToplevelBlock* toplevel,
                       P4::ReferenceMap* refMap, P4::TypeMap* typeMap) {
-    if (toplevel == nullptr)
-        return;
+    CHECK_NULL(toplevel);
+    CHECK_NULL(toplevel->getMain());
 
-    auto main = toplevel->getMain();
-    if (main == nullptr) {
-        ::error("Could not locate top-level block; is there a %1% module?", IR::P4Program::main);
-        return;
-    }
-
+    // If you ever need to create FPGAType from P4Type
     FPGATypeFactory::createFactory(typeMap);
 
-    const IR::P4Program* program = toplevel->getProgram();
+    // create Main.bsv
+    // Runtime runtime();
 
-    FPGAProgram fpgaprog(program, refMap, typeMap, toplevel);
-    if (!fpgaprog.build()) {
-        ::error("FPGAprog build failed");
-        return;
-    }
-    if (options.outputFile.isNullOrEmpty()) {
-        ::error("Must specify output directory");
-        return;
-    }
+    // create Program.bsv
+    FPGAProgram fpgaprog(toplevel, refMap, typeMap);
+    if (!fpgaprog.build())
+      { ::error("FPGAprog build failed"); return; }
+
+    if (options.outputFile.isNullOrEmpty())
+      { ::error("Must specify output directory"); return; }
 
     boost::filesystem::path dir(options.outputFile);
     boost::filesystem::create_directory(dir);

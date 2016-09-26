@@ -24,6 +24,7 @@ class FPGAOptions : public CompilerOptions {
  public:
   std::vector<cstring> partitions;
   bool dumpTable = false;
+  cstring runtime = nullptr;
   FPGAOptions() {
     registerOption("-P", "partition1[,partition2]",
                    [this](const char *arg) {
@@ -32,9 +33,13 @@ class FPGAOptions : public CompilerOptions {
                         partitions.push_back(partition);
                       return true;},
                    "Partition control flow at specific table id");
-   registerOption("--profile", nullptr,
-                  [this](const char*) { dumpTable = true; return true; },
-                  "Dump table resource utilization");
+    registerOption("--profile", nullptr,
+                   [this](const char*) { dumpTable = true; return true; },
+                   "Dump table resource utilization");
+    registerOption("-R", "runtime",
+                   [this](const char* arg) {
+                      runtime = arg; return true; },
+                   "Runtime type (stream/sharedmem)");
   }
 };
 
