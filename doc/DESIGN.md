@@ -14,6 +14,7 @@
 - DMAChannel/HostChannel : uses Parser.bsv
 - ReEntryChannel : uses Parser.bsv
 - DropChannel
+- StreamingChannel
 - PktGenChannel
 - PktCapChannel
 
