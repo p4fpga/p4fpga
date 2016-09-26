@@ -46,14 +46,8 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    // Optimization: Gearbox to 512 bit
 
    // Optimization: Optional Packet Memory
-   // SharedBuff buff <- mkSharedBuff(); // vector of buffers, to improve throughput?
-   // mkConnection(channels.readClients, buff.readServers);
-   // mkConnection(channels.freeClients, buff.freeServers);
-   // mkConnection(channels.writeClients, buff.writeServers);
-   // mkConnection(channels.mallocClients, buff.mallocServers);
-
-   //ConnectalMemory::MemServerIndication memServerInd;
-   //SharedBuffer#(12, 128, 1) mem <- mkSharedBuffer(vec(_txchan[0].readClient),
+   // vector of buffers, to improve throughput?
+   // SharedBuffer#(12, 128, 1) mem <- mkSharedBuffer(vec(_txchan[0].readClient),
    //                                    vec(_txchan[0].freeClient),
    //                                    vec(_hostchan[0].writeClient, _rxchan[0].writeClient),
    //                                    vec(_hostchan[0].mallocClient, _rxchan[0].mallocClient),

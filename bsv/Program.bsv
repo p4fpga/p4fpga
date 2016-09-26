@@ -32,23 +32,26 @@ import Control::*;
 import ConnectalTypes::*;
 
 interface Program#(numeric type nrx, numeric type ntx, numeric type nhs);
-   // memory-based
-   interface Vector#(nrx, Server#(MetadataRequest, MetadataResponse)) prev;
-   interface Vector#(ntx, Client#(MetadataRequest, MetadataResponse)) next;
-   // stream-based
-   // interface Vector#(nrx, StreamIn);
+   interface Vector#(nrx, PipeIn#(MetadataRequest)) prev;
+   interface Vector#(ntx, PipeOut#(MetadataRequest)) next;
    method Action set_verbosity (Bit#(32) verbosity);
-`include "APIDefGenerated.bsv"
 endinterface
+
+// mkConnection(rxchan.next, arbiter.prev[1]);
 
 module mkProgram(Program#(nrx, ntx, nhs));
    // N-to-1 RR Arbitration
-   //Ingress ingress <- mkIngress(vec(hostchan.next, rxchan.next));
-   // fifo queueing
-   //Egress egress <- mkEgress(vec(ingress.next));
-   // 1-to-N demux
-   // interface in = arbiter.in;
-   // interface out = demux.out;?
+   // Funnel??
+
+   // RRArbiter#(2) arbiter <- mkRRArbiter();
+   // Ingress ingress <- mkIngress();
+   // Egress egress <- mkEgress();
+   // Demux#(2) <- mkDemux();
+   // mkConnection(arbiter.next, ingress.prev);
+   // mkConnection(ingress.next, egress.prev);
+   // mkConnection(egress.next, demux.prev);
+   // interface prev = arbiter.prev;
+   // interface next = demux.next;?
    method Action set_verbosity (Bit#(32) verbosity);
       //ingress.set_verbosity(verbosity);
       //egress.set_verbosity(verbosity);

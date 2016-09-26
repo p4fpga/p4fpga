@@ -18,10 +18,9 @@ import Program::*;
 `include "ConnectalProjectConfig.bsv"
 
 interface MainRequest;
-  method Action read_version ();
-  method Action writePacketData (Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
-  method Action set_verbosity (Bit#(32) verbosity);
-  // Packet gen/cap APIs
+  method Action read_version();
+  method Action writePacketData(Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
+  method Action set_verbosity(Bit#(32) verbosity);
   method Action writePktGenData(Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
   method Action pktgen_start(Bit#(32) iteration, Bit#(32) ipg);
   method Action pktgen_stop();
@@ -53,7 +52,7 @@ module mkMainAPI #(MainIndication indication,
        beat.mask = pack(reverse(mask));
        beat.sop = unpack(sop);
        beat.eop = unpack(eop);
-       // hostchan.writeServer.writeData.put(beat);
+       runtime.hostchan[0].writeServer.writeData.put(beat);
     endmethod
     // packet gen/cap interfaces
     method Action writePktGenData(Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
