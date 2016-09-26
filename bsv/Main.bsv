@@ -37,7 +37,6 @@ import PktGen::*;
 import Board::*;
 import Runtime::*;
 import Program::*;
-
 `include "ConnectalProjectConfig.bsv"
 
 interface Main;
@@ -55,9 +54,8 @@ module mkMain #(HostInterface host, MainIndication indication, ConnectalMemory::
   Clock rxClock = board.rxClock;
   Reset rxReset = board.rxReset;
 
-  // implement memory or stream based design
-  Runtime#(1, 1, 1) runtime <- mkRuntime(rxClock, rxReset, txClock, txReset);
-  Program#(1, 1, 1) prog <- mkProgram();
+  Runtime#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) runtime <- mkRuntime(rxClock, rxReset, txClock, txReset);
+  Program#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) prog <- mkProgram();
 
   PktGenChannel pktgen <- mkPktGenChannel(txClock, txReset);
   PktCapChannel pktcap <- mkPktCapChannel(rxClock, rxReset);
