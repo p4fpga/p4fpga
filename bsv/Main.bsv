@@ -33,6 +33,7 @@ import PktCapChannel::*;
 import TxChannel::*;
 import RxChannel::*;
 import HostChannel::*;
+import StreamChannel::*;
 import PktGen::*;
 import Board::*;
 import Runtime::*;
@@ -57,13 +58,17 @@ module mkMain #(HostInterface host, MainIndication indication, ConnectalMemory::
   Runtime#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) runtime <- mkRuntime(rxClock, rxReset, txClock, txReset);
   Program#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) prog <- mkProgram();
 
+  for (Integer i=0; i<`NUM_HOSTCHAN; i=i+1) begin
+    mkConnection(runtime.hostchan[i].next, prog.prev[i]);
+  end
+
   PktGenChannel pktgen <- mkPktGenChannel(txClock, txReset);
   PktCapChannel pktcap <- mkPktCapChannel(rxClock, rxReset);
   //mkConnection(egress.next, runtime.txchan[0].prev); // insert demux, metadata fifo
 
 `ifdef SIMULATION
   mkTieOff(runtime.txchan[0].macTx);
-  mkConnection(pktgen.macTx, runtime.rxchan[0].macRx);
+  //mkConnection(pktgen.macTx, runtime.rxchan[0].macRx);
 `endif
 
   MainAPI api <- mkMainAPI(indication, runtime, prog, pktgen, pktcap);
