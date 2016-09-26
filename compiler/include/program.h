@@ -21,7 +21,6 @@ limitations under the License.
 #include "frontends/p4/typeMap.h"
 #include "frontends/p4/evaluator/evaluator.h"
 #include "frontends/p4/fromv1.0/v1model.h"
-#include "codebuilder.h"
 #include "translator.h"
 #include "bsvprogram.h"
 
@@ -35,52 +34,50 @@ class FPGADeparser;
 // // Base class for FPGA objects
 class FPGAObject {
  public:
-    virtual ~FPGAObject() {}
-    virtual void emit(BSVProgram & bsv) {};
-    virtual void emit(BSVProgram & bsv, CppProgram & cpp) {};
-    template<typename T> bool is() const { return to<T>() != nullptr; }
-    template<typename T> const T* to() const {
-        return dynamic_cast<const T*>(this); }
-    template<typename T> T* to() {
-        return dynamic_cast<T*>(this); }
+  virtual ~FPGAObject() {}
+  virtual void emit(BSVProgram & bsv) {};
+  virtual void emit(BSVProgram & bsv, CppProgram & cpp) {};
+  template<typename T> bool is() const { return to<T>() != nullptr; }
+  template<typename T> const T* to() const {
+      return dynamic_cast<const T*>(this); }
+  template<typename T> T* to() {
+      return dynamic_cast<T*>(this); }
 };
 
 class FPGAProgram : public FPGAObject {
  public:
-    const IR::P4Program*      program;
-    const IR::ToplevelBlock*  toplevel;
-    P4::ReferenceMap*         refMap;
-    P4::TypeMap*              typeMap;
-    // FIXME: dependency on v1model
-    P4V1::V1Model&            v1model;
-    FPGAParser*               parser;
-    FPGAControl*              ingress;
-    FPGAControl*              egress;
-    FPGADeparser*             deparser;
-    // TODO: flexible pipeline should have a map of these controlblocks
-    ExpressionTranslator*     tr;
-    std::map<cstring, const IR::Member*> metadata;
+  const IR::ToplevelBlock*  toplevel;
+  const IR::P4Program*      program;
+  P4::ReferenceMap*         refMap;
+  P4::TypeMap*              typeMap;
+  // FIXME: dependency on v1model
+  P4V1::V1Model&            v1model;
+  FPGAParser*               parser;
+  FPGAControl*              ingress;
+  FPGAControl*              egress;
+  FPGADeparser*             deparser;
+  // TODO: flexible pipeline should have a map of these controlblocks
+  std::map<cstring, const IR::Member*> metadata;
 
-    // write program as bluespec source code
-    void emit(BSVProgram & bsv, CppProgram & cpp); // override;
-    bool build();  // return 'true' on success
+  // write program as bluespec source code
+  void emit(BSVProgram & bsv, CppProgram & cpp); // override;
+  bool build();  // return 'true' on success
 
-    FPGAProgram(const IR::P4Program* program, P4::ReferenceMap* refMap,
-                P4::TypeMap* typeMap, const IR::ToplevelBlock* toplevel) :
-            program(program), toplevel(toplevel),
-            refMap(refMap), typeMap(typeMap),
-            v1model(P4V1::V1Model::instance),
-            // no love for this..
-            tr(new ExpressionTranslator(this)){
-    }
+  FPGAProgram(const IR::ToplevelBlock* toplevel,
+              P4::ReferenceMap* refMap, P4::TypeMap* typeMap) :
+      toplevel(toplevel),
+      refMap(refMap), typeMap(typeMap),
+      v1model(P4V1::V1Model::instance){
+    program = toplevel->getProgram();
+  }
 
  private:
-    void emitIncludes(CodeBuilder* builder);
-    void emitTypes(CodeBuilder* builder);
-    void emitTables(CodeBuilder* builder);
-    void emitHeaderInstances(CodeBuilder* builder);
-    void emitPipeline(CodeBuilder* builder);
-    void emitLicense(CodeBuilder* builder);
+  void emitIncludes(CodeBuilder* builder);
+  void emitTypes(CodeBuilder* builder);
+  void emitTables(CodeBuilder* builder);
+  void emitHeaderInstances(CodeBuilder* builder);
+  void emitPipeline(CodeBuilder* builder);
+  void emitLicense(CodeBuilder* builder);
 };
 
 }  // namespace FPGA
