@@ -9,10 +9,12 @@ import PacketBuffer::*;
 import TxChannel::*;
 import Vector::*;
 import Control::*;
-//import ConnectalTypes::*;
+import ConnectalTypes::*;
 import PktGenChannel::*;
 import PktCapChannel::*;
 import DbgDefs::*;
+import Runtime::*;
+import Program::*;
 `include "ConnectalProjectConfig.bsv"
 
 interface MainRequest;
@@ -35,19 +37,23 @@ endinterface
 interface MainAPI;
   interface MainRequest request;
 endinterface
-module mkMainAPI #(MainIndication indication,HostChannel hostchan,Ingress ingress, Egress egress, TxChannel txchan, PktGenChannel pktgen, PktCapChannel pktcap) (MainAPI);
+module mkMainAPI #(MainIndication indication,
+                   Runtime#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) runtime,
+                   Program#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) prog,
+                   PktGenChannel pktgen,
+                   PktCapChannel pktcap)(MainAPI);
   interface MainRequest request;
     method Action read_version ();
-        let v = `NicVersion;
-        indication.read_version_rsp(v);
+       let v = `NicVersion;
+       indication.read_version_rsp(v);
     endmethod
     method Action writePacketData (Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
-        EtherData beat = defaultValue;
-        beat.data = pack(reverse(data));
-        beat.mask = pack(reverse(mask));
-        beat.sop = unpack(sop);
-        beat.eop = unpack(eop);
-        hostchan.writeServer.writeData.put(beat);
+       EtherData beat = defaultValue;
+       beat.data = pack(reverse(data));
+       beat.mask = pack(reverse(mask));
+       beat.sop = unpack(sop);
+       beat.eop = unpack(eop);
+       // hostchan.writeServer.writeData.put(beat);
     endmethod
     // packet gen/cap interfaces
     method Action writePktGenData(Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
@@ -68,10 +74,8 @@ module mkMainAPI #(MainIndication indication,HostChannel hostchan,Ingress ingres
     endmethod
     // verbosity
     method Action set_verbosity (Bit#(32) verbosity);
-        hostchan.set_verbosity(unpack(verbosity));
-        txchan.set_verbosity(unpack(verbosity));
-        ingress.set_verbosity(unpack(verbosity));
-        egress.set_verbosity(unpack(verbosity));
+       runtime.set_verbosity(unpack(verbosity));
+       prog.set_verbosity(unpack(verbosity));
     endmethod
 `include "APIDeclGenerated.bsv"
   endinterface

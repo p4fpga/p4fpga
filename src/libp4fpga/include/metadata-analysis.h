@@ -2,7 +2,6 @@
 #define _BACKENDS_P4_METADATA_ANALYSIS_H_
 
 #include "ir/ir.h"
-#include "codebuilder.h"
 #include "frontends/p4/typeChecking/typeChecker.h"
 
 namespace P4 {

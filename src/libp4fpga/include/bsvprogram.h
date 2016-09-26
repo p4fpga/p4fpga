@@ -1,8 +1,15 @@
 #pragma once
 
-#include "codebuilder.h"
+#include "ir/ir.h"
+#include "lib/sourceCodeBuilder.h"
+#include "frontends/p4/typeMap.h"
 
 namespace FPGA {
+
+class CodeBuilder : public Util::SourceCodeBuilder {
+ public:
+    CodeBuilder() {}
+};
 
 class BSVProgram {
  public:
