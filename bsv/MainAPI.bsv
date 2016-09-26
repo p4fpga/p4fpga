@@ -4,9 +4,10 @@ import Connectable::*;
 import DefaultValue::*;
 import Ethernet::*;
 import GetPut::*;
-import HostChannel::*;
 import PacketBuffer::*;
+import HostChannel::*;
 import TxChannel::*;
+import StreamChannel::*;
 import Vector::*;
 import Control::*;
 import ConnectalTypes::*;
@@ -53,6 +54,7 @@ module mkMainAPI #(MainIndication indication,
        beat.sop = unpack(sop);
        beat.eop = unpack(eop);
        runtime.hostchan[0].writeServer.writeData.put(beat);
+       $display("write data ", fshow(beat));
     endmethod
     // packet gen/cap interfaces
     method Action writePktGenData(Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);

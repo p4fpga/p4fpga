@@ -24,8 +24,10 @@ import BuildVector::*;
 import ClientServer::*;
 import Control::*;
 import GetPut::*;
+import FIFOF::*;
 import Vector::*;
 import Ethernet::*;
+import Pipe::*;
 import StructDefines::*;
 import UnionDefines::*;
 import Control::*;
@@ -34,25 +36,37 @@ import ConnectalTypes::*;
 interface Program#(numeric type nrx, numeric type ntx, numeric type nhs);
    interface Vector#(nrx, PipeIn#(MetadataRequest)) prev;
    interface Vector#(ntx, PipeOut#(MetadataRequest)) next;
-   method Action set_verbosity (Bit#(32) verbosity);
+   method Action set_verbosity (int verbosity);
+`include "APIDefGenerated.bsv"
 endinterface
 
 // mkConnection(rxchan.next, arbiter.prev[1]);
 
-module mkProgram(Program#(nrx, ntx, nhs));
+module mkProgram(Program#(nrx, ntx, nhs))
+   provisos(Pipe::FunnelPipesPipelined#(1, nrx, StructDefines::MetadataRequest, 2));
    // N-to-1 RR Arbitration
-   // Funnel??
+   Vector#(nrx, FIFOF#(MetadataRequest)) funnel_ff <- replicateM(mkFIFOF);
+   function PipeIn#(MetadataRequest) metaPipeIn(Integer i);
+      return toPipeIn(funnel_ff[i]);
+   endfunction
+   function PipeOut#(MetadataRequest) metaPipeOut(Integer i);
+      return toPipeOut(funnel_ff[i]);
+   endfunction
+   FunnelPipe#(1, nrx, MetadataRequest, 2) funnel <- mkFunnelPipesPipelined(genWith(metaPipeOut));
 
-   // RRArbiter#(2) arbiter <- mkRRArbiter();
+
    // Ingress ingress <- mkIngress();
    // Egress egress <- mkEgress();
-   // Demux#(2) <- mkDemux();
    // mkConnection(arbiter.next, ingress.prev);
    // mkConnection(ingress.next, egress.prev);
    // mkConnection(egress.next, demux.prev);
-   // interface prev = arbiter.prev;
+
+   // 1-to-N unfunnel
+   // Demux#(2) <- mkDemux();
+
+   interface prev = genWith(metaPipeIn);
    // interface next = demux.next;?
-   method Action set_verbosity (Bit#(32) verbosity);
+   method Action set_verbosity (int verbosity);
       //ingress.set_verbosity(verbosity);
       //egress.set_verbosity(verbosity);
    endmethod

@@ -24,24 +24,44 @@ import Vector::*;
 import RxChannel::*;
 import HostChannel::*;
 import TxChannel::*;
+import StreamChannel::*;
 import SharedBuff::*;
 import PacketBuffer::*;
-
+import TieOff::*;
+`include "ConnectalProjectConfig.bsv"
 /*
    P4FPGA runtime consists of 5 types of channels and optional packet memory
    to acclerate packet re-entry
  */
 interface Runtime#(numeric type nrx, numeric type ntx, numeric type nhs);
+`ifdef MEMORY
    interface Vector#(nrx, RxChannel) rxchan;
    interface Vector#(ntx, TxChannel) txchan;
    interface Vector#(nhs, HostChannel) hostchan;
+`endif
+`ifdef STREAM
+   interface Vector#(nrx, StreamInChannel) rxchan;
+   interface Vector#(ntx, StreamOutChannel) txchan;
+   interface Vector#(nhs, StreamInChannel) hostchan;
+`endif
    // TODO: reentryChannel and dropChannel
-   method Action set_verbosity (Bit#(32) verbosity);
+   method Action set_verbosity (int verbosity);
 endinterface
 module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Runtime#(nrx, ntx, nhs));
+
+`ifdef MEMORY
    Vector#(nhs, HostChannel) _hostchan <- replicateM(mkHostChannel());
    Vector#(nrx, RxChannel) _rxchan <- replicateM(mkRxChannel(rxClock, rxReset));
    Vector#(ntx, TxChannel) _txchan <- replicateM(mkTxChannel(txClock, txReset));
+`endif
+`ifdef STREAM
+   Vector#(nhs, StreamInChannel) _hostchan <- replicateM(mkStreamInChannel());
+   Vector#(nrx, StreamInChannel) _rxchan <- replicateM(mkStreamInChannel(clocked_by rxClock, reset_by rxReset));
+   Vector#(ntx, StreamOutChannel) _txchan <- replicateM(mkStreamOutChannel(txClock, txReset));
+`endif
+
+   // drop streamed bytes on the floor
+   mkTieOff(_hostchan[0].writeClient.writeData);
 
    // Optimization: Gearbox to 512 bit
 
@@ -56,9 +76,9 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    interface rxchan = _rxchan;
    interface txchan = _txchan;
    interface hostchan = _hostchan;
-   method Action set_verbosity (Bit#(32) verbosity);
+   method Action set_verbosity (int verbosity);
       //_rxchan.set_verbosity(verbosity);
-      _txchan[0].set_verbosity(unpack(verbosity));
-      _hostchan[0].set_verbosity(unpack(verbosity));
+      _txchan[0].set_verbosity(verbosity);
+      _hostchan[0].set_verbosity(verbosity);
    endmethod
 endmodule
