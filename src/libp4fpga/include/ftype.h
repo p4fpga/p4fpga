@@ -17,10 +17,6 @@ class FPGAType : public FPGAObject {
     const IR::Type* type;
     virtual void emit(BSVProgram & bsv) = 0;
     virtual void declare(BSVProgram & bsv, cstring id, bool asPointer) = 0;
-    virtual void emitInitializer(BSVProgram & bsv) = 0;
-    virtual void declareArray(BSVProgram & bsv ,
-                              const char* /*id*/, unsigned /*size*/)
-    { BUG("Arrays of %1% not supported", type); }
     // cstring toString(const Target* target);
 };
 
@@ -49,11 +45,9 @@ class FPGABoolType : public FPGAType, IHasWidth {
  public:
     FPGABoolType() : FPGAType(IR::Type_Boolean::get()) {}
     void emit(BSVProgram & bsv) override
-    { bsv.getParserBuilder().append("u8"); }
+    { }
     void declare(BSVProgram & bsv,
                  cstring id, bool asPointer) override;
-    void emitInitializer(BSVProgram & bsv) override
-    { bsv.getParserBuilder().append("0"); }
     unsigned widthInBits() override { return 1; }
     unsigned implementationWidthInBits() override { return 8; }
 };
@@ -70,8 +64,6 @@ class FPGAScalarType : public FPGAType, public IHasWidth {
     void emit(BSVProgram & bsv) override;
     void declare(BSVProgram & bsv,
                  cstring id, bool asPointer) override;
-    void emitInitializer(BSVProgram & bsv) override
-    { bsv.getParserBuilder().append("0"); }
     unsigned widthInBits() override { return width; }
     unsigned implementationWidthInBits() override { return bytesRequired() * 8; }
     // True if this width is small enough to store in a machine scalar
@@ -88,7 +80,6 @@ class FPGATypeName : public FPGAType, public IHasWidth {
             FPGAType(type), type(type), canonical(canonical) {}
     void emit(BSVProgram & bsv) override { canonical->emit(bsv); }
     void declare(BSVProgram & bsv, cstring id, bool asPointer) override;
-    void emitInitializer(BSVProgram & bsv) override;
     unsigned widthInBits() override;
     unsigned implementationWidthInBits() override;
 };
@@ -113,11 +104,11 @@ class FPGAStructType : public FPGAType, public IHasWidth {
 
     explicit FPGAStructType(const IR::Type_StructLike* strct);
     void declare(BSVProgram & bsv, cstring id, bool asPointer) override;
-    void emitInitializer(BSVProgram & bsv) override;
     unsigned widthInBits() override { return width; }
     unsigned implementationWidthInBits() override { return implWidth; }
     void emit(BSVProgram & bsv) override;
 };
+
 
 }  // namespace FPGA
 

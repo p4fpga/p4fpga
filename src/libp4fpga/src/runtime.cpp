@@ -19,18 +19,23 @@ limitations under the License.
 
 namespace FPGA {
 
-class Runtime {
+class Runtime : public FPGAObject {
  protected:
   int num_ports;
   cstring type;
   cstring device; // Xilinx or Altera
   explicit Runtime() {}
  public:
+  enum Mode{
+    STREAM,
+    MEMORY
+  };
   virtual void emit() {}
 };
 
 // emit Runtime.bsv
 class StreamingRuntime : public Runtime {
+  // emit
   void emit() {
     // instantiate PHY
     // instantiate MAC
