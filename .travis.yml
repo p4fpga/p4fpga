@@ -10,6 +10,7 @@ env:
     - BLUESPECDIR=$PWD/Bluespec-2015.09.beta2/lib
     - PATH=$PATH:$PWD/Bluespec-2015.09.beta2/bin
     - LD_LIBRARY_PATH=$PWD/lib
+    - DEV_ROOT=$PWD
   matrix:
     - CONNECTAL_TEST=examples/07-mdp CONNECTAL_ARCH=bluesim
 script:
