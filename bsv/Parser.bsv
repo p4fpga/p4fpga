@@ -44,6 +44,7 @@ import PrintTrace::*;
 import Register::*;
 import SpecialFIFOs::*;
 import SharedBuff::*;
+import Stream::*;
 import StmtFSM::*;
 import TxRx::*;
 import Utils::*;
@@ -57,7 +58,7 @@ import UnionDefines::*;
 `undef PARSER_STRUCT
 
 interface Parser;
-   interface Put#(EtherData) frameIn;
+   interface Put#(ByteStream#(16)) frameIn;
    interface Get#(MetadataT) meta;
    method Action set_verbosity (int verbosity);
    method ParserPerfRec read_perf_info ();
@@ -67,7 +68,7 @@ module mkParser  (Parser);
    Reg#(Bool) parse_done[2] <- mkCReg(2, True);
    FIFO#(ParserState) parse_state_ff <- mkPipelineFIFO();
    FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
-   FIFOF#(EtherData) data_in_ff <- mkFIFOF;
+   FIFOF#(ByteStream#(16)) data_in_ff <- mkFIFOF;
    FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;
    PulseWire w_parse_done <- mkPulseWire();
    PulseWire w_parse_header_done <- mkPulseWireOR();
