@@ -22,6 +22,7 @@
 
 import BuildVector::*;
 import ClientServer::*;
+import Connectable::*;
 import Control::*;
 import GetPut::*;
 import FIFOF::*;
@@ -33,6 +34,10 @@ import UnionDefines::*;
 import Control::*;
 import ConnectalTypes::*;
 import Stream::*;
+import TieOff::*;
+
+`include "TieOff.defines"
+`TIEOFF_PIPEOUT("program ", MetadataRequest)
 
 interface Program#(numeric type nrx, numeric type ntx, numeric type nhs);
    interface Vector#(nrx, PipeIn#(MetadataRequest)) prev;
@@ -42,8 +47,12 @@ interface Program#(numeric type nrx, numeric type ntx, numeric type nhs);
 endinterface
 
 module mkProgram(Program#(nrx, ntx, nhs))
-   provisos(Pipe::FunnelPipesPipelined#(1, nrx, StructDefines::MetadataRequest, 2));
-   // N-to-1 RR Arbitration
+   provisos(Pipe::FunnelPipesPipelined#(1, nrx, StructDefines::MetadataRequest, 2)
+           ,Add#(b__, TLog#(TAdd#(TAdd#(nrx, ntx), nhs)), 9)
+           ,Pipe::FunnelPipesPipelined#(1, TAdd#(TAdd#(nrx, ntx), nhs), StructDefines::MetadataRequest, 2)
+           ,NumAlias#(TLog#(TAdd#(TAdd#(nrx, ntx), nhs)), wport)
+           ,NumAlias#(TAdd#(TAdd#(nrx, ntx), nhs), nport));
+   // N-to-1 arbitration
    Vector#(nrx, FIFOF#(MetadataRequest)) funnel_ff <- replicateM(mkFIFOF);
    function PipeIn#(MetadataRequest) metaPipeIn(Integer i);
       return toPipeIn(funnel_ff[i]);
@@ -51,21 +60,34 @@ module mkProgram(Program#(nrx, ntx, nhs))
    function PipeOut#(MetadataRequest) metaPipeOut(Integer i);
       return toPipeOut(funnel_ff[i]);
    endfunction
-   FunnelPipe#(1, nrx, MetadataRequest, 2) funnel <- mkFunnelPipesPipelined(genWith(metaPipeOut));
+   FunnelPipe#(1, nrx, MetadataRequest, 2) metaPipe <- mkFunnelPipesPipelined(genWith(metaPipeOut));
 
-   // Ingress ingress <- mkIngress();
-   // Egress egress <- mkEgress();
-   // mkConnection(arbiter.next, ingress.prev);
-   // mkConnection(ingress.next, egress.prev);
-   // mkConnection(egress.next, demux.prev);
+   Ingress ingress <- mkIngress();
+   mkConnection(metaPipe[0], ingress.prev);
 
-   // 1-to-N unfunnel
-   // Demux#(2) <- mkDemux();
+   Egress egress <- mkEgress();
+   mkConnection(ingress.next, egress.prev);
+
+   FIFOF#(Tuple2#(Bit#(wport), MetadataRequest)) writeData <- mkFIFOF;
+   UnFunnelPipe#(1, nport, MetadataRequest, 2) demux <- mkUnFunnelPipesPipelined(vec(toPipeOut(writeData)));
+   mapM_(mkTieOff, demux);
+
+   // use egress_port as tag to select outgoing port
+   rule egress_demux;
+      let v = egress.next.first;
+      egress.next.deq;
+      if (v.meta.egress_port matches tagged Valid .prt) begin
+         let tpl = tuple2(truncate(prt), v);
+         writeData.enq(tpl);
+         $display("type of port ", printType(typeOf(writeData)));
+      end
+   endrule
 
    interface prev = genWith(metaPipeIn);
    // interface next = demux.next;?
    method Action set_verbosity (int verbosity);
-      //ingress.set_verbosity(verbosity);
-      //egress.set_verbosity(verbosity);
+      ingress.set_verbosity(verbosity);
+      egress.set_verbosity(verbosity);
    endmethod
 endmodule
+

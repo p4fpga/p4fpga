@@ -56,8 +56,8 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    Vector#(ntx, TxChannel) _txchan <- replicateM(mkTxChannel(txClock, txReset));
 `endif
 `ifdef STREAM
-   Vector#(nhs, StreamInChannel) _hostchan <- replicateM(mkStreamInChannel());
-   Vector#(nrx, StreamInChannel) _rxchan <- replicateM(mkStreamInChannel(clocked_by rxClock, reset_by rxReset));
+   Vector#(nhs, StreamInChannel) _hostchan <- genWithM(mkStreamInChannel);
+   Vector#(nrx, StreamInChannel) _rxchan <- genWithM(mkStreamInChannel, clocked_by rxClock, reset_by rxReset);
    Vector#(ntx, StreamOutChannel) _txchan <- replicateM(mkStreamOutChannel(txClock, txReset));
 `endif
 

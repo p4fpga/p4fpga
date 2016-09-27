@@ -63,7 +63,7 @@ interface Parser;
    method Action set_verbosity (int verbosity);
    method ParserPerfRec read_perf_info ();
 endinterface
-module mkParser  (Parser);
+module mkParser#(Integer portnum)(Parser);
    Reg#(int) cf_verbosity <- mkConfigRegU;
    Reg#(Bool) parse_done[2] <- mkCReg(2, True);
    FIFO#(ParserState) parse_state_ff <- mkPipelineFIFO();
