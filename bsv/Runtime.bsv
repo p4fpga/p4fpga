@@ -27,6 +27,7 @@ import TxChannel::*;
 import StreamChannel::*;
 import SharedBuff::*;
 import PacketBuffer::*;
+import Stream::*;
 import TieOff::*;
 `include "ConnectalProjectConfig.bsv"
 /*

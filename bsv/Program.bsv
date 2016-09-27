@@ -32,6 +32,7 @@ import StructDefines::*;
 import UnionDefines::*;
 import Control::*;
 import ConnectalTypes::*;
+import Stream::*;
 
 interface Program#(numeric type nrx, numeric type ntx, numeric type nhs);
    interface Vector#(nrx, PipeIn#(MetadataRequest)) prev;
@@ -39,8 +40,6 @@ interface Program#(numeric type nrx, numeric type ntx, numeric type nhs);
    method Action set_verbosity (int verbosity);
 `include "APIDefGenerated.bsv"
 endinterface
-
-// mkConnection(rxchan.next, arbiter.prev[1]);
 
 module mkProgram(Program#(nrx, ntx, nhs))
    provisos(Pipe::FunnelPipesPipelined#(1, nrx, StructDefines::MetadataRequest, 2));
@@ -53,7 +52,6 @@ module mkProgram(Program#(nrx, ntx, nhs))
       return toPipeOut(funnel_ff[i]);
    endfunction
    FunnelPipe#(1, nrx, MetadataRequest, 2) funnel <- mkFunnelPipesPipelined(genWith(metaPipeOut));
-
 
    // Ingress ingress <- mkIngress();
    // Egress egress <- mkEgress();

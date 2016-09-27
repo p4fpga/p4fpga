@@ -43,6 +43,7 @@ import Pipe::*;
 import PrintTrace::*;
 import Register::*;
 import SpecialFIFOs::*;
+import Stream::*;
 import SharedBuff::*;
 import StmtFSM::*;
 import TxRx::*;
@@ -79,8 +80,8 @@ module mkDeparser (Deparser);
       endaction
    endfunction
 
-   FIFOF#(EtherData) data_in_ff <- mkFIFOF;
-   FIFOF#(EtherData) data_out_ff <- mkFIFOF;
+   FIFOF#(ByteStream#(16)) data_in_ff <- mkFIFOF;
+   FIFOF#(ByteStream#(16)) data_out_ff <- mkFIFOF;
    FIFOF#(MetadataT) meta_in_ff <- mkSizedFIFOF(16);
    FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
    FIFO#(DeparserState) deparse_state_ff <- mkPipelineFIFO();
@@ -152,7 +153,7 @@ module mkDeparser (Deparser);
     if (rg_shift_amt[1] != 0) begin
       Bit#(128) data_mask = create_mask(cExtend(rg_shift_amt[1]));
       Bit#(16) mask_out = create_mask(cExtend(rg_shift_amt[1] >> 3));
-      let data = EtherData { sop: v.sop, eop: v.eop, data: truncate(rg_tmp[1]) & data_mask, mask: mask_out};
+      let data = ByteStream { sop: v.sop, eop: v.eop, data: truncate(rg_tmp[1]) & data_mask, mask: mask_out};
       data_out_ff.enq(data);
       dbprint(4, $format("Deparser:rl_deparse_payload rg_shift_amt=%d", rg_shift_amt[1], fshow(data)));
       rg_shift_amt[1] <= 0;
@@ -207,7 +208,7 @@ module mkDeparser (Deparser);
     dbprint(3, $format("Deparser:rl_deparse_send ", fshow(v)));
     Bit#(128) data_out = truncate(rg_tmp[1] & create_mask(cExtend(amt)));
     Bit#(16) mask_out = create_mask(cExtend(amt >> 3));
-    let data = EtherData { sop: sop_this_cycle, eop: False, data: data_out, mask: mask_out };
+    let data = ByteStream { sop: sop_this_cycle, eop: False, data: data_out, mask: mask_out };
     rg_tmp[1] <= rg_tmp[1] >> amt;
     rg_processed[1] <= rg_processed[1] - amt;
     rg_shift_amt[1] <= rg_shift_amt[1] - amt;

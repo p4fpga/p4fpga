@@ -8,6 +8,7 @@ import PacketBuffer::*;
 import HostChannel::*;
 import TxChannel::*;
 import StreamChannel::*;
+import Stream::*;
 import Vector::*;
 import Control::*;
 import ConnectalTypes::*;
@@ -48,7 +49,7 @@ module mkMainAPI #(MainIndication indication,
        indication.read_version_rsp(v);
     endmethod
     method Action writePacketData (Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
-       EtherData beat = defaultValue;
+       ByteStream#(16) beat = defaultValue;
        beat.data = pack(reverse(data));
        beat.mask = pack(reverse(mask));
        beat.sop = unpack(sop);
@@ -58,7 +59,7 @@ module mkMainAPI #(MainIndication indication,
     endmethod
     // packet gen/cap interfaces
     method Action writePktGenData(Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
-       EtherData beat = defaultValue;
+       ByteStream#(16) beat = defaultValue;
        beat.data = pack(reverse(data));
        beat.mask = pack(reverse(mask));
        beat.sop = unpack(sop);
