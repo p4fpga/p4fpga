@@ -211,7 +211,7 @@ int main(int argc, char **argv)
     device = new MainRequestProxy(IfcNames_MainRequestS2H);
 
     parse_options(argc, argv, &pcap_file, &intf, &outf, &arguments);
-    device->set_verbosity(1);
+    device->set_verbosity(6);
     device->read_version();
 
     // application specific call

@@ -26,6 +26,7 @@ import Connectable::*;
 import GetPut::*;
 import HostInterface::*;
 import MainAPI::*;
+import DbgDefs::*;
 import Sims::*;
 import TieOff::*;
 import PktGenChannel::*;
