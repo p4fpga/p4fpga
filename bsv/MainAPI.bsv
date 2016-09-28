@@ -1,3 +1,4 @@
+`include "ConnectalProjectConfig.bsv"
 import BuildVector::*;
 import Clocks::*;
 import Connectable::*;
@@ -17,7 +18,6 @@ import PktCapChannel::*;
 import DbgDefs::*;
 import Runtime::*;
 import Program::*;
-`include "ConnectalProjectConfig.bsv"
 
 interface MainRequest;
   method Action read_version();
