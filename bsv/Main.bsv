@@ -24,6 +24,7 @@ import BuildVector::*;
 import Clocks::*;
 import Connectable::*;
 import GetPut::*;
+import Vector::*;
 import HostInterface::*;
 import MainAPI::*;
 import DbgDefs::*;
@@ -39,6 +40,9 @@ import PktGen::*;
 import Board::*;
 import Runtime::*;
 import Program::*;
+import Pipe::*;
+import StructDefines::*;
+import ConnectalTypes::*;
 `include "ConnectalProjectConfig.bsv"
 
 interface Main;
@@ -59,16 +63,24 @@ module mkMain #(HostInterface host, MainIndication indication, ConnectalMemory::
   Runtime#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) runtime <- mkRuntime(rxClock, rxReset, txClock, txReset);
   Program#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) prog <- mkProgram();
 
+  // Port 0 is HostChan
   for (Integer i=0; i<`NUM_HOSTCHAN; i=i+1) begin
     mkConnection(runtime.hostchan[i].next, prog.prev[i]);
   end
 
+  // Port 1-4 is RxChan
+  for (Integer i=0; i<`NUM_RXCHAN; i=i+1) begin
+    messageM(printType(typeOf(prog.prev)) + printType(typeOf(runtime.rxchan)));
+    mkConnection(runtime.rxchan[i].next, prog.prev[i+`NUM_HOSTCHAN]);
+  end
+
+  // Port 5 is PktGen
   PktGenChannel pktgen <- mkPktGenChannel(txClock, txReset);
   PktCapChannel pktcap <- mkPktCapChannel(rxClock, rxReset);
-  //mkConnection(egress.next, runtime.txchan[0].prev); // insert demux, metadata fifo
 
 `ifdef SIMULATION
   mkTieOff(runtime.txchan[0].macTx);
+  mapM_(mkTieOff, prog.next);
   //mkConnection(pktgen.macTx, runtime.rxchan[0].macRx);
 `endif
 

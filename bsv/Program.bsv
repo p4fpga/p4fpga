@@ -40,27 +40,30 @@ import TieOff::*;
 `TIEOFF_PIPEOUT("program ", MetadataRequest)
 
 interface Program#(numeric type nrx, numeric type ntx, numeric type nhs);
-   interface Vector#(nrx, PipeIn#(MetadataRequest)) prev;
+   interface Vector#(TAdd#(nrx, nhs), PipeIn#(MetadataRequest)) prev;
    interface Vector#(ntx, PipeOut#(MetadataRequest)) next;
    method Action set_verbosity (int verbosity);
-`include "APIDefGenerated.bsv"
+`include "APIDefGenerated.bsv" // for table api
 endinterface
 
 module mkProgram(Program#(nrx, ntx, nhs))
-   provisos(Pipe::FunnelPipesPipelined#(1, nrx, StructDefines::MetadataRequest, 2)
-           ,Add#(b__, TLog#(TAdd#(TAdd#(nrx, ntx), nhs)), 9)
-           ,Pipe::FunnelPipesPipelined#(1, TAdd#(TAdd#(nrx, ntx), nhs), StructDefines::MetadataRequest, 2)
-           ,NumAlias#(TLog#(TAdd#(TAdd#(nrx, ntx), nhs)), wport)
-           ,NumAlias#(TAdd#(TAdd#(nrx, ntx), nhs), nport));
+   provisos(Add#(b__, TLog#(TAdd#(nrx, nhs)), 9) // introduced by truncate
+           ,Pipe::FunnelPipesPipelined#(1, TAdd#(nrx, nhs), StructDefines::MetadataRequest, 2)
+           ,Add#(a__, TLog#(npo), 9) // provisos introduced by truncate
+           ,Pipe::FunnelPipesPipelined#(1, npo, StructDefines::MetadataRequest, 2)
+           ,NumAlias#(TLog#(TAdd#(nrx, nhs)), wpi)
+           ,NumAlias#(TAdd#(nrx, nhs), npi)
+           ,NumAlias#(TLog#(ntx), wpo)
+           ,NumAlias#(ntx, npo));
    // N-to-1 arbitration
-   Vector#(nrx, FIFOF#(MetadataRequest)) funnel_ff <- replicateM(mkFIFOF);
+   Vector#(npi, FIFOF#(MetadataRequest)) funnel_ff <- replicateM(mkFIFOF);
    function PipeIn#(MetadataRequest) metaPipeIn(Integer i);
       return toPipeIn(funnel_ff[i]);
    endfunction
    function PipeOut#(MetadataRequest) metaPipeOut(Integer i);
       return toPipeOut(funnel_ff[i]);
    endfunction
-   FunnelPipe#(1, nrx, MetadataRequest, 2) metaPipe <- mkFunnelPipesPipelined(genWith(metaPipeOut));
+   FunnelPipe#(1, npi, MetadataRequest, 2) metaPipe <- mkFunnelPipesPipelined(genWith(metaPipeOut));
 
    Ingress ingress <- mkIngress();
    mkConnection(metaPipe[0], ingress.prev);
@@ -68,23 +71,22 @@ module mkProgram(Program#(nrx, ntx, nhs))
    Egress egress <- mkEgress();
    mkConnection(ingress.next, egress.prev);
 
-   FIFOF#(Tuple2#(Bit#(wport), MetadataRequest)) writeData <- mkFIFOF;
-   UnFunnelPipe#(1, nport, MetadataRequest, 2) demux <- mkUnFunnelPipesPipelined(vec(toPipeOut(writeData)));
-   mapM_(mkTieOff, demux);
+   FIFOF#(Tuple2#(Bit#(wpo), MetadataRequest)) writeData <- mkFIFOF;
+   UnFunnelPipe#(1, npo, MetadataRequest, 2) demux <- mkUnFunnelPipesPipelined(vec(toPipeOut(writeData)));
 
-   // use egress_port as tag to select outgoing port
+   // use egress_port value to pick outgoing port
+   // truncate egress_port to fit number of ports on board
    rule egress_demux;
       let v = egress.next.first;
       egress.next.deq;
       if (v.meta.egress_port matches tagged Valid .prt) begin
          let tpl = tuple2(truncate(prt), v);
          writeData.enq(tpl);
-         $display("type of port ", printType(typeOf(writeData)));
       end
    endrule
 
    interface prev = genWith(metaPipeIn);
-   // interface next = demux.next;?
+   interface next = demux;
    method Action set_verbosity (int verbosity);
       ingress.set_verbosity(verbosity);
       egress.set_verbosity(verbosity);

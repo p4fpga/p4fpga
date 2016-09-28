@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Cornell University.
+// Copyright (c) 2016 P4FPGA Project
 
 // Permission is hereby granted, free of charge, to any person
 // obtaining a copy of this software and associated documentation
@@ -20,13 +20,46 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-`include "ConnectalProjectConfig.bsv"
+/*
+ Packet Processing Engine
 
-`ifdef MEMORY
-`include "RuntimeMemory.bsv"
-`endif
+ - Actions are implemented in different ways: DSP, local operator
+ - 
+ */
 
-`ifdef STREAM
-`include "RuntimeStream.bsv"
-`endif
+interface Engine#(type metaI, type actI);
+   interface Server#(actI, metaI) prev_control_state;
+   method Action set_verbosity(int verbosity);
+endinterface
 
+module mkEngine#(Engine#(metaI, actI));
+   `PRINT_DEBUG_MSG
+   RX #(actI) meta_in<- mkRX;
+   TX #(metaI) meta_out<- mkTX;
+
+   // Optimization: Use DSP
+   // DSP48E1
+   rule rl_read;
+      // read_meta;
+      // pipe_ff.enq();
+   endrule
+
+   rule rl_modify;
+      // pipe_ff.deq;
+      // operation -> dsp?
+      // pipe_ff.enq;
+   endrule
+
+   // rule rl_dsp;
+
+   rule rl_write;
+      // meta_in from pipeline register
+      // metaI meta_out = meta_in;
+      // field modification
+      // let m = modify_field(meta_in, nhop_ipv4, _port);
+      // meta_out.u.enq(metaI);
+   endrule
+   method Action set_verbosity(int verbosity);
+      cf_verbosity <= verbosity;
+   endmethod
+endmodule
