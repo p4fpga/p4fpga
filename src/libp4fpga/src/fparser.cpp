@@ -18,7 +18,7 @@
 #include "fstruct.h"
 #include <algorithm>
 #include "ir/ir.h"
-#include "codegeninspector.h"
+//#include "codegeninspector.h"
 #include "string_utils.h"
 #include "vector_utils.h"
 
@@ -179,18 +179,18 @@ FPGAParser::FPGAParser(FPGAProgram* program,
 }
 
 void FPGAParser::emitEnums(BSVProgram & bsv) {
-  append_line(bsv, "`ifdef PARSER_STRUCT");
-  append_line(bsv, "typedef enum {");
-  incr_indent(bsv);
+  builder->append_line("`ifdef PARSER_STRUCT");
+  builder->append_line("typedef enum {");
+  builder->incr_indent();
   for (auto s : parseSteps) {
     if (s == parseSteps.back())
-      append_format(bsv, "State%s", CamelCase(s->name));
+      builder->append_format("State%s", CamelCase(s->name));
     else
-      append_format(bsv, "State%s,", CamelCase(s->name));
+      builder->append_format("State%s,", CamelCase(s->name));
   }
   decr_indent(bsv);
-  append_line(bsv, "} ParserState deriving (Bits, Eq);");
-  append_line(bsv, "`endif");
+  builder->append_line("} ParserState deriving (Bits, Eq);");
+  builder->append_line("`endif");
 }
 
 void FPGAParser::emitStructs(BSVProgram & bsv) {
@@ -214,7 +214,7 @@ void FPGAParser::emitStructs(BSVProgram & bsv) {
 }
 
 void FPGAParser::emitFunctions(BSVProgram & bsv) {
-  append_line(bsv, "`ifdef PARSER_FUNCTION");
+  builder->append_line("`ifdef PARSER_FUNCTION");
   for (auto state : parseSteps) {
     // find out type and name of each field
     auto name = state->name.toString();
@@ -241,85 +241,85 @@ void FPGAParser::emitFunctions(BSVProgram & bsv) {
       }
     }
     if (params.size() != 0) {
-      append_format(bsv, "function Action compute_next_state_%s(%s);", name, join(params, ","));
+      builder->append_format("function Action compute_next_state_%s(%s);", name, join(params, ","));
     } else {
-      append_format(bsv, "function Action compute_next_state_%s();", name);
+      builder->append_format("function Action compute_next_state_%s();", name);
     }
-    incr_indent(bsv);
-    append_line(bsv, "action");
+    builder->incr_indent();
+    builder->append_line("action");
     // bit vector from ListExpression
     if (match.size() != 0) {
-      append_format(bsv, "let v = {%s};", join(match, ","));
+      builder->append_format("let v = {%s};", join(match, ","));
     } else {
-      append_line(bsv, "let v = 0;");
+      builder->append_line("let v = 0;");
     }
-    append_line(bsv, "case(v) matches");
-    incr_indent(bsv);
+    builder->append_line("case(v) matches");
+    builder->incr_indent();
     if (state->cases != nullptr) {
       for (auto c : *state->cases) {
         if (c->keyset->is<IR::Constant>()) {
-          append_format(bsv, "%d: begin", c->keyset->toString());
-          incr_indent(bsv);
-          append_line(bsv, "w_%s_%s.send();", name, c->state->toString());
+          builder->append_format("%d: begin", c->keyset->toString());
+          builder->incr_indent();
+          builder->append_line("w_%s_%s.send();", name, c->state->toString());
           decr_indent(bsv);
-          append_line(bsv, "end");
+          builder->append_line("end");
         } else if (c->keyset->is<IR::DefaultExpression>()) {
-          append_line(bsv, "default: begin");
-          incr_indent(bsv);
-          append_line(bsv, "w_%s_%s.send();", name, c->state->toString());
+          builder->append_line("default: begin");
+          builder->incr_indent();
+          builder->append_line("w_%s_%s.send();", name, c->state->toString());
           decr_indent(bsv);
-          append_line(bsv, "end");
+          builder->append_line("end");
         }
       }
     } else {
       // no case.
     }
     decr_indent(bsv);
-    append_line(bsv, "endcase");
-    append_line(bsv, "endaction");
+    builder->append_line("endcase");
+    builder->append_line("endaction");
     decr_indent(bsv);
-    append_line(bsv, "endfunction");
+    builder->append_line("endfunction");
   }
 
   auto initStep = parseStateMap[initState];
-  append_line(bsv, "let initState = State%s;", CamelCase(initStep->name.toString()));
+  builder->append_line("let initState = State%s;", CamelCase(initStep->name.toString()));
 
-  append_line(bsv, "`endif");
+  builder->append_line("`endif");
 }
 
 void FPGAParser::emitBufferRule(BSVProgram & bsv, const IR::BSV::ParseStep* state) {
     auto name = state->name.toString();
     // Rule: load data
-    append_format(bsv, "rule rl_%s_load if ((parse_state_ff.first == State%s) && rg_buffered[0] < %d);", name, CamelCase(name), state->width_bits);
-    incr_indent(bsv);
-    append_line(bsv, "report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);");
-    append_line(bsv, "if (isValid(data_ff.first)) begin");
-    incr_indent(bsv);
-    append_line(bsv, "data_ff.deq;");
-    append_line(bsv, "let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];");
-    append_line(bsv, "rg_tmp[0] <= zeroExtend(data);");
-    append_line(bsv, "move_shift_amt(128);");
+    builder->append_format("rule rl_%s_load if ((parse_state_ff.first == State%s) && rg_buffered[0] < %d);", name, CamelCase(name), state->width_bits);
+    builder->incr_indent();
+    builder->append_line("report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);");
+    builder->append_line("if (isValid(data_ff.first)) begin");
+    builder->incr_indent();
+    builder->append_line("data_ff.deq;");
+    builder->append_line("let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];");
+    builder->append_line("rg_tmp[0] <= zeroExtend(data);");
+    builder->append_line("move_shift_amt(128);");
     decr_indent(bsv);
-    append_line(bsv, "end");
+    builder->append_line("end");
     decr_indent(bsv);
-    append_line(bsv, "endrule");
-    append_line(bsv, "");
+    builder->append_line("endrule");
+    builder->append_line("");
 }
 
 void FPGAParser::emitExtractionRule(BSVProgram & bsv, const IR::BSV::ParseStep* state) {
     auto name = state->name.toString();
     auto type = state->type->toString();
-    append_format(bsv, "rule rl_%s_extract if ((parse_state_ff.first == State%s) && (rg_buffered[0] > %d));", name, CamelCase(name), state->width_bits);
-    incr_indent(bsv);
-    append_line(bsv, "let data = rg_tmp[0];");
-    append_line(bsv, "if (isValid(data_ff.first)) begin");
-    incr_indent(bsv);
-    append_line(bsv, "data_ff.deq;");
-    append_line(bsv, "data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];");
+    builder->append_format("rule rl_%s_extract if ((parse_state_ff.first == State%s) && (rg_buffered[0] > %d));", name, CamelCase(name), state->width_bits);
+    builder->incr_indent();
+    builder->append_line("let data = rg_tmp[0];");
+    builder->append_line("if (isValid(data_ff.first)) begin");
+    builder->incr_indent();
+    builder->append_line("data_ff.deq;");
+    builder->append_line("data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];");
     decr_indent(bsv);
-    append_line(bsv, "end");
-    append_line(bsv, "report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);");
-    append_line(bsv, "let %s = extract_%s(truncate(data));", name, type);
+    builder->append_line("end");
+    builder->append_line("report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);");
+    builder->append_line("let %s = extract_%s(truncate(data));", name, type);
     auto params = cstring("");
     if (state->keys != nullptr) {
       auto lk = state->keys->to<IR::ListExpression>();
@@ -338,14 +338,14 @@ void FPGAParser::emitExtractionRule(BSVProgram & bsv, const IR::BSV::ParseStep* 
         }
       }
     }
-    append_line(bsv, "compute_next_state_%s(%s);", name, params);
-    append_format(bsv, "rg_tmp[0] <= zeroExtend(data >> %d);", state->width_bits);
-    append_format(bsv, "succeed_and_next(%d);", state->width_bits);
-    append_line(bsv, "parse_state_ff.deq;");
-    append_format(bsv, "%s_out_ff.enq(tagged Valid %s);", name, name);
+    builder->append_line("compute_next_state_%s(%s);", name, params);
+    builder->append_format("rg_tmp[0] <= zeroExtend(data >> %d);", state->width_bits);
+    builder->append_format("succeed_and_next(%d);", state->width_bits);
+    builder->append_line("parse_state_ff.deq;");
+    builder->append_format("%s_out_ff.enq(tagged Valid %s);", name, name);
     decr_indent(bsv);
-    append_line(bsv, "endrule");
-    append_line(bsv, "");
+    builder->append_line("endrule");
+    builder->append_line("");
 }
 
 void FPGAParser::emitTransitionRule(BSVProgram & bsv, const IR::BSV::ParseStep* state) {
@@ -364,32 +364,32 @@ void FPGAParser::emitTransitionRule(BSVProgram & bsv, const IR::BSV::ParseStep* 
       } else {
         rule_set.insert(rl_name);
       }
-      append_line(bsv, "rule rl_%s if (w_%s);", rl_name, rl_name);
+      builder->append_line("rule rl_%s if (w_%s);", rl_name, rl_name);
       auto type = typeMap->getType(c->state, true);
       auto decl = refMap->getDeclaration(c->state->path, true);
-      incr_indent(bsv);
+      builder->incr_indent();
       if (c->state->toString() == IR::ParserState::accept) {
-        append_line(bsv, "parse_done[0] <= True;");
-        append_line(bsv, "w_parse_done.send();");
-        append_line(bsv, "fetch_next_header0(0);");
+        builder->append_line("parse_done[0] <= True;");
+        builder->append_line("w_parse_done.send();");
+        builder->append_line("fetch_next_header0(0);");
       } else {
         // ParserState* -> BSV::ParseStep --> width_bits
         // LOG1("decl" << decl << " " << c->state << " " << decl->node_type_name());
         if (decl->is<IR::ParserState>()) {
           auto s = decl->to<IR::ParserState>();
           auto bsv_parse_state = parseStateMap[s];
-          append_format(bsv, "parse_state_ff.enq(State%s);", CamelCase(bsv_parse_state->name.toString()));
-          append_line(bsv, "fetch_next_header0(%d);", bsv_parse_state->width_bits);
+          builder->append_format("parse_state_ff.enq(State%s);", CamelCase(bsv_parse_state->name.toString()));
+          builder->append_line("fetch_next_header0(%d);", bsv_parse_state->width_bits);
         }
       }
       decr_indent(bsv);
-      append_line(bsv, "endrule");
+      builder->append_line("endrule");
     }
   }
 }
 
 void FPGAParser::emitRules(BSVProgram & bsv) {
-  append_line(bsv, "`ifdef PARSER_RULES");
+  builder->append_line("`ifdef PARSER_RULES");
   // deparse rules are mutually exclusive
   std::vector<cstring> exclusive_rules;
   std::set<cstring> rule_set;
@@ -414,7 +414,7 @@ void FPGAParser::emitRules(BSVProgram & bsv) {
     }
   }
   exclusive_annotation += cstring("\" *)");
-  append_line(bsv, exclusive_annotation);
+  builder->append_line(exclusive_annotation);
 
   for (auto s : parseSteps) {
     emitBufferRule(bsv, s);
@@ -422,11 +422,11 @@ void FPGAParser::emitRules(BSVProgram & bsv) {
     emitTransitionRule(bsv, s);
   }
   emitAcceptRule(bsv);
-  append_line(bsv, "`endif");
+  builder->append_line("`endif");
 }
 
 void FPGAParser::emitStateElements(BSVProgram & bsv) {
-  append_line(bsv, "`ifdef PARSER_STATE");
+  builder->append_line("`ifdef PARSER_STATE");
   // pulsewire to communicate between different parse parseSteps
   for (auto state : parseSteps) {
     if (state->cases == nullptr) continue;
@@ -437,15 +437,15 @@ void FPGAParser::emitStateElements(BSVProgram & bsv) {
     }
   }
   for (auto n : pulse_wire_set) {
-    append_line(bsv, "PulseWire %s <- mkPulseWire;", n);
+    builder->append_line("PulseWire %s <- mkPulseWire;", n);
   }
   // dfifo to output parsed header
   for (auto state : parseSteps) {
     auto name = state->name.toString();
     auto type = CamelCase(state->type->toString());
-    append_line(bsv, "FIFOF#(Maybe#(%s)) %s_out_ff <- mkDFIFOF(tagged Invalid);", type, name);
+    builder->append_line("FIFOF#(Maybe#(%s)) %s_out_ff <- mkDFIFOF(tagged Invalid);", type, name);
   }
-  append_line(bsv, "`endif");
+  builder->append_line("`endif");
 }
 
 // convert every field in struct headers to its origial header type
@@ -455,13 +455,13 @@ void FPGAParser::emitAcceptedHeaders(BSVProgram & bsv, const IR::Type_Struct* he
     auto type = typeMap->getType(node, true);
     auto name = h->name.toString();
     if (type->is<IR::Type_Header>()) {
-      append_format(bsv, "let %s <- toGet(%s_out_ff).get;", name, name);
-      append_format(bsv, "if (isValid(%s)) begin", name);
-      incr_indent(bsv);
-      append_format(bsv, "meta.%s = tagged Forward;", name);
-      append_format(bsv, "meta.hdr.%s = tagged Valid;", name);
+      builder->append_format("let %s <- toGet(%s_out_ff).get;", name, name);
+      builder->append_format("if (isValid(%s)) begin", name);
+      builder->incr_indent();
+      builder->append_format("meta.%s = tagged Forward;", name);
+      builder->append_format("meta.hdr.%s = tagged Valid;", name);
       decr_indent(bsv);
-      append_line(bsv, "end");
+      builder->append_line("end");
       for (auto m : program->metadata) {
         auto member = m.second;
         auto ftype = program->typeMap->getType(member->expr, true);
@@ -469,11 +469,11 @@ void FPGAParser::emitAcceptedHeaders(BSVProgram & bsv, const IR::Type_Struct* he
         auto field = structT->getField(member->member);
         cstring fname = field->name.toString();
         if (ftype == type) {
-          append_format(bsv, "if (%s matches tagged Valid .d) begin", name);
-          incr_indent(bsv);
-          append_format(bsv, "meta.%s = tagged Valid d.%s;", fname, fname);
+          builder->append_format("if (%s matches tagged Valid .d) begin", name);
+          builder->incr_indent();
+          builder->append_format("meta.%s = tagged Valid d.%s;", fname, fname);
           decr_indent(bsv);
-          append_line(bsv,"end");
+          builder->append_line("end");
         }
       }
     } else if (type->is<IR::Type_Stack>()) {
@@ -492,17 +492,17 @@ void FPGAParser::emitUserMetadata(BSVProgram & bsv, const IR::Type_Struct* metad
       auto hh = type->to<IR::Type_Struct>();
       for (auto f : *hh->fields) {
         auto name = f->toString();
-        append_line(bsv, "meta.%s = tagged Invalid;", name);
+        builder->append_line("meta.%s = tagged Invalid;", name);
       }
     }
   }
 }
 
 void FPGAParser::emitAcceptRule(BSVProgram & bsv) {
-  append_line(bsv, "rule rl_accept if (delay_ff.notEmpty);");
-  incr_indent(bsv);
-  append_line(bsv, "delay_ff.deq;");
-  append_line(bsv, "MetadataT meta = defaultValue;");
+  builder->append_line("rule rl_accept if (delay_ff.notEmpty);");
+  builder->incr_indent();
+  builder->append_line("delay_ff.deq;");
+  builder->append_line("MetadataT meta = defaultValue;");
   for (auto h : *program->program->getDeclarations()) {
     // In V1 model, metadata comes from three sources:
     // - standard_metadata, metadata, header
@@ -524,16 +524,17 @@ void FPGAParser::emitAcceptRule(BSVProgram & bsv) {
       }
     }
   }
-  append_line(bsv, "rg_tmp[0] <= 0;");
-  append_line(bsv, "rg_shift_amt[0] <= 0;");
-  append_line(bsv, "rg_buffered[0] <= 0;");
-  append_line(bsv, "meta_in_ff.enq(meta);");
+  builder->append_line("rg_tmp[0] <= 0;");
+  builder->append_line("rg_shift_amt[0] <= 0;");
+  builder->append_line("rg_buffered[0] <= 0;");
+  builder->append_line("meta_in_ff.enq(meta);");
   decr_indent(bsv);
-  append_line(bsv, "endrule");
+  builder->append_line("endrule");
 }
 
 // emit BSV_IR with BSV-specific CodeGenInspector
 void FPGAParser::emit(BSVProgram & bsv) {
+  builder = &bsv.getParserBuilder();
   emitEnums(bsv);
   emitStructs(bsv);
   emitFunctions(bsv);

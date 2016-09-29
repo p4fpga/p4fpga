@@ -77,13 +77,14 @@ class TableParamExtractor : public Inspector {
 // per table code generator
 class TableCodeGen : public Inspector {
  public:
-  TableCodeGen(FPGAControl* control, BSVProgram & bsv, CppProgram & cpp) :
-    control(control), bsv(bsv), cpp(cpp) {}
+  TableCodeGen(FPGAControl* control, CodeBuilder* builder, CodeBuilder* cbuilder, CodeBuilder* type_builder) :
+    control(control), builder(builder), cbuilder(cbuilder), type_builder(type_builder) {}
   bool preorder(const IR::P4Table* table) override;
  private:
   FPGAControl* control;
-  BSVProgram & bsv;
-  CppProgram & cpp;
+  CodeBuilder* builder;
+  CodeBuilder* cbuilder;
+  CodeBuilder* type_builder;
   int key_width = 0;
   int action_size = 0;
   std::vector<std::pair<const IR::StructField*, int>> key_vec;

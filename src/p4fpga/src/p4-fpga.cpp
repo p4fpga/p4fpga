@@ -13,7 +13,6 @@
 #include "backend.h"
 #include "partition.h"
 #include "profile.h"
-#include "bsvprogram.h"
 #include "frontends/common/parseInput.h"
 #include "frontends/p4/frontend.h"
 #include "frontends/p4/evaluator/evaluator.h"

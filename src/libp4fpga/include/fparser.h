@@ -25,32 +25,32 @@
 namespace FPGA {
 
 namespace Parser {
-inline static std::string format_string(boost::format& message) {
-  return message.str();
-}
-
-template <typename TValue, typename... TArgs>
-  std::string format_string(boost::format& message, TValue&& arg, TArgs&&... args) {
-  message % std::forward<TValue>(arg);
-  return format_string(message, std::forward<TArgs>(args)...);
-}
-
-template <typename... TArgs>
-  void append_format(BSVProgram & bsv, const char* fmt, TArgs&&... args) {
-  bsv.getParserBuilder().emitIndent();
-  boost::format msg(fmt);
-  std::string s = format_string(msg, std::forward<TArgs>(args)...);
-  bsv.getParserBuilder().appendFormat(s.c_str());
-  bsv.getParserBuilder().newline();
-}
-
-template <typename... TArgs>
-  void append_line(BSVProgram & bsv, const char* fmt, TArgs&&... args) {
-    bsv.getParserBuilder().emitIndent();
-    boost::format msg(fmt);
-    std::string s = format_string(msg, std::forward<TArgs>(args)...);
-    bsv.getParserBuilder().appendLine(s.c_str());
-  }
+// inline static std::string format_string(boost::format& message) {
+//   return message.str();
+// }
+// 
+// template <typename TValue, typename... TArgs>
+//   std::string format_string(boost::format& message, TValue&& arg, TArgs&&... args) {
+//   message % std::forward<TValue>(arg);
+//   return format_string(message, std::forward<TArgs>(args)...);
+// }
+// 
+// template <typename... TArgs>
+//   void append_format(BSVProgram & bsv, const char* fmt, TArgs&&... args) {
+//   bsv.getParserBuilder().emitIndent();
+//   boost::format msg(fmt);
+//   std::string s = format_string(msg, std::forward<TArgs>(args)...);
+//   bsv.getParserBuilder().appendFormat(s.c_str());
+//   bsv.getParserBuilder().newline();
+// }
+// 
+// template <typename... TArgs>
+//   void append_line(BSVProgram & bsv, const char* fmt, TArgs&&... args) {
+//     bsv.getParserBuilder().emitIndent();
+//     boost::format msg(fmt);
+//     std::string s = format_string(msg, std::forward<TArgs>(args)...);
+//     bsv.getParserBuilder().appendLine(s.c_str());
+//   }
 
 inline void incr_indent(BSVProgram & bsv) {
   bsv.getParserBuilder().increaseIndent();
@@ -91,6 +91,7 @@ class FPGAParser : public FPGAObject {
   const IR::Parameter*          userMetadata;
   const IR::Parameter*          stdMetadata;
   FPGAType*                     headerType;
+  CodeBuilder*                  builder;
 
   // map from IR::ParserState to IR::BSV::ParseStep
   // the latter subclasses Type_Header, from which we
