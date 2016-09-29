@@ -26,54 +26,52 @@ typedef enum {
     DROP2
 } ForwardActionT deriving (Bits, Eq, FShow);
 
-typedef Table#(3, MetadataRequest,
-                  ForwardActionReq,
-                  ConnectalTypes::ForwardReqT,
-                  ConnectalTypes::ForwardRspT) ForwardTable;
-
-function ConnectalTypes::ForwardReqT forward_build_lookup_request();
-   let v = ConnectalTypes::ForwardReqT {padding: 0, nhop_ipv4: 1};
-   return v;
-endfunction
-
-function Action execute_action(ConnectalTypes::ForwardRspT resp,
-                               MetadataRequest metadata,
-                               Vector#(3, FIFOF#(Tuple2#(MetadataRequest, ForwardActionReq))) bbReqFifo);
-   action
-      $display("(%0d) execute action ", $time, fshow(resp._action));
-      case (unpack(resp._action)) matches
-         SETDMAC: begin
-            ForwardActionReq req = tagged SetDmacReqT {dmac: resp.dmac};
-            bbReqFifo[0].enq(tuple2(metadata, req));
-         end
-         DROP2: begin
-            bbReqFifo[1].enq(tuple2(metadata, ?));
-         end
-         NOACTION3: begin
-            bbReqFifo[2].enq(tuple2(metadata, ?));
-         end
-      endcase
-   endaction
-endfunction
-
-function ActionValue#(MetadataRequest) step1(MetadataRequest meta, ForwardActionReq param);
-   actionvalue
-      $display("(%0d) step 1: ", $time, fshow(meta));
-      return meta;
-   endactionvalue
-endfunction
-
-function ActionValue#(MetadataRequest) step2(MetadataRequest meta, ForwardActionReq param);
-   actionvalue
-      $display("(%0d) step 2: ", $time, fshow(meta));
-      return meta;
-   endactionvalue
-endfunction
-
+typedef Table#(3, MetadataRequest, ForwardActionReq, ConnectalTypes::ForwardReqT, ConnectalTypes::ForwardRspT) ForwardTable;
 typedef MatchTable#(29, 256, SizeOf#(ConnectalTypes::ForwardReqT), SizeOf#(ConnectalTypes::ForwardRspT)) ForwardMatchTable;
 typedef Engine#(2, MetadataRequest, ForwardActionReq) ForwardAction;
-
 `SynthBuildModule1(mkMatchTable, String, ForwardMatchTable, mkMatchTable_256_Forward)
+instance Table_request #(ConnectalTypes::ForwardReqT);
+   function ConnectalTypes::ForwardReqT table_request(MetadataRequest req);
+      let nhop_ipv4 = fromMaybe(?, req.meta.nhop_ipv4);
+      let v = ConnectalTypes::ForwardReqT {padding: 0, nhop_ipv4: 1}; //FIXME
+      return v;
+   endfunction
+endinstance
+instance Table_execute #(ConnectalTypes::ForwardRspT, ForwardActionReq, 3);
+   function Action table_execute(ConnectalTypes::ForwardRspT resp, MetadataRequest metadata,
+      Vector#(3, FIFOF#(Tuple2#(MetadataRequest, ForwardActionReq))) fifos);
+      action
+         $display("(%0d) execute action ", $time, fshow(resp._action));
+         case (unpack(resp._action)) matches
+            SETDMAC: begin
+               ForwardActionReq req = tagged SetDmacReqT {dmac: resp.dmac};
+               fifos[0].enq(tuple2(metadata, req));
+            end
+            DROP2: begin
+               fifos[1].enq(tuple2(metadata, ?));
+            end
+            NOACTION3: begin
+               fifos[2].enq(tuple2(metadata, ?));
+            end
+         endcase
+      endaction
+   endfunction
+endinstance
+
+instance Action_execute #(ForwardActionReq);
+   function ActionValue#(MetadataRequest) step_1(MetadataRequest meta, ForwardActionReq param);
+      actionvalue
+         $display("(%0d) step 1: ", $time, fshow(meta));
+         return meta;
+      endactionvalue
+   endfunction
+   function ActionValue#(MetadataRequest) step_2(MetadataRequest meta, ForwardActionReq param);
+      actionvalue
+         $display("(%0d) step 2: ", $time, fshow(meta));
+         return meta;
+      endactionvalue
+   endfunction
+endinstance
 
 interface Ingress;
    interface PipeIn#(MetadataRequest) prev;
@@ -90,10 +88,8 @@ module mkIngress(Ingress);
    FIFOF#(MetadataRequest) exit_req_ff <- mkSizedFIFOF(16);
 
    ForwardMatchTable matchTable <- mkMatchTable_256_Forward("forward");
-   let fvec = vec(step1, step2);
-   let flist = toList(fvec);
-   ForwardAction forward_action <- mkEngine(flist);
-   ForwardTable forward <- mkTable(forward_build_lookup_request, execute_action, matchTable);
+   ForwardAction forward_action <- mkEngine(toList(vec(step_1, step_2)));
+   ForwardTable forward <- mkTable(table_request, table_execute, matchTable);
 
    mkConnection(toClient(forward_req_ff, forward_rsp_ff), forward.prev_control_state);
    //mkChan(mkFIFOF, mkFIFOF, forward.next_control_state[0], forward_action.prev_control_state);

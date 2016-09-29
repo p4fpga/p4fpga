@@ -4,6 +4,8 @@ typedef union tagged {
     struct {
         Bit#(48) dmac;
     } SetDmacReqT;
+    struct {
+    } DropReqT;
 } ForwardActionReq deriving (Bits, Eq, FShow);
 typedef union tagged {
     struct {
