@@ -68,17 +68,6 @@ prebuild::
 	(cd $(BOARD); BUILDCACHE_CACHEDIR=$(BUILDCACHE_CACHEDIR) $(BUILDCACHE) vivado -notrace -mode batch -source $(SONICDIR)/hw/scripts/connectal-synth-phy.tcl)
 endif
 
-ALL: codegen simgen
-
-codegen: $(P4FILE)
-	$(foreach file, $(P4FILE), python ${P4FPGADIR}/p4c/bsvgen.py --mem $(file);)
-
-codegen-stream: $(P4File)
-	$(foreach file, $(P4FILE), python ${P4FPGADIR}/p4c/bsvgen.py $(file);)
-
-simgen: codegen
-	make build.bluesim
-
 run:
 	(cd bluesim; ./bin/ubuntu.exe -p ../${T})
 

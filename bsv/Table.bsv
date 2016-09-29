@@ -66,10 +66,29 @@ interface Table#(numeric type nActions, type metaI, type actI, type keyT, type v
    method Action set_verbosity(int verbosity);
 endinterface
 
+typeclass Table_request #(type reqT);
+   function reqT table_request (MetadataRequest data);
+endtypeclass
+
+typeclass Table_execute #(type rspT, type paramT, numeric type num);
+   function Action table_execute (rspT rsp, MetadataRequest meta, Vector#(num, FIFOF#(Tuple2#(MetadataRequest, paramT))) fifos);
+endtypeclass
+
+typeclass Action_execute #(type paramT);
+   function ActionValue#(MetadataRequest) step_1 (MetadataRequest data, paramT param) = error("No default for typeclass Action_execute::step_1");
+   function ActionValue#(MetadataRequest) step_2 (MetadataRequest data, paramT param) = error("No default for typeclass Action_execute::step_2");
+   function ActionValue#(MetadataRequest) step_3 (MetadataRequest data, paramT param) = error("No default for typeclass Action_execute::step_3");
+   function ActionValue#(MetadataRequest) step_4 (MetadataRequest data, paramT param) = error("No default for typeclass Action_execute::step_4");
+   function ActionValue#(MetadataRequest) step_5 (MetadataRequest data, paramT param) = error("No default for typeclass Action_execute::step_5");
+   function ActionValue#(MetadataRequest) step_6 (MetadataRequest data, paramT param) = error("No default for typeclass Action_execute::step_6");
+   function ActionValue#(MetadataRequest) step_7 (MetadataRequest data, paramT param) = error("No default for typeclass Action_execute::step_7");
+   function ActionValue#(MetadataRequest) step_8 (MetadataRequest data, paramT param) = error("No default for typeclass Action_execute::step_8");
+endtypeclass
+
 /*
    alternative implementation is 
  */
-module mkTable#(function keyT build_lookup_request(),
+module mkTable#(function keyT match_table_request(metaI data),
                 function Action execute_action(valT data, metaI md,
                    Vector#(nact, FIFOF#(Tuple2#(metaI, actI))) fifo),
                 MatchTable#(a, b, c, d) matchTable)
@@ -100,7 +119,7 @@ module mkTable#(function keyT build_lookup_request(),
    rule rl_handle_request;
        metaI data = meta_in.u.first;
        meta_in.u.deq;
-       let req = build_lookup_request();
+       let req = match_table_request(data);
        matchTable.lookupPort.request.put(pack(req));
        dbprint(3, fshow(req));
        metadata_ff.enq(data);
