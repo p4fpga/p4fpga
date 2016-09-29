@@ -22,57 +22,19 @@
 
 namespace FPGA {
 
-namespace Deparser {
-
-inline static std::string format_string(boost::format& message) {
-  return message.str();
-}
-
-template <typename TValue, typename... TArgs>
-  std::string format_string(boost::format& message, TValue&& arg, TArgs&&... args) {
-  message % std::forward<TValue>(arg);
-  return format_string(message, std::forward<TArgs>(args)...);
-}
-
-template <typename... TArgs>
-  void append_format(BSVProgram & bsv, const char* fmt, TArgs&&... args) {
-  bsv.getDeparserBuilder().emitIndent();
-  boost::format msg(fmt);
-  std::string s = format_string(msg, std::forward<TArgs>(args)...);
-  bsv.getDeparserBuilder().appendFormat(s.c_str());
-  bsv.getDeparserBuilder().newline();
-}
-
-template <typename... TArgs>
-  void append_line(BSVProgram & bsv, const char* fmt, TArgs&&... args) {
-    bsv.getDeparserBuilder().emitIndent();
-    boost::format msg(fmt);
-    std::string s = format_string(msg, std::forward<TArgs>(args)...);
-    bsv.getDeparserBuilder().appendLine(s.c_str());
-  }
-
-inline void incr_indent(BSVProgram & bsv) {
-  bsv.getDeparserBuilder().increaseIndent();
-}
-
-inline void decr_indent(BSVProgram & bsv) {
-  bsv.getDeparserBuilder().decreaseIndent();
-}
-
-}  // namespace Deparser
-
 class FPGADeparser : public FPGAObject {
  public:
   const FPGAProgram* program;
   const IR::ControlBlock* controlBlock;
   std::vector<IR::BSV::DeparseState*> states;
+  CodeBuilder* builder;
 
-  void emitEnums(BSVProgram & bsv);
-  void emitRules(BSVProgram & bsv);
-  void emitStates(BSVProgram & bsv);
+  void emitEnums();
+  void emitRules();
+  void emitStates();
 
   explicit FPGADeparser(const FPGAProgram* program, const IR::ControlBlock* block)
-    : program(program), controlBlock(block) {};
+    : program(program), controlBlock(block) { };
   void emit(BSVProgram &bsv ) override;
   bool build();
 };

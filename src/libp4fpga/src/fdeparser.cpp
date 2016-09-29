@@ -21,8 +21,6 @@
 
 namespace FPGA {
 
-using namespace Deparser;
-
 class DeparserBuilder : public Inspector {
   public:
     DeparserBuilder(FPGADeparser* deparser, const FPGAProgram* program) :
@@ -84,12 +82,12 @@ bool DeparserBuilder::preorder(const IR::Member* member) {
 
 class DeparserRuleVisitor : public Inspector {
   public:
-    DeparserRuleVisitor(const FPGADeparser* deparser, BSVProgram& bsv) :
-      bsv(bsv) {}
+    DeparserRuleVisitor(const FPGADeparser* deparser, CodeBuilder* builder) :
+      builder(builder) {}
     bool preorder(const IR::BSV::DeparseState* state) override;
   private:
     const FPGAProgram* program;
-    BSVProgram & bsv;
+    CodeBuilder* builder;
 };
 
 bool DeparserRuleVisitor::preorder(const IR::BSV::DeparseState* state) {
@@ -98,88 +96,87 @@ bool DeparserRuleVisitor::preorder(const IR::BSV::DeparseState* state) {
   auto name = hdr->name.name;
 
   // Rule: next deparse state
-  append_format(bsv, "rule rl_deparse_%s_next if (w_%s);", name, name);
-  incr_indent(bsv);
-  append_format(bsv, "deparse_state_ff.enq(StateDeparse%s);", CamelCase(name));
-  append_format(bsv, "fetch_next_header(%d);", width);
-  decr_indent(bsv);
-  append_line(bsv, "endrule");
-  append_line(bsv, "");
+  builder->append_format("rule rl_deparse_%s_next if (w_%s);", name, name);
+  builder->incr_indent();
+  builder->append_format("deparse_state_ff.enq(StateDeparse%s);", CamelCase(name));
+  builder->append_format("fetch_next_header(%d);", width);
+  builder->decr_indent();
+  builder->append_line("endrule");
+  builder->append_line("");
 
   // Rule: append bits to buffer
-  append_format(bsv, "rule rl_deparse_%s_load if ((deparse_state_ff.first == StateDeparse%s) && (rg_buffered[0] < %d));", name, CamelCase(name), width);
-  incr_indent(bsv);
-  append_format(bsv, "dbprint(3, $format(\"deparse load %s\"));", name);
-  append_format(bsv, "rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];");
-  append_format(bsv, "UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);");
-  append_format(bsv, "UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;");
-  append_format(bsv, "move_buffered_amt(cExtend(n_bits_used));");
-  decr_indent(bsv);
-  append_line(bsv, "endrule");
-  append_line(bsv, "");
+  builder->append_format("rule rl_deparse_%s_load if ((deparse_state_ff.first == StateDeparse%s) && (rg_buffered[0] < %d));", name, CamelCase(name), width);
+  builder->incr_indent();
+  builder->append_format("dbprint(3, $format(\"deparse load %s\"));", name);
+  builder->append_format("rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];");
+  builder->append_format("UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);");
+  builder->append_format("UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;");
+  builder->append_format("move_buffered_amt(cExtend(n_bits_used));");
+  builder->decr_indent();
+  builder->append_line("endrule");
+  builder->append_line("");
 
   // Rule: enough bits in buffer, send header
-  append_format(bsv, "rule rl_deparse_%s_send if ((deparse_state_ff.first == StateDeparse%s) && (rg_buffered[0] > %d));", name, CamelCase(name), width);
-  incr_indent(bsv);
-  append_format(bsv, "dbprint(3, $format(\"deparse send %s\"));", name);
-  append_format(bsv, "succeed_and_next(%d);", width);
-  append_line(bsv, "deparse_state_ff.deq;");
-  append_line(bsv, "let metadata = meta[0];");
-  append_format(bsv, "metadata.%s = tagged StructDefines::NotPresent;", name);
-  append_line(bsv, "transit_next_state(metadata);");
-  append_line(bsv, "meta[0] <= metadata;");
-  decr_indent(bsv);
-  append_line(bsv, "endrule");
-  append_line(bsv, "");
+  builder->append_format("rule rl_deparse_%s_send if ((deparse_state_ff.first == StateDeparse%s) && (rg_buffered[0] > %d));", name, CamelCase(name), width);
+  builder->incr_indent();
+  builder->append_format("dbprint(3, $format(\"deparse send %s\"));", name);
+  builder->append_format("succeed_and_next(%d);", width);
+  builder->append_line("deparse_state_ff.deq;");
+  builder->append_line("let metadata = meta[0];");
+  builder->append_format("metadata.%s = tagged StructDefines::NotPresent;", name);
+  builder->append_line("transit_next_state(metadata);");
+  builder->append_line("meta[0] <= metadata;");
+  builder->decr_indent();
+  builder->append_line("endrule");
+  builder->append_line("");
   return false;
 }
 
 class DeparserStateVisitor : public Inspector {
   public:
-    DeparserStateVisitor(const FPGADeparser* deparser, BSVProgram& bsv) :
-      bsv(bsv) {}
+    DeparserStateVisitor(const FPGADeparser* deparser, CodeBuilder* builder) :
+      builder(builder) {}
     bool preorder(const IR::BSV::DeparseState* state) override;
   private:
     const FPGAProgram* program;
-    BSVProgram & bsv;
+    CodeBuilder* builder;
 };
 
 bool DeparserStateVisitor::preorder(const IR::BSV::DeparseState* state) {
   auto hdr = state->to<IR::Type_Header>();
   auto name = hdr->name.name;
-  append_format(bsv, "PulseWire w_%s <- mkPulseWire();", name);
+  builder->append_format("PulseWire w_%s <- mkPulseWire();", name);
   return false;
 }
 
 // Convert emit() to IR::BSV::DeparseState
 bool FPGADeparser::build() {
-  //LOG1(program->typeMap);
   auto stat = controlBlock->container->body;
   DeparserBuilder visitor(this, program);
   stat->apply(visitor);
   return true;
 }
 
-void FPGADeparser::emitEnums(BSVProgram & bsv) {
-  append_line(bsv, "`ifdef DEPARSER_STRUCT");
-  append_line(bsv, "typedef enum {");
-  incr_indent(bsv);
-  append_line(bsv, "StateDeparseStart,");
+void FPGADeparser::emitEnums() {
+  builder->append_line("`ifdef DEPARSER_STRUCT");
+  builder->append_line("typedef enum {");
+  builder->incr_indent();
+  builder->append_line("StateDeparseStart,");
   for (auto r : states) {
     auto name = r->name.name;
     if (r != states.back()) {
-      append_format(bsv, "StateDeparse%s,", CamelCase(name));
+      builder->append_format("StateDeparse%s,", CamelCase(name));
     } else {
-      append_format(bsv, "StateDeparse%s", CamelCase(name));
+      builder->append_format("StateDeparse%s", CamelCase(name));
     }
   }
-  decr_indent(bsv);
-  append_line(bsv, "} DeparserState deriving (Bits, Eq, FShow);");
-  append_line(bsv, "`endif  // DEPARSER_STRUCT");
+  builder->decr_indent();
+  builder->append_line("} DeparserState deriving (Bits, Eq, FShow);");
+  builder->append_line("`endif  // DEPARSER_STRUCT");
 }
 
-void FPGADeparser::emitRules(BSVProgram & bsv) {
-  append_line(bsv, "`ifdef DEPARSER_RULES");
+void FPGADeparser::emitRules() {
+  builder->append_line("`ifdef DEPARSER_RULES");
   // deparse rules are mutually exclusive
   std::vector<cstring> exclusive_rules;
   for (auto r : states) {
@@ -194,79 +191,80 @@ void FPGADeparser::emitRules(BSVProgram & bsv) {
     }
   }
   exclusive_annotation += cstring("\" *)");
-  append_line(bsv, exclusive_annotation);
-  DeparserRuleVisitor visitor(this, bsv);
+  builder->append_line(exclusive_annotation);
+  DeparserRuleVisitor visitor(this, builder);
   for (auto r : states) {
     r->apply(visitor);
   }
-  append_line(bsv, "`endif  // DEPARSER_RULES");
+  builder->append_line("`endif  // DEPARSER_RULES");
 }
 
-void FPGADeparser::emitStates(BSVProgram & bsv) {
-  append_line(bsv, "`ifdef DEPARSER_STATE");
+void FPGADeparser::emitStates() {
+  builder->append_line("`ifdef DEPARSER_STATE");
 
   // pulsewire to initiate next state
-  DeparserStateVisitor visitor(this, bsv);
+  DeparserStateVisitor visitor(this, builder);
   for (auto r : states) {
     r->apply(visitor);
   }
-  append_line(bsv, "");
+  builder->append_line("");
 
   // Function: next_parse_state
   auto len = states.size();
   // bit0 is by default 0.
   auto lenp1 = len + 1;
-  append_format(bsv, "function Bit#(%d) nextDeparseState(MetadataT metadata);", lenp1);
-  incr_indent(bsv);
-  append_format(bsv, "Vector#(%d, Bool) headerValid;", lenp1);
-  append_line(bsv, "headerValid[0] = False;");
+  builder->append_format("function Bit#(%d) nextDeparseState(MetadataT metadata);", lenp1);
+  builder->incr_indent();
+  builder->append_format("Vector#(%d, Bool) headerValid;", lenp1);
+  builder->append_line("headerValid[0] = False;");
   for (int i = 0; i < states.size(); i++) {
     auto name = states.at(i)->name.name;
-    append_format(bsv, "headerValid[%d] = metadata.%s matches tagged Forward ? True : False;", i+1, name);
+    builder->append_format("headerValid[%d] = metadata.%s matches tagged Forward ? True : False;", i+1, name);
   }
-  append_line(bsv, "let vec = pack(headerValid);");
-  append_line(bsv, "return vec;");
-  decr_indent(bsv);
-  append_line(bsv, "endfunction");
-  append_line(bsv, "");
+  builder->append_line("let vec = pack(headerValid);");
+  builder->append_line("return vec;");
+  builder->decr_indent();
+  builder->append_line("endfunction");
+  builder->append_line("");
 
   // Function: transit_next_state
-  append_line(bsv, "function Action transit_next_state(MetadataT metadata);");
-  incr_indent(bsv);
-  append_line(bsv, "action");
-  append_line(bsv, "let vec = nextDeparseState(metadata);");
-  append_line(bsv, "if (vec == 0) begin");
-  incr_indent(bsv);
-  append_line(bsv, "w_deparse_header_done.send();");
-  decr_indent(bsv);
-  append_line(bsv, "end");
-  append_line(bsv, "else begin");
-  incr_indent(bsv);
+  builder->append_line("function Action transit_next_state(MetadataT metadata);");
+  builder->incr_indent();
+  builder->append_line("action");
+  builder->append_line("let vec = nextDeparseState(metadata);");
+  builder->append_line("if (vec == 0) begin");
+  builder->incr_indent();
+  builder->append_line("w_deparse_header_done.send();");
+  builder->decr_indent();
+  builder->append_line("end");
+  builder->append_line("else begin");
+  builder->incr_indent();
   auto nextVecLen = ceil(log2(lenp1));
-  append_format(bsv, "Bit#(%d) nextHeader = truncate(pack(countZerosLSB(vec)%% %d));", nextVecLen, lenp1 );
-  append_line(bsv, "DeparserState nextState = unpack(nextHeader);");
-  append_line(bsv, "case (nextState) matches");
-  incr_indent(bsv);
+  builder->append_format("Bit#(%d) nextHeader = truncate(pack(countZerosLSB(vec)%% %d));", nextVecLen, lenp1 );
+  builder->append_line("DeparserState nextState = unpack(nextHeader);");
+  builder->append_line("case (nextState) matches");
+  builder->incr_indent();
   for (int i = 0; i < states.size(); i++) {
     auto name = states.at(i)->name.name;
-    append_format(bsv, "StateDeparse%s: w_%s.send();", CamelCase(name), name);
+    builder->append_format("StateDeparse%s: w_%s.send();", CamelCase(name), name);
   }
-  append_line(bsv, "default: $display(\"ERROR: unknown states.\");");
-  decr_indent(bsv);
-  append_line(bsv, "endcase");
-  decr_indent(bsv);
-  append_line(bsv, "end");
-  append_line(bsv, "endaction");
-  decr_indent(bsv);
-  append_line(bsv, "endfunction");
-  append_line(bsv, "let initState = StateDeparse%s;", CamelCase(states[0]->name.toString()));
-  append_line(bsv, "`endif  // DEPARSER_STATE");
+  builder->append_line("default: $display(\"ERROR: unknown states.\");");
+  builder->decr_indent();
+  builder->append_line("endcase");
+  builder->decr_indent();
+  builder->append_line("end");
+  builder->append_line("endaction");
+  builder->decr_indent();
+  builder->append_line("endfunction");
+  builder->append_line("let initState = StateDeparse%s;", CamelCase(states[0]->name.toString()));
+  builder->append_line("`endif  // DEPARSER_STATE");
 }
 
 void FPGADeparser::emit(BSVProgram & bsv) {
-  emitEnums(bsv);
-  emitRules(bsv);
-  emitStates(bsv);
+  builder = &bsv.getDeparserBuilder();
+  emitEnums();
+  emitRules();
+  emitStates();
 }
 
 }  // namespace FPGA
