@@ -92,7 +92,8 @@ void FPGAProgram::emit(BSVProgram & bsv, CppProgram & cpp) {
   deparser->emit(bsv);
 
   // generate MetadataT
-  StructCodeGen visitor(this, bsv);
+  CodeBuilder* builder = &bsv.getStructBuilder();
+  StructCodeGen visitor(this, builder);
   visitor.emit();
 }
 
