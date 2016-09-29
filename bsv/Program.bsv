@@ -91,5 +91,6 @@ module mkProgram(Program#(nrx, ntx, nhs))
       ingress.set_verbosity(verbosity);
       egress.set_verbosity(verbosity);
    endmethod
+`include "ProgDeclGenerated.bsv"
 endmodule
 

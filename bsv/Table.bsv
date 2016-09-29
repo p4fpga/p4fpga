@@ -41,8 +41,6 @@ import FIFO::*;
 import FIFOF::*;
 import FShow::*;
 import GetPut::*;
-import List::*;
-import MIMO::*;
 import MatchTable::*;
 import PacketBuffer::*;
 import Pipe::*;
@@ -63,14 +61,17 @@ import ConnectalTypes::*;
 `include "SynthBuilder.defines"
 interface Table#(numeric type nActions, type metaI, type actI, type keyT, type valueT);
    interface Server#(metaI, metaI) prev_control_state;
-   interface Vector#(nActions, Client#(actI, metaI)) next_control_state;
+   interface Vector#(nActions, Client#(Tuple2#(metaI, actI), metaI)) next_control_state;
    method Action add_entry(keyT key, valueT value);
    method Action set_verbosity(int verbosity);
 endinterface
 
+/*
+   alternative implementation is 
+ */
 module mkTable#(function keyT build_lookup_request(),
                 function Action execute_action(valT data, metaI md,
-                   Vector#(nact, FIFOF#(actI)) fifo),
+                   Vector#(nact, FIFOF#(Tuple2#(metaI, actI))) fifo),
                 MatchTable#(a, b, c, d) matchTable)
                 (Table#(nact, metaI, actI, keyT, valT))
    provisos(Bits#(actI, b__)
@@ -81,7 +82,7 @@ module mkTable#(function keyT build_lookup_request(),
    `PRINT_DEBUG_MSG
    RX #(metaI) meta_in <- mkRX;
    TX #(metaI) meta_out <- mkTX;
-   Vector#(nact, FIFOF#(actI)) bbReqFifo <- replicateM(mkSizedFIFOF(16));
+   Vector#(nact, FIFOF#(Tuple2#(metaI, actI))) bbReqFifo <- replicateM(mkSizedFIFOF(16));
    Vector#(nact, FIFOF#(metaI)) bbRspFifo <- replicateM(mkSizedFIFOF(16));
 
    FIFOF#(metaI) metadata_ff <- mkSizedFIFOF(16);
@@ -120,10 +121,10 @@ module mkTable#(function keyT build_lookup_request(),
    interface prev_control_state = toServer(meta_in.e, meta_out.e);
    interface next_control_state = zipWith(toClient, bbReqFifo, bbRspFifo);
    method Action add_entry(keyT k, valT v);
-      // function that takes care of padding ...
+      // function that takes care of padding
       // let key = ForwardReqT { padding: 0, nhop_ipv4: k.nhop_ipv4};
       // let value = ForwardRspT { _action: unpack(v._action), dmac: v.dmac};
-      // matchTable.add_entry.put(tuple2(pack(key), pack(value)));
+      matchTable.add_entry.put(tuple2(pack(k), pack(v)));
    endmethod
    method Action set_verbosity(int verbosity);
        cf_verbosity <= verbosity;
