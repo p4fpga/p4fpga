@@ -24,53 +24,15 @@
 
 namespace FPGA {
 
-namespace Union {
-inline static std::string format_string(boost::format& message) {
-  return message.str();
-}
-
-template <typename TValue, typename... TArgs>
-  std::string format_string(boost::format& message, TValue&& arg, TArgs&&... args) {
-  message % std::forward<TValue>(arg);
-  return format_string(message, std::forward<TArgs>(args)...);
-}
-
-template <typename... TArgs>
-  void append_format(BSVProgram & bsv, const char* fmt, TArgs&&... args) {
-  bsv.getUnionBuilder().emitIndent();
-  boost::format msg(fmt);
-  std::string s = format_string(msg, std::forward<TArgs>(args)...);
-  bsv.getUnionBuilder().appendFormat(s.c_str());
-  bsv.getUnionBuilder().newline();
-}
-
-template <typename... TArgs>
-  void append_line(BSVProgram & bsv, const char* fmt, TArgs&&... args) {
-    bsv.getUnionBuilder().emitIndent();
-    boost::format msg(fmt);
-    std::string s = format_string(msg, std::forward<TArgs>(args)...);
-    bsv.getUnionBuilder().appendLine(s.c_str());
-  }
-
-inline void incr_indent(BSVProgram & bsv) {
-  bsv.getUnionBuilder().increaseIndent();
-}
-
-inline void decr_indent(BSVProgram & bsv) {
-  bsv.getUnionBuilder().decreaseIndent();
-}
-
-}  // namespace Union
-
 class UnionCodeGen : public Inspector {
  public:
-  UnionCodeGen(FPGAControl* control, BSVProgram& bsv):
-    control(control), bsv(bsv) {}
+  UnionCodeGen(FPGAControl* control, CodeBuilder* builder):
+    control(control), builder(builder) {}
   bool preorder(const IR::P4Table* table) override;
   void emit();
  private:
   FPGAControl* control;
-  BSVProgram & bsv;
+  CodeBuilder* builder;
 };
 
 }  // namespace FPGA

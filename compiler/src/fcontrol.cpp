@@ -408,11 +408,12 @@ void FPGAControl::emitActions(BSVProgram & bsv) {
 }
 
 void FPGAControl::emitActionTypes(BSVProgram & bsv) {
-  UnionCodeGen visitor(this, bsv);
+  CodeBuilder* builder = &bsv.getUnionBuilder();
+  UnionCodeGen visitor(this, builder);
   visitor.emit();
   for (auto b : tables) {
     LOG1("emit Action Types");
-    UnionCodeGen visitor(this, bsv);
+    UnionCodeGen visitor(this, builder);
     b.second->apply(visitor);
   }
 }
