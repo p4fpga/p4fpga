@@ -21,13 +21,6 @@
 #include "fcontrol.h"
 #include "string_utils.h"
 
-/*
-  info associated with a table
-  - key, value
-  - name
-  - actions
- */
-
 namespace FPGA {
 
 void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
@@ -146,7 +139,7 @@ cstring TableCodeGen::gatherTableKeys() {
     LOG1("key size" << s);
     field_width += s;
     cstring name = f->name.toString();
-    builder->append_line("let %s = fromMaybe(?, meta.%s);", name, name);
+    builder->append_line("let %s = fromMaybe(?, data.meta.%s);", name, name);
     fields += name + cstring(": ") + name;
     if (k != key_vec.back()) {
       fields += cstring(",");
@@ -158,23 +151,29 @@ cstring TableCodeGen::gatherTableKeys() {
   return fields;
 }
 
-void TableCodeGen::emitLookupFunction(const IR::P4Table* table) {
+void TableCodeGen::emitFunctionLookup(const IR::P4Table* table) {
   cstring name = nameFromAnnotation(table->annotations, table->name);
   cstring type = CamelCase(name);
-  cstring fields = gatherTableKeys();
-  builder->append_line("function ConnectalTypes::%sReqT %s_lookup_request();", type, name);
+  builder->append_line("instance Table_request #(ConnectalTypes::%sReqT);", type);
   builder->incr_indent();
-  builder->append_line("let v = ConnectalTypes::%sReqT {%s}", type, fields);
+  builder->append_line("function ConnectalTypes::%sReqT %s_lookup_request(MetadataRequest data);", type, name);
+  builder->incr_indent();
+  cstring fields = gatherTableKeys();
+  builder->append_line("let v = ConnectalTypes::%sReqT {%s};", type, fields);
   builder->append_line("return v;");
   builder->decr_indent();
   builder->append_line("endfunction");
+  builder->decr_indent();
+  builder->append_line("endinstance");
 }
 
-void TableCodeGen::emitExecuteFunction(const IR::P4Table* table) {
+void TableCodeGen::emitFunctionExecute(const IR::P4Table* table) {
   cstring name = nameFromAnnotation(table->annotations, table->name);
   cstring type = CamelCase(name);
   auto actionList = table->getActionList()->actionList;
   int actionSize = actionList->size();
+  builder->append_line("instance Table_execute #(ConnectalTypes::%sRspT, %sActionReq, %d)", type, type, actionSize);
+  builder->incr_indent();
   builder->append_line("function Action execute_action(ConnectalTypes::%sRspT resp, MetadataRequest metadata, Vector#(%d, FIFOF#(Tuple2#(MetadataRequest, %sActionReqT bbReqFifo))));", type, actionSize, type);
   builder->incr_indent();
   builder->append_line("action");
@@ -213,6 +212,8 @@ void TableCodeGen::emitExecuteFunction(const IR::P4Table* table) {
   builder->append_line("endaction");
   builder->decr_indent();
   builder->append_line("endfunction");
+  builder->decr_indent();
+  builder->append_line("endinstance");
 }
 
 void TableCodeGen::emitIntfAddEntry(const IR::P4Table* table) {
@@ -274,8 +275,8 @@ void TableCodeGen::emit(const IR::P4Table* table) {
   builder->append_line("typedef Table#(%d, MetadataRequest, %sActionReq, ConnectalTypes::%sReqT, ConnectalTypes::%sRspT) %sTable;", actionSize, type, type, type, type);
   builder->append_line("typedef MatchTable#(%d, %d, SizeOf#(%sReqT), SizeOf#(%sRspT)) %sMatchTable;", id, 256, type, type, type);
   builder->append_line("`SynthBuildModule(mkMatchTable, String, %sMatchTable, mkMatchTable_%d_%s)", type, 256, type);
-  emitLookupFunction(table);
-  emitExecuteFunction(table);
+  emitFunctionLookup(table);
+  emitFunctionExecute(table);
 }
 
 void TableCodeGen::emitCpp(const IR::P4Table* table) {
@@ -351,7 +352,6 @@ bool TableCodeGen::preorder(const IR::P4Table* table) {
   emitSimulation(tbl);
   emit(tbl);
   emitCpp(tbl);
-
   return false;
 }
 
