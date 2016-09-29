@@ -27,67 +27,16 @@ namespace FPGA {
 
 class FPGAParser;
 
-namespace Control {
-inline static std::string format_string(boost::format& message) {
-  return message.str();
-}
-
-template <typename TValue, typename... TArgs>
-  std::string format_string(boost::format& message, TValue&& arg, TArgs&&... args) {
-  message % std::forward<TValue>(arg);
-  return format_string(message, std::forward<TArgs>(args)...);
-}
-
-template <typename... TArgs>
-  void append_format(BSVProgram & bsv, const char* fmt, TArgs&&... args) {
-  bsv.getControlBuilder().emitIndent();
-  boost::format msg(fmt);
-  std::string s = format_string(msg, std::forward<TArgs>(args)...);
-  bsv.getControlBuilder().appendFormat(s.c_str());
-  bsv.getControlBuilder().newline();
-}
-
-template <typename... TArgs>
-  void append_line(BSVProgram & bsv, const char* fmt, TArgs&&... args) {
-    bsv.getControlBuilder().emitIndent();
-    boost::format msg(fmt);
-    std::string s = format_string(msg, std::forward<TArgs>(args)...);
-    bsv.getControlBuilder().appendLine(s.c_str());
-  }
-
-inline void incr_indent(BSVProgram & bsv) {
-  bsv.getControlBuilder().increaseIndent();
-}
-
-inline void decr_indent(BSVProgram & bsv) {
-  bsv.getControlBuilder().decreaseIndent();
-}
-
-template <typename... TArgs>
-  void append_line(CppProgram & cpp, const char* fmt, TArgs&&... args) {
-    cpp.getSimBuilder().emitIndent();
-    boost::format msg(fmt);
-    std::string s = format_string(msg, std::forward<TArgs>(args)...);
-    cpp.getSimBuilder().appendLine(s.c_str());
-  }
-
-inline void incr_indent(CppProgram & cpp) {
-  cpp.getSimBuilder().increaseIndent();
-}
-
-inline void decr_indent(CppProgram & cpp) {
-  cpp.getSimBuilder().decreaseIndent();
-}
-
-}  // namespace Control
-
-using namespace FPGA;
-
 class FPGAControl { // : public FPGAObject {
  public:
     const IR::ControlBlock*       controlBlock;
     FPGAProgram*                  program;
     FPGA::CFG*                    cfg;
+    CodeBuilder*                  builder;
+    CodeBuilder*                  cbuilder;
+    CodeBuilder*                  api_def;
+    CodeBuilder*                  api_decl;
+    CodeBuilder*                  type_builder;
 
     // map from action name to P4Action
     std::map<cstring, const IR::P4Action*>    basicBlock;
@@ -108,11 +57,12 @@ class FPGAControl { // : public FPGAObject {
     void emitTableRule(BSVProgram & bsv, const CFG::TableNode* node);
     void emitCondRule(BSVProgram & bsv, const CFG::IfNode* node);
     void emitEntryRule(BSVProgram & bsv, const CFG::Node* node);
+    void emitImports();
     void emitDeclaration(BSVProgram & bsv);
     void emitConnection(BSVProgram & bsv);
     void emitDebugPrint(BSVProgram & bsv);
     void emitFifo(BSVProgram & bsv);
-    void emitTables(BSVProgram & bsv, CppProgram & cpp);
+    void emitTables();
     void emitActions(BSVProgram & bsv);
     void emitActionTypes(BSVProgram & bsv);
     void emitAPI(BSVProgram & bsv, cstring cbtype);

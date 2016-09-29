@@ -25,8 +25,8 @@ namespace FPGA {
 
 class ActionCodeGen : public Inspector {
  public:
-  ActionCodeGen(FPGAControl* control, BSVProgram& bsv) : 
-    control(control), bsv(bsv) {}
+  ActionCodeGen(FPGAControl* control, BSVProgram& bsv, CodeBuilder* builder) : 
+    control(control), bsv(bsv), builder(builder) {}
   bool preorder(const IR::AssignmentStatement* stmt) override;
   bool preorder(const IR::Expression* expression) override;
   bool preorder(const IR::MethodCallExpression* expression) override;
@@ -36,6 +36,7 @@ class ActionCodeGen : public Inspector {
  private:
   FPGAControl* control;
   BSVProgram & bsv;
+  CodeBuilder* builder;
   cstring table_name;
   cstring table_type;
   void emitForwardRule(const IR::P4Action* action);
