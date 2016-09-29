@@ -20,21 +20,9 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-import BuildVector::*;
-import ClientServer::*;
-import Connectable::*;
-import Control::*;
-import GetPut::*;
-import FIFOF::*;
-import Vector::*;
-import Ethernet::*;
-import Pipe::*;
-import StructDefines::*;
-import UnionDefines::*;
-import Control::*;
+import Library::*;
 import ConnectalTypes::*;
-import Stream::*;
-import TieOff::*;
+import Control::*;
 
 `include "TieOff.defines"
 `TIEOFF_PIPEOUT("program ", MetadataRequest)

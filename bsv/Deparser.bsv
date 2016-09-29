@@ -21,36 +21,7 @@
 // SOFTWARE.
 
 // Deparser Template
-
-import BUtils::*;
-import BuildVector::*;
-import CBus::*;
-import ClientServer::*;
-import ConfigReg::*;
-import Connectable::*;
-import DefaultValue::*;
-import DbgDefs::*;
-import Ethernet::*;
-import FIFO::*;
-import FIFOF::*;
-import FShow::*;
-import GetPut::*;
-import List::*;
-import MIMO::*;
-import MatchTable::*;
-import PacketBuffer::*;
-import Pipe::*;
-import PrintTrace::*;
-import Register::*;
-import SpecialFIFOs::*;
-import Stream::*;
-import SharedBuff::*;
-import StmtFSM::*;
-import TxRx::*;
-import Utils::*;
-import Vector::*;
-import StructDefines::*;
-import UnionDefines::*;
+import Library::*;
 
 // app-specific structs
 `define DEPARSER_STRUCT
