@@ -24,8 +24,6 @@
 
 namespace FPGA {
 
-using namespace Parser;
-
 class ParserBuilder : public Inspector {
  public:
   ParserBuilder(FPGAParser* parser) : parser(parser) {
@@ -188,7 +186,7 @@ void FPGAParser::emitEnums(BSVProgram & bsv) {
     else
       builder->append_format("State%s,", CamelCase(s->name));
   }
-  decr_indent(bsv);
+  builder->decr_indent();
   builder->append_line("} ParserState deriving (Bits, Eq);");
   builder->append_line("`endif");
 }
@@ -200,7 +198,8 @@ void FPGAParser::emitStructs(BSVProgram & bsv) {
   if (htype == nullptr)
     return;
 
-  StructCodeGen visitor(program, bsv);
+  struct_builder = &bsv.getStructBuilder();
+  StructCodeGen visitor(program, struct_builder);
   for (auto f : *htype->to<IR::Type_Struct>()->fields) {
     auto ftype = typeMap->getType(f);
     if (ftype->is<IR::Type_Header>()) {
@@ -261,23 +260,23 @@ void FPGAParser::emitFunctions(BSVProgram & bsv) {
           builder->append_format("%d: begin", c->keyset->toString());
           builder->incr_indent();
           builder->append_line("w_%s_%s.send();", name, c->state->toString());
-          decr_indent(bsv);
+          builder->decr_indent();
           builder->append_line("end");
         } else if (c->keyset->is<IR::DefaultExpression>()) {
           builder->append_line("default: begin");
           builder->incr_indent();
           builder->append_line("w_%s_%s.send();", name, c->state->toString());
-          decr_indent(bsv);
+          builder->decr_indent();
           builder->append_line("end");
         }
       }
     } else {
       // no case.
     }
-    decr_indent(bsv);
+    builder->decr_indent();
     builder->append_line("endcase");
     builder->append_line("endaction");
-    decr_indent(bsv);
+    builder->decr_indent();
     builder->append_line("endfunction");
   }
 
@@ -299,9 +298,9 @@ void FPGAParser::emitBufferRule(BSVProgram & bsv, const IR::BSV::ParseStep* stat
     builder->append_line("let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];");
     builder->append_line("rg_tmp[0] <= zeroExtend(data);");
     builder->append_line("move_shift_amt(128);");
-    decr_indent(bsv);
+    builder->decr_indent();
     builder->append_line("end");
-    decr_indent(bsv);
+    builder->decr_indent();
     builder->append_line("endrule");
     builder->append_line("");
 }
@@ -316,7 +315,7 @@ void FPGAParser::emitExtractionRule(BSVProgram & bsv, const IR::BSV::ParseStep* 
     builder->incr_indent();
     builder->append_line("data_ff.deq;");
     builder->append_line("data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];");
-    decr_indent(bsv);
+    builder->decr_indent();
     builder->append_line("end");
     builder->append_line("report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);");
     builder->append_line("let %s = extract_%s(truncate(data));", name, type);
@@ -343,7 +342,7 @@ void FPGAParser::emitExtractionRule(BSVProgram & bsv, const IR::BSV::ParseStep* 
     builder->append_format("succeed_and_next(%d);", state->width_bits);
     builder->append_line("parse_state_ff.deq;");
     builder->append_format("%s_out_ff.enq(tagged Valid %s);", name, name);
-    decr_indent(bsv);
+    builder->decr_indent();
     builder->append_line("endrule");
     builder->append_line("");
 }
@@ -382,7 +381,7 @@ void FPGAParser::emitTransitionRule(BSVProgram & bsv, const IR::BSV::ParseStep* 
           builder->append_line("fetch_next_header0(%d);", bsv_parse_state->width_bits);
         }
       }
-      decr_indent(bsv);
+      builder->decr_indent();
       builder->append_line("endrule");
     }
   }
@@ -460,7 +459,7 @@ void FPGAParser::emitAcceptedHeaders(BSVProgram & bsv, const IR::Type_Struct* he
       builder->incr_indent();
       builder->append_format("meta.%s = tagged Forward;", name);
       builder->append_format("meta.hdr.%s = tagged Valid;", name);
-      decr_indent(bsv);
+      builder->decr_indent();
       builder->append_line("end");
       for (auto m : program->metadata) {
         auto member = m.second;
@@ -472,7 +471,7 @@ void FPGAParser::emitAcceptedHeaders(BSVProgram & bsv, const IR::Type_Struct* he
           builder->append_format("if (%s matches tagged Valid .d) begin", name);
           builder->incr_indent();
           builder->append_format("meta.%s = tagged Valid d.%s;", fname, fname);
-          decr_indent(bsv);
+          builder->decr_indent();
           builder->append_line("end");
         }
       }
@@ -528,7 +527,7 @@ void FPGAParser::emitAcceptRule(BSVProgram & bsv) {
   builder->append_line("rg_shift_amt[0] <= 0;");
   builder->append_line("rg_buffered[0] <= 0;");
   builder->append_line("meta_in_ff.enq(meta);");
-  decr_indent(bsv);
+  builder->decr_indent();
   builder->append_line("endrule");
 }
 

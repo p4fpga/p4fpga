@@ -22,8 +22,6 @@
 
 namespace FPGA {
 
-using namespace Struct;
-
 bool StructCodeGen::preorder(const IR::Type_Header* hdr) {
   cstring name = hdr->name.toString();
   cstring header_type = CamelCase(name);
@@ -34,54 +32,56 @@ bool StructCodeGen::preorder(const IR::Type_Header* hdr) {
   }
   header_map.emplace(name, hdr);
   // do code gen
-  append_line(bsv, "import DefaultValue::*;");
-  append_line(bsv, "typedef struct {");
-  incr_indent(bsv);
+  builder->append_line("import DefaultValue::*;");
+  builder->append_line("typedef struct {");
+  builder->incr_indent();
   auto header_width = 0;
   for (auto f : *hdr->fields) {
     if (f->type->is<IR::Type_Bits>()) {
       auto width = f->type->to<IR::Type_Bits>()->size;
       auto name = f->name;
-      append_format(bsv, "Bit#(%d) %s;", width, name.toString());
+      builder->append_format("Bit#(%d) %s;", width, name.toString());
       header_width += width;
     }
   }
-  decr_indent(bsv);
-  append_format(bsv, "} %s deriving (Bits, Eq);", header_type);
-  append_format(bsv, "function %s extract_%s(Bit#(%d) data);", header_type, name, header_width);
-  incr_indent(bsv);
-  append_line(bsv, "return unpack(byteSwap(data));");
-  decr_indent(bsv);
-  append_line(bsv, "endfunction");
+  builder->decr_indent();
+  builder->append_format("} %s deriving (Bits, Eq);", header_type);
+  builder->append_format("function %s extract_%s(Bit#(%d) data);", header_type, name, header_width);
+  builder->incr_indent();
+  builder->append_line("return unpack(byteSwap(data));");
+  builder->decr_indent();
+  builder->append_line("endfunction");
   return false;
 }
 
 void StructCodeGen::emit() {
-  append_line(bsv, "typedef struct {");
-  incr_indent(bsv);
+  CHECK_NULL(builder);
+
+  builder->append_line("typedef struct {");
+  builder->incr_indent();
   // metadata used in table
   for (auto p : program->ingress->metadata_to_table) {
     auto name = nameFromAnnotation(p.first->annotations, p.first->name);
     auto size = p.first->type->to<IR::Type_Bits>()->size;
-    append_line(bsv, "Maybe#(Bit#(%d)) %s;", size, name);
+    builder->append_line("Maybe#(Bit#(%d)) %s;", size, name);
   }
   for (auto p : program->egress->metadata_to_table) {
     auto name = nameFromAnnotation(p.first->annotations, p.first->name);
     auto size = p.first->type->to<IR::Type_Bits>()->size;
-    append_line(bsv, "Maybe#(Bit#(%d)) %s;", size, name);
+    builder->append_line("Maybe#(Bit#(%d)) %s;", size, name);
   }
   // metadata used in control flow
   // TODO:
   for (auto s : program->parser->parseSteps) {
-    append_format(bsv, "HeaderState %s;", s->name.toString());
+    builder->append_format("HeaderState %s;", s->name.toString());
   }
-  decr_indent(bsv);
-  append_line(bsv, "} MetadataT deriving (Bits, Eq, FShow);");
-  append_line(bsv, "instance DefaultValue#(MetadataT);");
-  incr_indent(bsv);
-  append_line(bsv, "defaultValue = unpack(0);");
-  decr_indent(bsv);
-  append_line(bsv, "endinstance");
+  builder->decr_indent();
+  builder->append_line("} MetadataT deriving (Bits, Eq, FShow);");
+  builder->append_line("instance DefaultValue#(MetadataT);");
+  builder->incr_indent();
+  builder->append_line("defaultValue = unpack(0);");
+  builder->decr_indent();
+  builder->append_line("endinstance");
 }
 
 }  // namespace FPGA
