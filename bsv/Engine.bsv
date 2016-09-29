@@ -21,10 +21,10 @@
 // SOFTWARE.
 
 /*
-  Adjustable Action Engine
+  Multi-cycle Action Engine
 
-  Action engine require 
  - Actions are implemented in different ways: DSP, local operator
+
  */
 import BUtils::*;
 import BuildVector::*;
