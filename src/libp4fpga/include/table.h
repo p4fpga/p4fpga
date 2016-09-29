@@ -90,16 +90,13 @@ class TableCodeGen : public Inspector {
   std::vector<std::pair<const IR::StructField*, int>> key_vec;
   std::vector<cstring> action_vec;
   cstring defaultActionName;
+  cstring gatherTableKeys();
   void emit(const IR::P4Table* table);
   void emitTypedefs(const IR::P4Table* table);
   void emitSimulation(const IR::P4Table* table);
-  void emitRuleHandleRequest(const IR::P4Table* table);
-  void emitRuleHandleExecution(const IR::P4Table* table);
-  void emitRuleHandleResponse(const IR::P4Table* table);
-  void emitRspFifoMux(const IR::P4Table* table);
+  void emitLookupFunction(const IR::P4Table* table);
+  void emitExecuteFunction(const IR::P4Table* table);
   void emitIntfAddEntry(const IR::P4Table* table);
-  void emitIntfControlFlow(const IR::P4Table* table);
-  void emitIntfVerbosity(const IR::P4Table* table);
   void emitCpp(const IR::P4Table* table);
 };
 

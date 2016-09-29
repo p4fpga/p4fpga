@@ -134,52 +134,18 @@ void TableCodeGen::emitSimulation(const IR::P4Table* table) {
   if (remainder != 0) {
     key_width = key_width + 9 - remainder;
   }
-  builder->append_line("`ifndef SVDPI");
-  builder->append_format("import \"BDPI\" function ActionValue#(Bit#(%d)) matchtable_read_%s(Bit#(%d) msgtype);", action_size, camelCase(name), key_width);
-  builder->append_format("import \"BDPI\" function Action matchtable_write_%s(Bit#(%d) msgtype, Bit#(%d) data);", camelCase(name), key_width, action_size);
-  builder->append_line("`endif");
-
-  builder->append_line("instance MatchTableSim#(%d, %d, %d);", id, key_width, action_size);
-  builder->incr_indent();
-  builder->append_format("function ActionValue#(Bit#(%d)) matchtable_read(Bit#(%d) id, Bit#(%d) key);", action_size, id, key_width);
-  builder->append_line("actionvalue");
-  builder->incr_indent();
-  builder->append_format("let v <- matchtable_read_%s(key);", camelCase(name));
-  builder->append_line("return v;");
-  builder->decr_indent();
-  builder->append_line("endactionvalue");
-  builder->append_line("endfunction");
-
-  builder->append_format("function Action matchtable_write(Bit#(%d) id, Bit#(%d) key, Bit#(%d) data);", id, key_width, action_size);
-  builder->append_line("action");
-  builder->incr_indent();
-  builder->append_format("matchtable_write_%s(key, data);", camelCase(name));
-  builder->decr_indent();
-  builder->append_line("endaction");
-  builder->append_line("endfunction");
-  builder->decr_indent();
-  builder->append_line("endinstance");
+  builder->append_line("`MATCHTABLE_SIM(%d, %d, %d);", id, key_width, action_size);
 }
 
-void TableCodeGen::emitRuleHandleRequest(const IR::P4Table* table) {
-  auto name = nameFromAnnotation(table->annotations, table->name);
-  auto type = CamelCase(name);
-  // handle table request
-  builder->append_line("Vector#(2, FIFOF#(MetadataT)) metadata_ff <- replicateM(mkFIFOF);");
-  builder->append_line("rule rl_handle_request;");
-  builder->incr_indent();
-  builder->append_line("let data = rx_info_metadata.first;");
-  builder->append_line("rx_info_metadata.deq;");
-  builder->append_line("let meta = data.meta;");
-  builder->append_line("let pkt = data.pkt;");
-  auto fields = cstring("");
-  auto field_width = 0;
+cstring TableCodeGen::gatherTableKeys() {
+  cstring fields = "";
+  int field_width = 0;
   for (auto k : key_vec) {
     auto f = k.first;
     auto s = k.second;
     LOG1("key size" << s);
     field_width += s;
-    auto name = f->name.toString();
+    cstring name = f->name.toString();
     builder->append_line("let %s = fromMaybe(?, meta.%s);", name, name);
     fields += name + cstring(": ") + name;
     if (k != key_vec.back()) {
@@ -189,28 +155,30 @@ void TableCodeGen::emitRuleHandleRequest(const IR::P4Table* table) {
   if (field_width % 9 != 0) {
     fields += ", padding: 0";
   }
-  builder->append_line("%sReqT req = %sReqT{%s};", type, type, fields);
-  builder->append_line("matchTable.lookupPort.request.put(pack(req));");
-  builder->append_line("packet_ff[0].enq(pkt);");
-  builder->append_line("metadata_ff[0].enq(meta);");
-  builder->decr_indent();
-  builder->append_line("endrule");
+  return fields;
 }
 
-void TableCodeGen::emitRuleHandleExecution(const IR::P4Table* table) {
-  auto name = nameFromAnnotation(table->annotations, table->name);
-  auto type = CamelCase(name);
-  // handle action execution
-  builder->append_line("rule rl_execute;");
+void TableCodeGen::emitLookupFunction(const IR::P4Table* table) {
+  cstring name = nameFromAnnotation(table->annotations, table->name);
+  cstring type = CamelCase(name);
+  cstring fields = gatherTableKeys();
+  builder->append_line("function ConnectalTypes::%sReqT %s_lookup_request();", type, name);
   builder->incr_indent();
-  builder->append_line("let rsp <- matchTable.lookupPort.response.get;");
-  builder->append_line("let pkt <- toGet(packet_ff[0]).get;");
-  builder->append_line("let meta <- toGet(metadata_ff[0]).get;");
-  builder->append_line("if (rsp matches tagged Valid .data) begin");
-  builder->incr_indent();
-  builder->append_format("%sRspT resp = unpack(data);", type);
-  builder->append_line("case (resp._action) matches");
+  builder->append_line("let v = ConnectalTypes::%sReqT {%s}", type, fields);
+  builder->append_line("return v;");
+  builder->decr_indent();
+  builder->append_line("endfunction");
+}
+
+void TableCodeGen::emitExecuteFunction(const IR::P4Table* table) {
+  cstring name = nameFromAnnotation(table->annotations, table->name);
+  cstring type = CamelCase(name);
   auto actionList = table->getActionList()->actionList;
+  int actionSize = actionList->size();
+  builder->append_line("function Action execute_action(ConnectalTypes::%sRspT resp, MetadataRequest metadata, Vector#(%d, FIFOF#(Tuple2#(MetadataRequest, %sActionReqT bbReqFifo))));", type, actionSize, type);
+  builder->incr_indent();
+  builder->append_line("action");
+  builder->append_line("case (resp._action) matches");
   int idx = 0;
   builder->incr_indent();
   for (auto action : *actionList) {
@@ -232,7 +200,7 @@ void TableCodeGen::emitRuleHandleExecution(const IR::P4Table* table) {
         }
         builder->append_format("%s: begin", UpperCase(t));
         builder->incr_indent();
-        builder->append_format("%sActionReq req = tagged %sReqT {pkt: pkt, meta: meta %s};", type, t, fields);
+        builder->append_format("%sActionReq req = tagged %sReqT {%s};", type, t, fields);
         builder->append_format("bbReqFifo[%d].enq(req);", idx);
         builder->decr_indent();
         builder->append_line("end");
@@ -242,68 +210,9 @@ void TableCodeGen::emitRuleHandleExecution(const IR::P4Table* table) {
   }
   builder->decr_indent();
   builder->append_line("endcase");
-  // builder->append_line("packet_ff[1].enq(pkt);");
-  // builder->append_line("metadata_ff[1].enq(meta);");
+  builder->append_line("endaction");
   builder->decr_indent();
-  builder->append_line("end");
-  builder->decr_indent();
-  builder->append_line("endrule");
-}
-
-void TableCodeGen::emitRuleHandleResponse(const IR::P4Table *table) {
-  auto name = nameFromAnnotation(table->annotations, table->name);
-  auto type = CamelCase(name);
-  auto actionList = table->getActionList()->actionList;
-  // handle table response
-  builder->append_line("rule rl_handle_response;");
-  builder->incr_indent();
-  builder->append_line("let v <- toGet(bbRspFifo[readyChannel]).get;");
-  // builder->append_line("let pkt <- toGet(packet_ff[1]).get;");
-  // builder->append_line("let meta <- toGet(metadata_ff[1]).get;");
-  builder->append_line("case (v) matches");
-  builder->incr_indent();
-  for (auto action : *actionList) {
-    auto fields = cstring("");
-    auto elem = action->to<IR::ActionListElement>();
-    if (elem->expression->is<IR::MethodCallExpression>()) {
-      auto e = elem->expression->to<IR::MethodCallExpression>();
-      auto n = e->method->toString();
-      auto t = CamelCase(n);
-      // from action name to actual action declaration
-      auto k = control->basicBlock.find(n);
-      if (k != control->basicBlock.end()) {
-        builder->append_format("tagged %sRspT {pkt: .pkt, meta: .meta} : begin", t);
-        builder->incr_indent();
-        builder->append_format("MetadataResponse rsp = tagged MetadataResponse {pkt: pkt, meta: meta};");
-        builder->append_line("tx_info_metadata.enq(rsp);");
-        builder->decr_indent();
-        builder->append_line("end");
-      }
-    }
-  }
-  builder->decr_indent();
-  builder->append_line("endcase");
-  builder->decr_indent();
-  builder->append_line("endrule");
-}
-
-void TableCodeGen::emitRspFifoMux(const IR::P4Table *table) {
-  auto actionList = table->getActionList()->actionList;
-  auto nActions = actionList->size();
-  // ready mux for all rsp fifo
-  builder->append_format("Vector#(%d, Bool) readyBits = map(fifoNotEmpty, bbRspFifo);", nActions);
-  builder->append_line("Bool interruptStatus = False;");
-  builder->append_format("Bit#(%d) readyChannel = -1;", nActions);
-  builder->append_format("for (Integer i=%d; i>=0; i=i-1) begin", nActions-1);
-  builder->incr_indent();
-  builder->append_line("if (readyBits[i]) begin");
-  builder->incr_indent();
-  builder->append_line("interruptStatus = True;");
-  builder->append_line("readyChannel = fromInteger(i);");
-  builder->decr_indent();
-  builder->append_line("end");
-  builder->decr_indent();
-  builder->append_line("end");
+  builder->append_line("endfunction");
 }
 
 void TableCodeGen::emitIntfAddEntry(const IR::P4Table* table) {
@@ -354,25 +263,6 @@ void TableCodeGen::emitIntfAddEntry(const IR::P4Table* table) {
   builder->append_line("endmethod");
 }
 
-void TableCodeGen::emitIntfControlFlow(const IR::P4Table* table) {
-  auto actionList = table->getActionList()->actionList;
-  builder->append_line("interface prev_control_state = toServer(rx_metadata.e, tx_metadata.e);");
-  int idx = 0;
-  for (auto action : *actionList) {
-    builder->append_line("interface next_control_state_%d = toClient(bbReqFifo[%d], bbRspFifo[%d]);", idx, idx, idx);
-    idx ++;
-  }
-}
-
-void TableCodeGen::emitIntfVerbosity(const IR::P4Table* table) {
-  builder->append_line("method Action set_verbosity(int verbosity);");
-  builder->incr_indent();
-  builder->append_line("cf_verbosity <= verbosity;");
-  builder->decr_indent();
-  builder->append_line("endmethod");
-  builder->decr_indent();
-}
-
 void TableCodeGen::emit(const IR::P4Table* table) {
   auto name = nameFromAnnotation(table->annotations, table->name);
   auto type = CamelCase(name);
@@ -380,52 +270,12 @@ void TableCodeGen::emit(const IR::P4Table* table) {
   auto actionList = table->getActionList()->actionList;
   auto nActions = actionList->size();
   CHECK_NULL(builder);
-  builder->append_line("(* synthesize *)");
-  builder->append_line("module mkMatchTable_256_%s(MatchTable#(%d, 256, SizeOf#(%sReqT), SizeOf#(%sRspT)));", type, id, type, type);
-  builder->incr_indent();
-  builder->append_line("(* hide *)");
-  builder->append_line("MatchTable#(%d, 256, SizeOf#(%sReqT), SizeOf#(%sRspT)) ifc <- mkMatchTable(\"%s\");", id, type, type, name);
-  builder->append_line("return ifc;");
-  builder->decr_indent();
-  builder->append_line("endmodule");
-
-  builder->append_format("// =============== table %s ==============", name);
-  builder->append_line("interface %s;", type);
-  builder->incr_indent();
-  //FIXME: more than one action;
-  builder->append_line("interface Server#(MetadataRequest, MetadataResponse) prev_control_state;");
-  int idx = 0;
-  for (auto action : *actionList) {
-    builder->append_line("interface Client#(%sActionReq, %sActionRsp) next_control_state_%d;", type, type, idx);
-    idx ++;
-  }
-  builder->append_line("method Action add_entry(ConnectalTypes::%sReqT key, ConnectalTypes::%sRspT value);", type, type);
-  builder->append_line("method Action set_verbosity(int verbosity);");
-  builder->decr_indent();
-  builder->append_line("endinterface");
-  builder->append_line("(* synthesize *)");
-  builder->append_format("module mk%s (Control::%s);", type, type);
-  builder->incr_indent();
-  //control->emitDebugPrint(bsv);
-
-  builder->append_line("RX #(MetadataRequest) rx_metadata <- mkRX;");
-  builder->append_line("TX #(MetadataResponse) tx_metadata <- mkTX;");
-  builder->append_line("let rx_info_metadata = rx_metadata.u;");
-  builder->append_line("let tx_info_metadata = tx_metadata.u;");
-
-  builder->append_format("Vector#(%d, FIFOF#(%sActionReq)) bbReqFifo <- replicateM(mkFIFOF);", nActions, type);
-  builder->append_format("Vector#(%d, FIFOF#(%sActionRsp)) bbRspFifo <- replicateM(mkFIFOF);", nActions, type);
-  builder->append_line("Vector#(2, FIFOF#(PacketInstance)) packet_ff <- replicateM(mkFIFOF);");
-  builder->append_line("MatchTable#(%d, 256, SizeOf#(%sReqT), SizeOf#(%sRspT)) matchTable <- mkMatchTable_256_%s;", id, type, type, type);
-
-  emitRspFifoMux(table);
-  emitRuleHandleRequest(table);
-  emitRuleHandleExecution(table);
-  emitRuleHandleResponse(table);
-  emitIntfControlFlow(table);
-  emitIntfAddEntry(table);
-  emitIntfVerbosity(table);
-  builder->append_line("endmodule");
+  int actionSize = actionList->size();
+  builder->append_line("typedef Table#(%d, MetadataRequest, %sActionReq, ConnectalTypes::%sReqT, ConnectalTypes::%sRspT) %sTable;", actionSize, type, type, type, type);
+  builder->append_line("typedef MatchTable#(%d, %d, SizeOf#(%sReqT), SizeOf#(%sRspT)) %sMatchTable;", id, 256, type, type, type);
+  builder->append_line("`SynthBuildModule(mkMatchTable, String, %sMatchTable, mkMatchTable_%d_%s)", type, 256, type);
+  emitLookupFunction(table);
+  emitExecuteFunction(table);
 }
 
 void TableCodeGen::emitCpp(const IR::P4Table* table) {
