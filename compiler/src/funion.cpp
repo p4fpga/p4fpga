@@ -20,56 +20,36 @@
 
 namespace FPGA {
 
-bool UnionCodeGen::preorder(const IR::P4Table* table) {
-  auto name = nameFromAnnotation(table->annotations, table->name);
-  auto type = CamelCase(name);
-
-  builder->append_line("typedef union tagged {");
+bool UnionCodeGen::preorder(const IR::MethodCallExpression* expr) {
+  cstring type = CamelCase(expr->method->toString());
+  builder->append_line("struct {");
   builder->incr_indent();
-  for (auto act : *table->getActionList()->actionList) {
-    auto elem = act->to<IR::ActionListElement>();
-    if (elem->expression->is<IR::MethodCallExpression>()) {
-      auto expr = elem->expression->to<IR::MethodCallExpression>();
-      auto action = expr->method->toString();
-      LOG1("action type " << action << " " << expr->method->node_type_name());
-      auto ty = CamelCase(action);
-      builder->append_line("struct {");
-      builder->incr_indent();
-      builder->append_line("PacketInstance pkt;");
-      builder->append_line("MetadataT meta;");
-      auto k = control->basicBlock.find(action);
-      if (k != control->basicBlock.end()) {
-        auto params = k->second->parameters;
-        for (auto p : *params->parameters) {
-          auto type = p->type->to<IR::Type_Bits>();
-          builder->append_line("Bit#(%d) %s;", type->size, p->name.toString() );
-        }
-      }
-      builder->decr_indent();
-      builder->append_line("} %sReqT;", ty);
+  auto k = control->basicBlock.find(expr->method->toString());
+  if (k != control->basicBlock.end()) {
+    const IR::ParameterList* params = k->second->parameters;
+    for (auto p : *params->parameters) {
+      int size = p->type->width_bits();
+      cstring name = p->name.toString();
+      builder->append_line("Bit#(%d) %s;", size, name);
     }
   }
+  builder->decr_indent();
+  builder->append_line("} %sReqT;", type);
+  return false;
+}
+
+bool UnionCodeGen::preorder(const IR::P4Table* table) {
+  CHECK_NULL(table);
+  cstring name = nameFromAnnotation(table->annotations, table->name);
+  cstring type = CamelCase(name);
+
+  CHECK_NULL(builder);
+  builder->append_line("typedef union tagged {");
+  builder->incr_indent();
+  UnionCodeGen visitor(control, builder);
+  table->getActionList()->apply(visitor);
   builder->decr_indent();
   builder->append_line("} %sActionReq deriving (Bits, Eq, FShow);", type);
-
-  builder->append_line("typedef union tagged {");
-  builder->incr_indent();
-  for (auto act : *table->getActionList()->actionList) {
-    auto elem = act->to<IR::ActionListElement>();
-    if (elem->expression->is<IR::MethodCallExpression>()) {
-      auto expr = elem->expression->to<IR::MethodCallExpression>();
-      auto action = expr->method->toString();
-      auto ty = CamelCase(action);
-      builder->append_line("struct {");
-      builder->incr_indent();
-      builder->append_line("PacketInstance pkt;");
-      builder->append_line("MetadataT meta;");
-      builder->decr_indent();
-      builder->append_line("} %sRspT;", ty);
-    }
-  }
-  builder->decr_indent();
-  builder->append_line("} %sActionRsp deriving (Bits, Eq, FShow);", type);
   return false;
 }
 

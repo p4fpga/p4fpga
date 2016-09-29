@@ -14,8 +14,8 @@
   limitations under the License.
 */
 
-#ifndef EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FUNION_H_
-#define EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FUNION_H_
+#ifndef P4FPGA_INCLUDE_FUNION_H_
+#define P4FPGA_INCLUDE_FUNION_H_
 
 #include "ir/ir.h"
 #include "fcontrol.h"
@@ -29,6 +29,7 @@ class UnionCodeGen : public Inspector {
   UnionCodeGen(FPGAControl* control, CodeBuilder* builder):
     control(control), builder(builder) {}
   bool preorder(const IR::P4Table* table) override;
+  bool preorder(const IR::MethodCallExpression* expr) override;
   void emit();
  private:
   FPGAControl* control;
@@ -37,4 +38,4 @@ class UnionCodeGen : public Inspector {
 
 }  // namespace FPGA
 
-#endif /* EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_FUNION_H_ */
+#endif /* P4FPGA_INCLUDE_FUNION_H_ */
