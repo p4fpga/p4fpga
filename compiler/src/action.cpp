@@ -88,29 +88,6 @@ bool ActionCodeGen::preorder(const IR::MethodCallExpression* expression) {
   return false;
 }
 
-void ActionCodeGen::emitCpuReqRule(const IR::P4Action* action) {
-  builder->append_line("rule rl_cpu_request if (cpu.not_running());");
-  builder->incr_indent();
-  builder->append_line("let v = rx_info_prev_control_state.first;");
-  builder->append_line("rx_info_prev_control_state.deq;");
-  builder->append_line("case (v) matches");
-  builder->incr_indent();
-  auto name = action->name;
-  auto type = CamelCase(name);
-  builder->append_format("tagged %sReqT {pkt: .pkt, meta: .meta} : begin", type);
-  builder->incr_indent();
-  builder->append_line("metadata <= meta;");
-  builder->append_line("curr_packet_ff.enq(pkt);");
-  builder->decr_indent();
-  builder->append_line("end");
-  builder->decr_indent();
-  builder->append_line("endcase");
-  builder->append_line("// copy from metadata to stack");
-  builder->append_line("// run cpu");
-  builder->decr_indent();
-  builder->append_line("endrule");
-}
-
 void ActionCodeGen::emitCpuRspRule(const IR::P4Action* action) {
   auto name = action->name;
   auto type = CamelCase(name);
@@ -137,80 +114,20 @@ void ActionCodeGen::emitCpuRspRule(const IR::P4Action* action) {
 }
 
 void ActionCodeGen::emitActionBegin(const IR::P4Action* action) {
-  auto name = nameFromAnnotation(action->annotations, action->name);
-  auto orig_name = action->name.toString();
-  auto type = CamelCase(name);
-  builder->append_format("// =============== action %s ==============", name);
-  auto table = control->action_to_table[orig_name];
+  cstring name = nameFromAnnotation(action->annotations, action->name);
+  cstring orig_name = action->name.toString();
+  cstring type = CamelCase(name);
+  const IR::P4Table* table = control->action_to_table[orig_name];
   if (table == nullptr) {
     ::error("unable to find table from action %s", orig_name);
   }
   table_name = nameFromAnnotation(table->annotations, table->name);
   table_type = CamelCase(table_name);
-  builder->append_line("interface %s;", type);
-  builder->incr_indent();
-  builder->append_format("interface Server#(%sActionReq, %sActionRsp) prev_control_state;", table_type, table_type);
-  builder->append_line("method Action set_verbosity(int verbosity);");
-  builder->decr_indent();
-  builder->append_line("endinterface");
-  builder->append_line("(* synthesize *)");
-  builder->append_format("module mk%s (Control::%s);", type, type);
-  builder->incr_indent();
-  control->emitDebugPrint(bsv);
-  builder->append_format("RX #(%sActionReq) rx_prev_control_state <- mkRX;", table_type);
-  builder->append_format("TX #(%sActionRsp) tx_prev_control_state <- mkTX;", table_type);
-  builder->append_line("let rx_info_prev_control_state = rx_prev_control_state.u;");
-  builder->append_line("let tx_info_prev_control_state = tx_prev_control_state.u;");
-}
-
-void ActionCodeGen::emitActionEnd(const IR::P4Action* action) {
-  builder->append_line("interface prev_control_state = toServer(rx_prev_control_state.e, tx_prev_control_state.e);");
-  builder->append_line("method Action set_verbosity(int verbosity);");
-  builder->incr_indent();
-  builder->append_line("cf_verbosity <= verbosity;");
-  // extern verbosity
-  builder->decr_indent();
-  builder->append_line("endmethod");
-  builder->decr_indent();
-  builder->append_line("endmodule");
-}
-
-void ActionCodeGen::emitDropRule(const IR::P4Action* action) {
-  builder->append_line("rule drop;");
-  builder->incr_indent();
-  builder->append_line("let v = rx_info_prev_control_state.first;");
-  builder->append_line("rx_info_prev_control_state.deq;");
-  builder->append_line("case (v) matches");
-  builder->incr_indent();
-  auto name = action->name;
-  auto type = CamelCase(name);
-  builder->append_format("tagged %sReqT {pkt: .pkt, meta: .meta} : begin", type);
-  builder->incr_indent();
-  builder->append_line("%sActionRsp rsp = taggeed %sRspT {pkt: pkt, meta: meta};", table_type, type);
-  builder->append_line("tx_info_prev_control_state.enq(v);");
-  builder->decr_indent();
-  builder->append_line("end");
-  builder->decr_indent();
-  builder->append_line("endcase");
-  builder->decr_indent();
-  builder->append_line("endrule");
-  builder->append_line("FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;");
-}
-
-void ActionCodeGen::emitForwardRule(const IR::P4Action* action) {
-
 }
 
 void ActionCodeGen::emitModifyRule(const IR::P4Action* action) {
   auto name = nameFromAnnotation(action->annotations, action->name);
-  builder->append_line("Reg#(MetadataT) metadata <- mkReg(defaultValue);");
-  builder->append_line("FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;");
-  builder->append_line("Vector#(1, Reg#(Bit#(64))) temp <- replicateM(mkReg(0));");
-  builder->append_line("CPU cpu <- mkCPU(\"%s\", toList(temp));", name);
-  builder->append_line("IMem imem <- mkIMem(\"%s.hex\");", name);
-  builder->append_line("mkConnection(cpu.imem_client, imem.cpu_server);");
   // Extern ??
-  emitCpuReqRule(action);
   emitCpuRspRule(action);
 }
 
@@ -254,13 +171,10 @@ void ActionCodeGen::postorder(const IR::P4Action* action) {
   }
   emitActionBegin(action);
   if (isNoAction(action)) {
-    emitForwardRule(action);
   } else if (isDropAction(action)) {
-    emitDropRule(action);
   } else {
     emitModifyRule(action);
   }
-  emitActionEnd(action);
 }
 
 }  // namespace FPGA
