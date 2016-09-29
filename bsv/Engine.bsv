@@ -21,44 +21,74 @@
 // SOFTWARE.
 
 /*
- Packet Processing Engine
+  Adjustable Action Engine
 
+  Action engine require 
  - Actions are implemented in different ways: DSP, local operator
- - 
  */
+import BUtils::*;
+import BuildVector::*;
+import CBus::*;
+import ClientServer::*;
+import ConfigReg::*;
+import Connectable::*;
+import DefaultValue::*;
+import Ethernet::*;
+import FIFO::*;
+import FIFOF::*;
+import Vector::*;
+import FShow::*;
+import GetPut::*;
+import Pipe::*;
+import TxRx::*;
+import Utils::*;
 
-interface Engine#(type metaI, type actI);
-   interface Server#(actI, metaI) prev_control_state;
+`include "Debug.defines"
+
+interface Engine#(numeric type depth, type metaI, type actI);
+   interface Server#(Tuple2#(metaI, actI), metaI) prev_control_state;
    method Action set_verbosity(int verbosity);
 endinterface
+module mkEngine#(List#(function ActionValue#(metaI) func(metaI meta, actI param)) proc)(Engine#(depth, metaI, actI))
+   provisos(Bits#(metaI, a__)
+           ,Bits#(actI, b__)
+           ,Add#(depth, 0, dep)
+           ,FShow#(actI)
+           ,FShow#(metaI));
 
-module mkEngine#(Engine#(metaI, actI));
    `PRINT_DEBUG_MSG
-   RX #(actI) meta_in<- mkRX;
+   RX #(Tuple2#(metaI, actI)) meta_in<- mkRX;
    TX #(metaI) meta_out<- mkTX;
+   Vector#(dep, FIFOF#(Tuple2#(metaI, actI))) meta_ff <- replicateM(mkFIFOF);
 
    // Optimization: Use DSP
    // DSP48E1
    rule rl_read;
-      // read_meta;
-      // pipe_ff.enq();
+      let v = meta_in.u.first;
+      meta_in.u.deq;
+      dbprint(3, fshow(tpl_1(v)));
+      meta_ff[0].enq(v);
    endrule
 
-   rule rl_modify;
-      // pipe_ff.deq;
-      // operation -> dsp?
-      // pipe_ff.enq;
-   endrule
-
-   // rule rl_dsp;
-
-   rule rl_write;
-      // meta_in from pipeline register
-      // metaI meta_out = meta_in;
-      // field modification
-      // let m = modify_field(meta_in, nhop_ipv4, _port);
-      // meta_out.u.enq(metaI);
-   endrule
+   // List of functions, each acts on packet, but performed in different cycles
+   for (Integer i = 0; i < valueOf(dep); i = i+1) begin
+      rule rl_modify;
+         let v <- toGet(meta_ff[i]).get;
+         let meta = tpl_1(v);
+         let param = tpl_2(v);
+         let updated_metadata <- proc[i](meta, param);
+         // TODO: extern
+         if (i < valueOf(dep) - 1) begin
+            meta_ff[i+1].enq(tuple2(updated_metadata, param));
+            messageM("next proc " + integerToString(i));
+         end
+         else begin
+            meta_out.u.enq(updated_metadata);
+            messageM("exit " + integerToString(i));
+         end
+      endrule
+   end
+   interface prev_control_state = toServer(meta_in.e, meta_out.e);
    method Action set_verbosity(int verbosity);
       cf_verbosity <= verbosity;
    endmethod
