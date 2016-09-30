@@ -35,13 +35,18 @@ bool StructCodeGen::preorder(const IR::Type_Header* hdr) {
   builder->append_line("import DefaultValue::*;");
   builder->append_line("typedef struct {");
   builder->incr_indent();
-  auto header_width = 0;
+  int header_width = 0;
   for (auto f : *hdr->fields) {
     if (f->type->is<IR::Type_Bits>()) {
-      auto width = f->type->to<IR::Type_Bits>()->size;
-      auto name = f->name;
-      builder->append_format("Bit#(%d) %s;", width, name.toString());
-      header_width += width;
+      int size = f->type->to<IR::Type_Bits>()->size;
+      cstring name = f->name.toString();
+      if (size > 64) {
+        int vec_size = size / 64;
+        builder->append_line("Vector#(%d, Bit#(64)) %s;", vec_size, name);
+      } else {
+        builder->append_line("Bit#(%d) %s;", size, name);
+      }
+      header_width += size;
     }
   }
   builder->decr_indent();

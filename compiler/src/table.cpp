@@ -28,26 +28,24 @@ void TableCodeGen::emitTableRequestType(const IR::P4Table* table) {
   cstring type = CamelCase(name);
   type_builder->append_line("typedef struct{");
   type_builder->incr_indent();
-  //builder->append_line("typedef struct {");
-  //builder->incr_indent();
   if ((key_width % 9) != 0) {
     int pad = 9 - (key_width % 9);
-    //builder->append_line("`ifndef SIMULATION");
-    //builder->append_line("Bit#(%d) padding;", pad);
-    //builder->append_line("`endif");
     type_builder->append_line("Bit#(%d) padding;", pad);
   }
   for (auto k : key_vec) {
     const IR::StructField* f = k.first;
     int size = k.second;
     cstring fname = f->name.toString();
-    //builder->append_line("Bit#(%d) %s;", size, fname);
-    type_builder->append_format("Bit#(%d) %s;", size, fname);
+    if (size > 64) {
+      int vec_size = size / 64;
+      type_builder->append_line("Vector#(%d, Bit#(64)) %s;", vec_size, fname);
+    } else {
+      type_builder->append_line("Bit#(%d) %s;", size, fname);
+    }
+    //type_builder->append_format("Bit#(%d) %s;", size, fname);
   }
   type_builder->decr_indent();
-  //builder->decr_indent();
   type_builder->append_format("} %sReqT deriving (Bits, FShow);", type);
-  //builder->append_format("} %sReqT deriving (Bits, Eq, FShow);", type);
 }
 
 void TableCodeGen::emitActionEnum(const IR::P4Table* table) {

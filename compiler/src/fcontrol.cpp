@@ -446,7 +446,6 @@ void FPGAControl::emit(BSVProgram & bsv, CppProgram & cpp) {
   prog_decl = &bsv.getProgDeclBuilder();
 
   emitTables();
-  return;
   emitActions(bsv);
   emitActionTypes(bsv);
 
