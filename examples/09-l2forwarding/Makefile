@@ -14,4 +14,5 @@ compile:
 	make build.bluesim -j8
 
 include ../Makefile.common
-BSVFILES += generatedbsv/ConnectalTypeGenerated.bsv
+BSVFILES += generatedbsv/ConnectalTypes.bsv
+BSVFILES+=$(SONICDIR)/hw/bsv/DbgDefs.bsv
