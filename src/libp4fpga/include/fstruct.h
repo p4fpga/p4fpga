@@ -34,6 +34,7 @@ class StructCodeGen : public Inspector {
   const FPGAProgram* program;
   CodeBuilder* builder;
   std::map<cstring, const IR::Type_Header*> header_map;
+  std::vector<cstring> headers;
 };
 
 }  // namespace FPGA
