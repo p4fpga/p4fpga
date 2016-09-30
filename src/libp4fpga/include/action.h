@@ -39,7 +39,9 @@ class ActionCodeGen : public Inspector {
   CodeBuilder* builder;
   cstring table_name;
   cstring table_type;
-  void emitModifyRule(const IR::P4Action* action);
+  void emitModifyAction(const IR::P4Action* action);
+  void emitNoAction(const IR::P4Action* action);
+  void emitDropAction(const IR::P4Action* action);
   void emitCpuRspRule(const IR::P4Action* action);
   void emitActionBegin(const IR::P4Action* action);
 };

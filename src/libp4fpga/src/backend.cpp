@@ -58,11 +58,14 @@ void run_fpga_backend(const FPGAOptions& options, const IR::ToplevelBlock* tople
     boost::filesystem::path unionFile("UnionGenerated.bsv");
     boost::filesystem::path unionPath = dir / unionFile;
 
-    boost::filesystem::path apiIntfDefFile("APIDefGenerated.bsv");
-    boost::filesystem::path apiIntfDefPath = dir / apiIntfDefFile;
+    boost::filesystem::path apiDefFile("APIDefGenerated.bsv");
+    boost::filesystem::path apiDefPath = dir / apiDefFile;
 
-    boost::filesystem::path apiIntfDeclFile("APIDeclGenerated.bsv");
-    boost::filesystem::path apiIntfDeclPath = dir / apiIntfDeclFile;
+    boost::filesystem::path apiDeclFile("APIDeclGenerated.bsv");
+    boost::filesystem::path apiDeclPath = dir / apiDeclFile;
+
+    boost::filesystem::path progDeclFile("ProgDeclGenerated.bsv");
+    boost::filesystem::path progDeclPath = dir / progDeclFile;
 
     boost::filesystem::path apiTypeDefFile("ConnectalTypes.bsv");
     boost::filesystem::path apiTypeDefPath = dir / apiTypeDefFile;
@@ -75,8 +78,9 @@ void run_fpga_backend(const FPGAOptions& options, const IR::ToplevelBlock* tople
     std::ofstream(structPath.native())   <<  bsv.getStructBuilder().toString();
     std::ofstream(controlPath.native())  <<  bsv.getControlBuilder().toString();
     std::ofstream(unionPath.native())    <<  bsv.getUnionBuilder().toString();
-    std::ofstream(apiIntfDefPath.native())  <<  bsv.getAPIIntfDefBuilder().toString();
-    std::ofstream(apiIntfDeclPath.native())   <<  bsv.getAPIIntfDeclBuilder().toString();
+    std::ofstream(apiDefPath.native())  <<  bsv.getAPIDefBuilder().toString();
+    std::ofstream(apiDeclPath.native())   <<  bsv.getAPIDeclBuilder().toString();
+    std::ofstream(progDeclPath.native())   <<  bsv.getProgDeclBuilder().toString();
     std::ofstream(apiTypeDefPath.native()) << bsv.getConnectalTypeBuilder().toString();
 
     std::ofstream(simFile.native())      <<  cpp.getSimBuilder().toString();

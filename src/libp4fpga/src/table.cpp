@@ -23,43 +23,44 @@
 
 namespace FPGA {
 
-void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
-  // Typedef are emitted to two different files
-  // - ConnectalType is used by Connectal to generate API
-  // - Control is used by p4 pipeline
-  // TODO: we can probably just generate ConnectalType and import it in Control
+void TableCodeGen::emitTableRequestType(const IR::P4Table* table) {
   cstring name = nameFromAnnotation(table->annotations, table->name);
   cstring type = CamelCase(name);
   type_builder->append_line("typedef struct{");
   type_builder->incr_indent();
-  builder->append_line("typedef struct {");
-  builder->incr_indent();
+  //builder->append_line("typedef struct {");
+  //builder->incr_indent();
   if ((key_width % 9) != 0) {
     int pad = 9 - (key_width % 9);
     //builder->append_line("`ifndef SIMULATION");
-    builder->append_line("Bit#(%d) padding;", pad);
+    //builder->append_line("Bit#(%d) padding;", pad);
     //builder->append_line("`endif");
+    type_builder->append_line("Bit#(%d) padding;", pad);
   }
   for (auto k : key_vec) {
     const IR::StructField* f = k.first;
     int size = k.second;
     cstring fname = f->name.toString();
-    builder->append_line("Bit#(%d) %s;", size, fname);
+    //builder->append_line("Bit#(%d) %s;", size, fname);
     type_builder->append_format("Bit#(%d) %s;", size, fname);
   }
   type_builder->decr_indent();
-  builder->decr_indent();
+  //builder->decr_indent();
   type_builder->append_format("} %sReqT deriving (Bits, FShow);", type);
-  builder->append_format("} %sReqT deriving (Bits, Eq, FShow);", type);
+  //builder->append_format("} %sReqT deriving (Bits, Eq, FShow);", type);
+}
 
-  // action enum
+void TableCodeGen::emitActionEnum(const IR::P4Table* table) {
+  cstring name = nameFromAnnotation(table->annotations, table->name);
+  cstring type = CamelCase(name);
   builder->append_line("typedef enum {");
   builder->incr_indent();
   // find out name of default action
   auto defaultAction = table->getDefaultAction();
   if (defaultAction->is<IR::MethodCallExpression>()){
-    auto expression = defaultAction->to<IR::MethodCallExpression>();
-    defaultActionName = expression->method->toString();
+    auto e = defaultAction->to<IR::MethodCallExpression>();
+    defaultActionName = control->toP4Action(e->method->toString());
+    CHECK_NULL(defaultActionName);
   }
   // put default action in first position
   auto actionList = table->getActionList()->actionList;
@@ -69,10 +70,11 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
       // FIXME: handle action as path
       LOG1("Path " << elem->expression->to<IR::PathExpression>());
     } else if (elem->expression->is<IR::MethodCallExpression>()) {
-      auto e = elem->expression->to<IR::MethodCallExpression>();
-      auto t = control->program->typeMap->getType(e->method, true);
-      auto n = e->method->toString();
-      // check if default action
+      auto expr = elem->expression->to<IR::MethodCallExpression>();
+      //auto t = control->program->typeMap->getType(e->method, true);
+      cstring n = control->toP4Action(expr->method->toString());
+      CHECK_NULL(n);
+      // put default action at position 0
       if (n == defaultActionName) {
         action_vec.insert(action_vec.begin(), UpperCase(n));
       } else {
@@ -90,11 +92,15 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
   }
   builder->decr_indent();
   builder->append_line("} %sActionT deriving (Bits, Eq, FShow);", type);
+}
 
-  // generate response typedef
-  builder->append_line("typedef struct {");
-  builder->incr_indent();
-  builder->append_line("%sActionT _action;", type);
+void TableCodeGen::emitTableResponseType(const IR::P4Table* table) {
+  cstring name = nameFromAnnotation(table->annotations, table->name);
+  cstring type = CamelCase(name);
+  auto actionList = table->getActionList()->actionList;
+  //builder->append_line("typedef struct {");
+  //builder->incr_indent();
+  //builder->append_line("%sActionT _action;", type);
   // if there is any params
   TableParamExtractor param_extractor(control);
   for (auto action : *actionList) {
@@ -109,15 +115,25 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
   for (auto f : param_extractor.param_map) {
     cstring pname = f.first;
     const IR::Type_Bits* param = f.second;
-    builder->append_line("Bit#(%d) %s;", param->size, pname);
+    //builder->append_line("Bit#(%d) %s;", param->size, pname);
     type_builder->append_format("Bit#(%d) %s;", param->size, pname);
     action_size += param->size;
   }
   action_size += ceil(log2(actionList->size()));
   type_builder->decr_indent();
   type_builder->append_format("} %sRspT deriving (Bits, FShow);", type);
-  builder->decr_indent();
-  builder->append_line("} %sRspT deriving (Bits, Eq, FShow);", type);
+  //builder->decr_indent();
+  //builder->append_line("} %sRspT deriving (Bits, Eq, FShow);", type);
+}
+
+void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
+  // Typedef are emitted to two different files
+  // - ConnectalType is used by Connectal to generate API
+  // - Control is used by p4 pipeline
+  // TODO: we can probably just generate ConnectalType and import it in Control
+  emitTableRequestType(table);
+  emitActionEnum(table);
+  emitTableResponseType(table);
 }
 
 void TableCodeGen::emitSimulation(const IR::P4Table* table) {
@@ -127,7 +143,7 @@ void TableCodeGen::emitSimulation(const IR::P4Table* table) {
   if (remainder != 0) {
     key_width = key_width + 9 - remainder;
   }
-  builder->append_line("`MATCHTABLE_SIM(%d, %d, %d);", id, key_width, action_size);
+  builder->append_line("`MATCHTABLE_SIM(%d, %d, %d, %s)", id, key_width, action_size, name);
 }
 
 cstring TableCodeGen::gatherTableKeys() {
@@ -156,7 +172,7 @@ void TableCodeGen::emitFunctionLookup(const IR::P4Table* table) {
   cstring type = CamelCase(name);
   builder->append_line("instance Table_request #(ConnectalTypes::%sReqT);", type);
   builder->incr_indent();
-  builder->append_line("function ConnectalTypes::%sReqT %s_lookup_request(MetadataRequest data);", type, name);
+  builder->append_line("function ConnectalTypes::%sReqT table_request(MetadataRequest data);", type);
   builder->incr_indent();
   cstring fields = gatherTableKeys();
   builder->append_line("let v = ConnectalTypes::%sReqT {%s};", type, fields);
@@ -170,41 +186,20 @@ void TableCodeGen::emitFunctionLookup(const IR::P4Table* table) {
 void TableCodeGen::emitFunctionExecute(const IR::P4Table* table) {
   cstring name = nameFromAnnotation(table->annotations, table->name);
   cstring type = CamelCase(name);
+  //const IR::IndexedVector<IR::ActionListElement>* actionList
   auto actionList = table->getActionList()->actionList;
-  int actionSize = actionList->size();
-  builder->append_line("instance Table_execute #(ConnectalTypes::%sRspT, %sActionReq, %d)", type, type, actionSize);
+  int actionSize = (actionList != nullptr) ? actionList->size() : 0;
+  builder->append_line("instance Table_execute #(ConnectalTypes::%sRspT, %sParam, %d);", type, type, actionSize);
   builder->incr_indent();
-  builder->append_line("function Action execute_action(ConnectalTypes::%sRspT resp, MetadataRequest metadata, Vector#(%d, FIFOF#(Tuple2#(MetadataRequest, %sActionReqT bbReqFifo))));", type, actionSize, type);
+  builder->append_line("function Action table_execute(ConnectalTypes::%sRspT resp, MetadataRequest metadata, Vector#(%d, FIFOF#(Tuple2#(MetadataRequest, %sParam))) fifos);", type, actionSize, type);
   builder->incr_indent();
   builder->append_line("action");
-  builder->append_line("case (resp._action) matches");
-  int idx = 0;
+  builder->append_line("case (unpack(resp._action)) matches");
   builder->incr_indent();
-  for (auto action : *actionList) {
-    auto elem = action->to<IR::ActionListElement>();
-    if (elem->expression->is<IR::MethodCallExpression>()) {
-      auto e = elem->expression->to<IR::MethodCallExpression>();
-      auto n = e->method->toString();
-      auto t = CamelCase(n);
-      // from action name to actual action declaration
-      auto k = control->basicBlock.find(n);
-      if (k != control->basicBlock.end()) {
-        auto fields = cstring("");
-        auto params = k->second->parameters;
-        for (auto param : *params->parameters) {
-          fields += cstring(", ");
-          auto p = param->to<IR::Parameter>();
-          auto name = p->name.toString();
-          fields += name + cstring(": resp.") + name;
-        }
-        builder->append_format("%s: begin", UpperCase(t));
-        builder->incr_indent();
-        builder->append_format("%sActionReq req = tagged %sReqT {%s};", type, t, fields);
-        builder->append_format("bbReqFifo[%d].enq(req);", idx);
-        builder->decr_indent();
-        builder->append_line("end");
-      }
-      idx += 1;
+  if (actionList != nullptr) {
+    ActionParamPrinter printer(control, builder, name);
+    for (auto p : *actionList) {
+      p->apply(printer);
     }
   }
   builder->decr_indent();
@@ -265,16 +260,16 @@ void TableCodeGen::emitIntfAddEntry(const IR::P4Table* table) {
 }
 
 void TableCodeGen::emit(const IR::P4Table* table) {
-  auto name = nameFromAnnotation(table->annotations, table->name);
-  auto type = CamelCase(name);
-  auto id = table->declid % 32;
+  cstring name = nameFromAnnotation(table->annotations, table->name);
+  cstring type = CamelCase(name);
+  int id = table->declid % 32;
+  //const IR::IndexedVector<IR::ActionListElement>* actionList
   auto actionList = table->getActionList()->actionList;
-  auto nActions = actionList->size();
+  int actionSize = (actionList != nullptr) ? actionList->size() : 0;
   CHECK_NULL(builder);
-  int actionSize = actionList->size();
-  builder->append_line("typedef Table#(%d, MetadataRequest, %sActionReq, ConnectalTypes::%sReqT, ConnectalTypes::%sRspT) %sTable;", actionSize, type, type, type, type);
-  builder->append_line("typedef MatchTable#(%d, %d, SizeOf#(%sReqT), SizeOf#(%sRspT)) %sMatchTable;", id, 256, type, type, type);
-  builder->append_line("`SynthBuildModule(mkMatchTable, String, %sMatchTable, mkMatchTable_%d_%s)", type, 256, type);
+  builder->append_line("typedef Table#(%d, MetadataRequest, %sParam, ConnectalTypes::%sReqT, ConnectalTypes::%sRspT) %sTable;", actionSize, type, type, type, type);
+  builder->append_line("typedef MatchTable#(%d, %d, SizeOf#(ConnectalTypes::%sReqT), SizeOf#(ConnectalTypes::%sRspT)) %sMatchTable;", id, 256, type, type, type);
+  builder->append_line("`SynthBuildModule1(mkMatchTable, String, %sMatchTable, mkMatchTable_%s)", type, type);
   emitFunctionLookup(table);
   emitFunctionExecute(table);
 }
@@ -282,30 +277,30 @@ void TableCodeGen::emit(const IR::P4Table* table) {
 void TableCodeGen::emitCpp(const IR::P4Table* table) {
   auto name = nameFromAnnotation(table->annotations, table->name);
   auto type = CamelCase(name);
-  cbuilder->append_line("typedef uint64_t %sReqT;", type);
-  cbuilder->append_line("typedef uint64_t %sRspT;", type);
-  cbuilder->append_line("std::unordered_map<%sReqT, %sRspT> tbl_%s;", type, type, name);
-  cbuilder->append_line("extern \"C\" %sReqT matchtable_read_%s(%sReqT rdata) {", type, camelCase(name), type);
-  cbuilder->incr_indent();
-  cbuilder->append_line("auto it = tbl_%s.find(rdata);", name);
+  cpp_builder->append_line("typedef uint64_t %sReqT;", type);
+  cpp_builder->append_line("typedef uint64_t %sRspT;", type);
+  cpp_builder->append_line("std::unordered_map<%sReqT, %sRspT> tbl_%s;", type, type, name);
+  cpp_builder->append_line("extern \"C\" %sReqT matchtable_read_%s(%sReqT rdata) {", type, name, type);
+  cpp_builder->incr_indent();
+  cpp_builder->append_line("auto it = tbl_%s.find(rdata);", name);
 
-  cbuilder->append_line("if (it != tbl_%s.end()) {", name);
-  cbuilder->incr_indent();
-  cbuilder->append_line("return tbl_%s[rdata];", name);
-  cbuilder->decr_indent();
-  cbuilder->append_line("} else {");
-  cbuilder->incr_indent();
-  cbuilder->append_line("return 0;");
-  cbuilder->decr_indent();
-  cbuilder->append_line("}");
-  cbuilder->decr_indent();
-  cbuilder->append_line("}");
+  cpp_builder->append_line("if (it != tbl_%s.end()) {", name);
+  cpp_builder->incr_indent();
+  cpp_builder->append_line("return tbl_%s[rdata];", name);
+  cpp_builder->decr_indent();
+  cpp_builder->append_line("} else {");
+  cpp_builder->incr_indent();
+  cpp_builder->append_line("return 0;");
+  cpp_builder->decr_indent();
+  cpp_builder->append_line("}");
+  cpp_builder->decr_indent();
+  cpp_builder->append_line("}");
 
-  cbuilder->append_line("extern \"C\" void matchtable_write_%s(%sReqT wdata, %sRspT action){", camelCase(name), type, type);
-  cbuilder->incr_indent();
-  cbuilder->append_line("tbl_%s[wdata] = action;", name);
-  cbuilder->decr_indent();
-  cbuilder->append_line("}");
+  cpp_builder->append_line("extern \"C\" void matchtable_write_%s(%sReqT wdata, %sRspT action){", name, type, type);
+  cpp_builder->incr_indent();
+  cpp_builder->append_line("tbl_%s[wdata] = action;", name);
+  cpp_builder->decr_indent();
+  cpp_builder->append_line("}");
 }
 
 bool TableCodeGen::preorder(const IR::P4Table* table) {

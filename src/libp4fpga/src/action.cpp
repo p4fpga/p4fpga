@@ -125,10 +125,50 @@ void ActionCodeGen::emitActionBegin(const IR::P4Action* action) {
   table_type = CamelCase(table_name);
 }
 
-void ActionCodeGen::emitModifyRule(const IR::P4Action* action) {
-  auto name = nameFromAnnotation(action->annotations, action->name);
-  // Extern ??
-  emitCpuRspRule(action);
+void ActionCodeGen::emitDropAction(const IR::P4Action* action) {
+  cstring name = nameFromAnnotation(action->annotations, action->name);
+  cstring type = CamelCase(name);
+  const IR::P4Table* table = control->action_to_table[action->name];
+  cstring table_name = nameFromAnnotation(table->annotations, table->name);
+  cstring table_type = CamelCase(table_name);
+
+  builder->append_line("typedef Engine#(1, MetadataRequest, %sParam) %sAction;", table_type, type);
+}
+
+void ActionCodeGen::emitNoAction(const IR::P4Action* action) {
+  cstring name = nameFromAnnotation(action->annotations, action->name);
+  cstring type = CamelCase(name);
+  const IR::P4Table* table = control->action_to_table[action->name];
+  cstring table_name = nameFromAnnotation(table->annotations, table->name);
+  cstring table_type = CamelCase(table_name);
+
+  builder->append_line("typedef Engine#(1, MetadataRequest, %sParam) %sAction;", table_type, type);
+}
+
+void ActionCodeGen::emitModifyAction(const IR::P4Action* action) {
+  cstring name = nameFromAnnotation(action->annotations, action->name);
+  cstring type = CamelCase(name);
+  const IR::P4Table* table = control->action_to_table[action->name];
+  cstring table_name = nameFromAnnotation(table->annotations, table->name);
+  cstring table_type = CamelCase(table_name);
+  builder->append_line("typedef Engine#(1, MetadataRequest, %sParam) %sAction;", table_type, type);
+  builder->append_line("instance Action_execute #(%sParam);", table_type);
+  // FIXME: do one step for now..
+  builder->incr_indent();
+  builder->append_line("function ActionValue#(MetadataRequest) step_1 (MetadataRequest meta, %sParam param);", table_type);
+  builder->incr_indent();
+  builder->append_line("actionvalue");
+  builder->incr_indent();
+  builder->append_line("$display(\"(%%0d) step 1: \", $time, fshow(meta));");
+  // table->params
+  // invoke each action
+  builder->append_line("return meta;");
+  builder->decr_indent();
+  builder->append_line("endactionvalue");
+  builder->decr_indent();
+  builder->append_line("endfunction");
+  builder->decr_indent();
+  builder->append_line("endinstance");
 }
 
 bool ActionCodeGen::isDropAction(const IR::P4Action* action) {
@@ -170,10 +210,12 @@ void ActionCodeGen::postorder(const IR::P4Action* action) {
     return;
   }
   emitActionBegin(action);
-  if (isNoAction(action)) {
-  } else if (isDropAction(action)) {
+  if (isDropAction(action)) {
+    emitDropAction(action);
+  } else if (isNoAction(action)) {
+    emitNoAction(action);
   } else {
-    emitModifyRule(action);
+    emitModifyAction(action);
   }
 }
 

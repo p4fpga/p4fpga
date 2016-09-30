@@ -18,7 +18,7 @@ import PrintTrace::*;
 `include "Debug.defines"
 `include "SynthBuilder.defines"
 `include "MatchTable.defines"
-`MATCHTABLE_SIM(29, 36, 50)
+`MATCHTABLE_SIM(29, 36, 50, forward)
 
 typedef enum {
     NOACTION3,
@@ -29,6 +29,7 @@ typedef enum {
 typedef Table#(3, MetadataRequest, ForwardActionReq, ConnectalTypes::ForwardReqT, ConnectalTypes::ForwardRspT) ForwardTable;
 typedef MatchTable#(29, 256, SizeOf#(ConnectalTypes::ForwardReqT), SizeOf#(ConnectalTypes::ForwardRspT)) ForwardMatchTable;
 typedef Engine#(2, MetadataRequest, ForwardActionReq) ForwardAction;
+typedef Engine#(1, MetadataRequest, ?) DropAction;
 `SynthBuildModule1(mkMatchTable, String, ForwardMatchTable, mkMatchTable_256_Forward)
 instance Table_request #(ConnectalTypes::ForwardReqT);
    function ConnectalTypes::ForwardReqT table_request(MetadataRequest req);
@@ -113,12 +114,12 @@ module mkIngress(Ingress);
 
    interface prev = toPipeIn(entry_req_ff);
    interface next = toPipeOut(exit_req_ff);
+   method forward_add_entry=forward.add_entry;
    method Action set_verbosity(int verbosity);
       cf_verbosity <= verbosity;
       forward.set_verbosity(verbosity);
       forward_action.set_verbosity(verbosity);
    endmethod
-   method forward_add_entry=forward.add_entry;
 endmodule
 
 interface Egress;
