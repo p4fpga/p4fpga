@@ -33,10 +33,11 @@ class FPGAControl { // : public FPGAObject {
     FPGAProgram*                  program;
     FPGA::CFG*                    cfg;
     CodeBuilder*                  builder;
-    CodeBuilder*                  cbuilder;
+    CodeBuilder*                  cpp_builder;
+    CodeBuilder*                  type_builder;
     CodeBuilder*                  api_def;
     CodeBuilder*                  api_decl;
-    CodeBuilder*                  type_builder;
+    CodeBuilder*                  prog_decl;
 
     // map from action name to P4Action
     std::map<cstring, const IR::P4Action*>    basicBlock;
@@ -53,14 +54,13 @@ class FPGAControl { // : public FPGAObject {
       : program(program), controlBlock(block) {}
 
     virtual ~FPGAControl() {}
+    cstring toP4Action (cstring inst);
     void emit(BSVProgram & bsv, CppProgram & cpp);
     void emitTableRule(BSVProgram & bsv, const CFG::TableNode* node);
     void emitCondRule(BSVProgram & bsv, const CFG::IfNode* node);
     void emitEntryRule(BSVProgram & bsv, const CFG::Node* node);
-    void emitImports();
     void emitDeclaration(BSVProgram & bsv);
     void emitConnection(BSVProgram & bsv);
-    void emitDebugPrint(BSVProgram & bsv);
     void emitFifo(BSVProgram & bsv);
     void emitTables();
     void emitActions(BSVProgram & bsv);

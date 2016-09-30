@@ -58,8 +58,9 @@ class BSVProgram {
   CodeBuilder& getStructBuilder() { return structBuilder_; }
   CodeBuilder& getUnionBuilder()  { return unionBuilder_; }
   CodeBuilder& getControlBuilder() { return controlBuilder_; }
-  CodeBuilder& getAPIIntfDefBuilder() { return apiIntfDefBuilder_; }
-  CodeBuilder& getAPIIntfDeclBuilder() { return apiIntfDeclBuilder_; }
+  CodeBuilder& getAPIDefBuilder() { return apiDefBuilder_; }
+  CodeBuilder& getAPIDeclBuilder() { return apiDeclBuilder_; }
+  CodeBuilder& getProgDeclBuilder() { return progDeclBuilder_; }
   CodeBuilder& getConnectalTypeBuilder() { return connectalTypeBuilder_; }
 
  private:
@@ -68,8 +69,9 @@ class BSVProgram {
   CodeBuilder structBuilder_;
   CodeBuilder unionBuilder_;
   CodeBuilder controlBuilder_;
-  CodeBuilder apiIntfDefBuilder_;
-  CodeBuilder apiIntfDeclBuilder_;
+  CodeBuilder apiDefBuilder_;
+  CodeBuilder apiDeclBuilder_;
+  CodeBuilder progDeclBuilder_;
   CodeBuilder connectalTypeBuilder_;
 };
 

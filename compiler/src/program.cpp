@@ -71,21 +71,34 @@ bool FPGAProgram::build() {
   return true;
 }
 
+void FPGAProgram::emitImportStatements(BSVProgram & bsv) {
+  CodeBuilder* builder = &bsv.getControlBuilder();
+  builder->append_line("import Library::*;");
+  builder->append_line("import StructDefines::*;");
+  builder->append_line("import UnionDefines::*;");
+  builder->append_line("import ConnectalTypes::*;");
+  builder->append_line("import Table::*;");
+  builder->append_line("import Engine::*;");
+  builder->append_line("import Pipe::*;");
+  builder->append_line("import Lists::*;");
+}
+
+void FPGAProgram::emitIncludeStatements(BSVProgram & bsv) {
+  CodeBuilder* builder = &bsv.getControlBuilder();
+  builder->append_line("`include \"TieOff.defines\"");
+  builder->append_line("`include \"Debug.defines\"");
+  builder->append_line("`include \"SynthBuilder.defines\"");
+  builder->append_line("`include \"MatchTable.defines\"");
+}
+
 void FPGAProgram::emit(BSVProgram & bsv, CppProgram & cpp) {
-
-  // instantiate Runtime
-  // runtime->emit();
-
-  // instantiate Pipeline
-  // pipeline->emit();
-
-  // instantiate API
-  // api->emit();
-
-  LOG1("Emitting FPGA program");
   for (auto f : parser->parseStateMap) {
     LOG1(f.first << f.second);
   }
+  // emits import statement to all generated files
+  emitImportStatements(bsv);
+  emitIncludeStatements(bsv);
+
   parser->emit(bsv);
   ingress->emit(bsv, cpp);
   egress->emit(bsv, cpp);

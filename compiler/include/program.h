@@ -73,6 +73,8 @@ class FPGAProgram : public FPGAObject {
 
  private:
   void emitIncludes(CodeBuilder* builder);
+  void emitImportStatements(BSVProgram& bsv);
+  void emitIncludeStatements(BSVProgram& bsv);
   void emitTypes(CodeBuilder* builder);
   void emitTables(CodeBuilder* builder);
   void emitHeaderInstances(CodeBuilder* builder);

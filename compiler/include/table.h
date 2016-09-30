@@ -21,6 +21,7 @@
 #include "ir/ir.h"
 #include "fcontrol.h"
 #include "lib/ordered_map.h"
+#include "string_utils.h"
 
 namespace FPGA {
 
@@ -74,28 +75,84 @@ class TableParamExtractor : public Inspector {
   FPGAControl*          control;
 };
 
+class ActionParamPrinter : public Inspector {
+ public:
+  std::vector<cstring> param_vec;
+  explicit ActionParamPrinter (FPGAControl* control, CodeBuilder* builder, cstring name) :
+    control(control), builder(builder), table_name(name) {}
+  bool preorder(const IR::MethodCallExpression* expr) {
+    // from action name to actual action declaration
+    auto k = control->basicBlock.find(expr->method->toString());
+    if (k != control->basicBlock.end()) {
+      auto params = k->second->parameters;
+      param_vec.clear();
+      for (auto param : *params->parameters) {
+        auto p = param->to<IR::Parameter>();
+        if (p == nullptr) continue;
+        cstring name = p->name.toString();
+        param_vec.push_back(name);
+      }
+      cstring action_name = nameFromAnnotation(k->second->annotations, k->second->name);
+      cstring action_type = CamelCase(action_name);
+      builder->append_format("%s: begin", UpperCase(action_type));
+      builder->incr_indent();
+      if (param_vec.size() != 0) {
+        builder->emitIndent();
+        CHECK_NULL(action_type);
+        builder->appendFormat("%sParam req = tagged %sReqT {", CamelCase(table_name), action_type);
+        for (auto p : param_vec) {
+          builder->appendFormat("%s: resp.%s", p, p);
+          if (p != param_vec.back()) {
+            builder->append(", ");
+          }
+        }
+        builder->append("};");
+        builder->newline();
+        builder->append_format("fifos[%d].enq(tuple2(metadata, req));", action_idx);
+      } else {
+        builder->append_format("fifos[%d].enq(tuple2(metadata, ?));", action_idx);
+      }
+      builder->decr_indent();
+      builder->append_line("end");
+    }
+    action_idx ++;
+    return false;
+  }
+ private:
+  int action_idx = 0;
+  FPGAControl* control;
+  CodeBuilder* builder;
+  cstring table_name;
+};
+
 // per table code generator
 class TableCodeGen : public Inspector {
  public:
-  TableCodeGen(FPGAControl* control, CodeBuilder* builder, CodeBuilder* cbuilder, CodeBuilder* type_builder) :
-    control(control), builder(builder), cbuilder(cbuilder), type_builder(type_builder) {}
+  TableCodeGen(FPGAControl* control, CodeBuilder* builder, CodeBuilder* cpp_builder, CodeBuilder* type_builder) :
+    control(control), builder(builder), cpp_builder(cpp_builder), type_builder(type_builder) {}
   bool preorder(const IR::P4Table* table) override;
+  // bool preorder(const IR::MethodCallExpression* expr) override;
  private:
   FPGAControl* control;
   CodeBuilder* builder;
-  CodeBuilder* cbuilder;
+  CodeBuilder* cpp_builder;
   CodeBuilder* type_builder;
   int key_width = 0;
   int action_size = 0;
+  int action_idx = 0;
   std::vector<std::pair<const IR::StructField*, int>> key_vec;
   std::vector<cstring> action_vec;
   cstring defaultActionName;
   cstring gatherTableKeys();
+  cstring tableName;
   void emit(const IR::P4Table* table);
+  void emitTableRequestType(const IR::P4Table* table);
+  void emitActionEnum(const IR::P4Table* table);
+  void emitTableResponseType(const IR::P4Table* table);
   void emitTypedefs(const IR::P4Table* table);
   void emitSimulation(const IR::P4Table* table);
-  void emitLookupFunction(const IR::P4Table* table);
-  void emitExecuteFunction(const IR::P4Table* table);
+  void emitFunctionLookup(const IR::P4Table* table);
+  void emitFunctionExecute(const IR::P4Table* table);
   void emitIntfAddEntry(const IR::P4Table* table);
   void emitCpp(const IR::P4Table* table);
 };

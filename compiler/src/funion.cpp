@@ -21,7 +21,8 @@
 namespace FPGA {
 
 bool UnionCodeGen::preorder(const IR::MethodCallExpression* expr) {
-  cstring type = CamelCase(expr->method->toString());
+  cstring union_name = control->toP4Action(expr->method->toString());
+  cstring union_type = CamelCase(union_name);
   builder->append_line("struct {");
   builder->incr_indent();
   auto k = control->basicBlock.find(expr->method->toString());
@@ -34,7 +35,7 @@ bool UnionCodeGen::preorder(const IR::MethodCallExpression* expr) {
     }
   }
   builder->decr_indent();
-  builder->append_line("} %sReqT;", type);
+  builder->append_line("} %sReqT;", union_type);
   return false;
 }
 
@@ -49,7 +50,7 @@ bool UnionCodeGen::preorder(const IR::P4Table* table) {
   UnionCodeGen visitor(control, builder);
   table->getActionList()->apply(visitor);
   builder->decr_indent();
-  builder->append_line("} %sActionReq deriving (Bits, Eq, FShow);", type);
+  builder->append_line("} %sParam deriving (Bits, Eq, FShow);", type);
   return false;
 }
 
