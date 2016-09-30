@@ -27,8 +27,8 @@ action _nop() {
 
 }
 
-action forward(port) {
-    modify_field(standard_metadata.egress_spec, port);
+action forward(_port) {
+    modify_field(standard_metadata.egress_spec, _port);
 }
 
 table forward_tbl {
