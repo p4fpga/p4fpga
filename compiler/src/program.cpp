@@ -91,6 +91,37 @@ void FPGAProgram::emitIncludeStatements(BSVProgram & bsv) {
   builder->append_line("`include \"MatchTable.defines\"");
 }
 
+void FPGAProgram::emitMetadata(CodeBuilder* builder) {
+  builder->append_line("typedef struct {");
+  builder->incr_indent();
+  // metadata used in table
+  for (auto p : ingress->metadata_to_table) {
+    auto name = nameFromAnnotation(p.first->annotations, p.first->name);
+    auto size = p.first->type->to<IR::Type_Bits>()->size;
+    builder->append_line("Maybe#(Bit#(%d)) %s;", size, name);
+  }
+  for (auto p : egress->metadata_to_table) {
+    auto name = nameFromAnnotation(p.first->annotations, p.first->name);
+    auto size = p.first->type->to<IR::Type_Bits>()->size;
+    builder->append_line("Maybe#(Bit#(%d)) %s;", size, name);
+  }
+  // metadata used in control flow
+  // TODO:
+
+  //
+  // TODO: combine HeaderState with Headers??
+  for (auto s : parser->parseSteps) {
+    builder->append_format("HeaderState %s;", s->name.toString());
+  }
+  builder->decr_indent();
+  builder->append_line("} MetadataT deriving (Bits, Eq, FShow);");
+  builder->append_line("instance DefaultValue#(MetadataT);");
+  builder->incr_indent();
+  builder->append_line("defaultValue = unpack(0);");
+  builder->decr_indent();
+  builder->append_line("endinstance");
+}
+
 void FPGAProgram::emit(BSVProgram & bsv, CppProgram & cpp) {
   for (auto f : parser->parseStateMap) {
     LOG1(f.first << f.second);
@@ -104,10 +135,9 @@ void FPGAProgram::emit(BSVProgram & bsv, CppProgram & cpp) {
   egress->emit(bsv, cpp);
   deparser->emit(bsv);
 
-  // generate MetadataT
+  // must generate metadata after processing pipelines
   CodeBuilder* builder = &bsv.getStructBuilder();
-  StructCodeGen visitor(this, builder);
-  visitor.emit();
+  emitMetadata(builder);
 }
 
 //void FPGAProgram::generateGraph(Graph & graph) {

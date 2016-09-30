@@ -59,35 +59,5 @@ bool StructCodeGen::preorder(const IR::Type_Header* hdr) {
   return false;
 }
 
-void StructCodeGen::emit() {
-  CHECK_NULL(builder);
-
-  builder->append_line("typedef struct {");
-  builder->incr_indent();
-  // metadata used in table
-  for (auto p : program->ingress->metadata_to_table) {
-    auto name = nameFromAnnotation(p.first->annotations, p.first->name);
-    auto size = p.first->type->to<IR::Type_Bits>()->size;
-    builder->append_line("Maybe#(Bit#(%d)) %s;", size, name);
-  }
-  for (auto p : program->egress->metadata_to_table) {
-    auto name = nameFromAnnotation(p.first->annotations, p.first->name);
-    auto size = p.first->type->to<IR::Type_Bits>()->size;
-    builder->append_line("Maybe#(Bit#(%d)) %s;", size, name);
-  }
-  // metadata used in control flow
-  // TODO:
-  for (auto s : program->parser->parseSteps) {
-    builder->append_format("HeaderState %s;", s->name.toString());
-  }
-  builder->decr_indent();
-  builder->append_line("} MetadataT deriving (Bits, Eq, FShow);");
-  builder->append_line("instance DefaultValue#(MetadataT);");
-  builder->incr_indent();
-  builder->append_line("defaultValue = unpack(0);");
-  builder->decr_indent();
-  builder->append_line("endinstance");
-}
-
 }  // namespace FPGA
 
