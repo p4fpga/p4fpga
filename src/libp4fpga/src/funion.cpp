@@ -28,10 +28,20 @@ bool UnionCodeGen::preorder(const IR::MethodCallExpression* expr) {
   auto k = control->basicBlock.find(expr->method->toString());
   if (k != control->basicBlock.end()) {
     const IR::ParameterList* params = k->second->parameters;
-    for (auto p : *params->parameters) {
-      int size = p->type->width_bits();
-      cstring name = p->name.toString();
-      builder->append_line("Bit#(%d) %s;", size, name);
+    if (params->parameters->size() != 0) {
+      for (auto p : *params->parameters) {
+        int size = p->type->width_bits();
+        cstring name = p->name.toString();
+        // NOTE: only deal with Bit#(128) ipv4_address
+        if (size > 64) {
+          int vec_size = size / 64;
+          builder->append_line("Vector#(%d, Bit#(64)) %s;", vec_size, name);
+        } else {
+          builder->append_line("Bit#(%d) %s;", size, name);
+        }
+      }
+    } else {
+      builder->append_line("Bit#(0) unused;");
     }
   }
   builder->decr_indent();
