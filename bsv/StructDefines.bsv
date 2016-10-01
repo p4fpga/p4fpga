@@ -1,6 +1,7 @@
 import DefaultValue::*;
 import Ethernet::*;
 import Utils::*;
+import Vector::*;
 
 typedef struct {
   PacketInstance pkt;

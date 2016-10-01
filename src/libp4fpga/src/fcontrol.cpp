@@ -31,13 +31,10 @@ class MetadataExtractor : public Inspector {
   explicit MetadataExtractor () {}
 
   bool preorder(const IR::Member* expr) {
+    // isValid is handled elsewhere
     if (expr->member == "isValid") return false;
-    bsv.push_back(cstring("let ") + expr->member.toString() +
-           cstring("_isValid = meta.") + expr->member.toString() +
-           cstring(" matches tagged Valid .d") +
-           cstring(" ? True : False;"));
-    bsv.push_back(cstring("let ") + expr->member.toString() +
-           cstring(" = fromMaybe(?, meta.") + expr->member.toString() +
+    bsv.push_back(cstring("let ") + RemoveDot(expr->expr->toString()) +
+           cstring(" = fromMaybe(?, meta.") + expr->expr->toString() +
            cstring(");"));
     return false;
   }
@@ -50,7 +47,7 @@ class ExpressionConverter : public Inspector {
   bool preorder(const IR::MethodCallExpression* expr){
     auto m = expr->method->to<IR::Member>();
     if (m->member == "isValid") {
-      bsv += cstring("isValid(") + m->expr->toString() + cstring(")");
+      bsv += cstring("isValid(meta.") + m->expr->toString() + cstring(")");
     }
     return false;
   }
@@ -76,10 +73,8 @@ class ExpressionConverter : public Inspector {
   }
   bool preorder(const IR::Member* expr) {
     // FIXME: use header$field format to avoid naming conflict
-    bsv += expr->member.toString() +
-           cstring("_isValid") +
-           cstring(" && ") +
-           expr->member.toString();
+    bsv += RemoveDot(expr->expr->toString()) +
+           cstring(".") + expr->member.toString();
     return false;
   }
 };

@@ -108,7 +108,7 @@ void FPGAProgram::emitMetadata(CodeBuilder* builder) {
   // metadata used in control flow
   // TODO:
 
-  //
+  builder->append_format("Headers hdr;");
   // TODO: combine HeaderState with Headers??
   for (auto s : parser->parseSteps) {
     builder->append_format("HeaderState %s;", s->name.toString());
@@ -120,6 +120,18 @@ void FPGAProgram::emitMetadata(CodeBuilder* builder) {
   builder->append_line("defaultValue = unpack(0);");
   builder->decr_indent();
   builder->append_line("endinstance");
+}
+
+void FPGAProgram::emitHeaders(CodeBuilder* builder) {
+  builder->append_line("typedef struct {");
+  builder->incr_indent();
+  HeaderCodeGen visitor(this, builder);
+  auto type = typeMap->getType(parser->headers);
+  if (type != nullptr) {
+    type->apply(visitor);
+  }
+  builder->decr_indent();
+  builder->append_line("} Headers deriving (Bits, Eq, FShow);");
 }
 
 void FPGAProgram::emit(BSVProgram & bsv, CppProgram & cpp) {
@@ -137,14 +149,7 @@ void FPGAProgram::emit(BSVProgram & bsv, CppProgram & cpp) {
 
   // must generate metadata after processing pipelines
   CodeBuilder* builder = &bsv.getStructBuilder();
+  emitHeaders(builder);
   emitMetadata(builder);
 }
-
-//void FPGAProgram::generateGraph(Graph & graph) {
-//  ingress->plot_v_table_e_meta(graph);
-//  egress->plot_v_table_e_meta(graph);
-//  ingress->plot_v_meta_e_table(graph);
-//  egress->plot_v_meta_e_table(graph);
-//}
-
 }  // namespace FPGA

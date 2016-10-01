@@ -54,7 +54,6 @@ class FPGAParser : public FPGAObject {
   const IR::Parameter*          stdMetadata;
   FPGAType*                     headerType;
   CodeBuilder*                  builder;
-  CodeBuilder*                  struct_builder;
 
   // map from IR::ParserState to IR::BSV::ParseStep
   // the latter subclasses Type_Header, from which we
@@ -69,7 +68,6 @@ class FPGAParser : public FPGAObject {
                       const P4::TypeMap* typeMap,
                       const P4::ReferenceMap* refMap);
 
-  void test();
   void emit(BSVProgram & bsv) override;
   bool build();
 };
