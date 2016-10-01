@@ -194,20 +194,33 @@ void FPGAParser::emitEnums(BSVProgram & bsv) {
 void FPGAParser::emitStructs(BSVProgram & bsv) {
   // assume all headers are parsed_out
   // optimization opportunity ??
-  auto htype = typeMap->getType(headers);
-  if (htype == nullptr)
+  auto type = typeMap->getType(headers);
+  if (type == nullptr) {
+    ::error("parameter 'headers' is null");
     return;
+  }
 
-  struct_builder = &bsv.getStructBuilder();
+  CodeBuilder* struct_builder = &bsv.getStructBuilder();
   StructCodeGen visitor(program, struct_builder);
-  for (auto f : *htype->to<IR::Type_Struct>()->fields) {
-    auto ftype = typeMap->getType(f);
-    if (ftype->is<IR::Type_Header>()) {
-      ftype->apply(visitor);
-    } else if (ftype->is<IR::Type_Stack>()) {
-      auto hstack = ftype->to<IR::Type_Stack>();
-      auto header = hstack->elementType->to<IR::Type_Header>();
-      header->apply(visitor);
+
+  const IR::Type_Struct* ir_struct = type->to<IR::Type_Struct>();
+  if (ir_struct == nullptr) {
+    ::error("ir_struct is null");
+    return;
+  }
+
+  for (auto f : *ir_struct->fields) {
+    auto field_t = typeMap->getType(f);
+    if (field_t->is<IR::Type_Header>()) {
+      field_t->apply(visitor);
+    } else if (field_t->is<IR::Type_Stack>()) {
+      const IR::Type_Stack* stack_t = field_t->to<IR::Type_Stack>();
+      const IR::Type_Header* header_t = stack_t->elementType->to<IR::Type_Header>();
+      if (header_t == nullptr) {
+        ::error("header_t is null");
+        return;
+      }
+      header_t->apply(visitor);
     }
   }
 }
@@ -458,9 +471,9 @@ void FPGAParser::emitAcceptedHeaders(BSVProgram & bsv, const IR::Type_Struct* he
       builder->append_format("if (isValid(%s)) begin", name);
       builder->incr_indent();
       builder->append_format("meta.%s = tagged Forward;", name);
-      builder->append_format("meta.hdr.%s = tagged Valid;", name);
       builder->decr_indent();
       builder->append_line("end");
+      builder->append_format("meta.hdr.%s = %s;", name, name);
       for (auto m : program->metadata) {
         auto member = m.second;
         auto ftype = program->typeMap->getType(member->expr, true);
@@ -558,10 +571,10 @@ bool FPGAParser::build() {
 
   auto states = parserBlock->container->states;
   for (auto state : *states) {
-    LOG1("state " << state);
     ParserBuilder visitor(this);
     state->apply(visitor);
   }
+
   return true;
 }
 

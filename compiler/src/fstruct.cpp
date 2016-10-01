@@ -50,12 +50,37 @@ bool StructCodeGen::preorder(const IR::Type_Header* hdr) {
     }
   }
   builder->decr_indent();
-  builder->append_format("} %s deriving (Bits, Eq);", header_type);
+  builder->append_format("} %s deriving (Bits, Eq, FShow);", header_type);
   builder->append_format("function %s extract_%s(Bit#(%d) data);", header_type, name, header_width);
   builder->incr_indent();
   builder->append_line("return unpack(byteSwap(data));");
   builder->decr_indent();
   builder->append_line("endfunction");
+  return false;
+}
+
+bool HeaderCodeGen::preorder(const IR::StructField* field) {
+  cstring header_type = CamelCase(field->type->getP4Type()->toString());
+  cstring header_name = field->getName().toString();
+  if (field->type->is<IR::Type_Header>()) {
+    visit(field->type);;
+    builder->append_line("Maybe#(%s) %s;", header_type, header_name);
+  } else if (field->type->is<IR::Type_Stack>()) {
+    visit(field->type);
+    builder->appendFormat(" %s;", header_name);
+    builder->newline();
+  } else {}
+  return false;
+}
+
+bool HeaderCodeGen::preorder(const IR::Type_Header* hdr) {
+  return false;
+}
+
+bool HeaderCodeGen::preorder(const IR::Type_Stack* stk) {
+  builder->emitIndent();
+  LOG1("xxxx" << stk->elementType->getP4Type());
+  builder->appendFormat("Vector#(%d, %s)", stk->getSize(), CamelCase(stk->elementType->getP4Type()->toString()));
   return false;
 }
 
