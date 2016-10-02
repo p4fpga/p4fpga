@@ -3,7 +3,7 @@ typedef struct {
     Bit#(48) dstAddr;
     Bit#(48) srcAddr;
     Bit#(16) etherType;
-} EthernetT deriving (Bits, Eq);
+} EthernetT deriving (Bits, Eq, FShow);
 function EthernetT extract_ethernet_t(Bit#(112) data);
     return unpack(byteSwap(data));
 endfunction
@@ -26,18 +26,13 @@ function Ipv4T extract_ipv4_t(Bit#(160) data);
     return unpack(byteSwap(data));
 endfunction
 typedef struct {
-   Maybe#(void) ipv4;
-   Maybe#(void) ethernet;
+    Maybe#(EthernetT) ethernet;
+    Maybe#(Ipv4T) ipv4;
 } Headers deriving (Bits, Eq, FShow);
-instance DefaultValue#(Headers);
-   defaultValue = unpack(0);
-endinstance
 typedef struct {
-    Maybe#(Bit#(32)) dstAddr;
-    Maybe#(Bit#(9)) ingress_port;
-    Maybe#(Bit#(9)) egress_port;
     Maybe#(Bit#(32)) nhop_ipv4;
-    Maybe#(Bit#(8)) ttl;
+    Maybe#(Bit#(32)) dstAddr;
+    Maybe#(Bit#(9)) egress_port;
     Headers hdr;
     HeaderState ethernet;
     HeaderState ipv4;
@@ -45,4 +40,3 @@ typedef struct {
 instance DefaultValue#(MetadataT);
     defaultValue = unpack(0);
 endinstance
-
