@@ -22,12 +22,17 @@
 
 // Parser Template
 import Library::*;
+import List::*;
+import UnitAppendList::*;
+import HList::*;
 
 `include "ConnectalProjectConfig.bsv"
 
 `define PARSER_STRUCT
 `include "ParserGenerated.bsv"
 `undef PARSER_STRUCT
+
+`define COLLECT_RULE(collectrule, rl) collectrule = List::cons (rl, collectrule)
 
 interface Parser;
    interface Put#(ByteStream#(16)) frameIn;
@@ -137,9 +142,66 @@ module mkParser#(Integer portnum)(Parser);
       delay_ff.enq(?);
    endrule
 
+   function Rules genLoadRule (ParserState state, Integer i);
+      let len = fromInteger(i);
+      return (rules 
+         rule rl_load if ((parse_state_ff.first == state) && rg_buffered[0] < len);
+            report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+            if (isValid(data_ff.first)) begin
+               data_ff.deq;
+               let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+               rg_tmp[0] <= zeroExtend(data);
+               move_shift_amt(128);
+            end
+         endrule
+      endrules);
+   endfunction
+
+   function Rules genAcceptRule (PulseWire wl);
+      return (rules
+         rule rl_accept if (wl);
+            parse_done[0] <= True;
+            w_parse_done.send();
+            fetch_next_header0(0);
+         endrule
+      endrules);
+   endfunction
+
+   function Rules genContRule (PulseWire wl, ParserState state, Integer i);
+      let len = fromInteger(i);
+      return (rules
+         rule rl_cont if (wl);
+            parse_state_ff.enq(state);
+            fetch_next_header0(len);
+         endrule
+      endrules);
+   endfunction
+
+   function Rules genExtractRule (ParserState state, Integer i);
+      let len = fromInteger(i);
+      return (rules
+         rule rl_extract if ((parse_state_ff.first == state) && (rg_buffered[0] > len));
+            let data = rg_tmp[0];
+            if (isValid(data_ff.first)) begin
+               data_ff.deq;
+               data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+            end
+            report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
+            extract_header(state, data);
+            rg_tmp[0] <= zeroExtend(data >> len);
+            succeed_and_next(len);
+            parse_state_ff.deq;
+         endrule
+      endrules);
+   endfunction
+
+   List#(Rules) parse_fsm = List::nil;
+
    `define PARSER_RULES
    `include "ParserGenerated.bsv"
    `undef PARSER_RULES
+
+   Empty fsmrl <- addRules(foldl(rJoin, emptyRules, fsmRules));
 
    interface frameIn = toPut(data_in_ff);
    interface meta = toGet(meta_in_ff);

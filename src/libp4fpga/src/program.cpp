@@ -35,6 +35,7 @@ bool FPGAProgram::build() {
   auto pb = pack->getParameterValue(v1model.sw.parser.name)
                 ->to<IR::ParserBlock>();
   BUG_CHECK(pb != nullptr, "No parser block found");
+  CHECK_NULL(typeMap);
   parser = new FPGAParser(this, pb, typeMap, refMap);
   success = parser->build();
   if (!success)

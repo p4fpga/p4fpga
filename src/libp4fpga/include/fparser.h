@@ -33,7 +33,7 @@ class FPGAParser : public FPGAObject {
   void emitStructs(BSVProgram & bsv);
   void emitFunctions(BSVProgram & bsv);
   void emitRules(BSVProgram & bsv);
-  void emitBufferRule(BSVProgram & bsv, const IR::BSV::ParseStep* state);
+  //void emitBufferRule(BSVProgram & bsv, const IR::BSV::ParseStep* state);
   void emitExtractionRule(BSVProgram & bsv, const IR::BSV::ParseStep* state);
   void emitTransitionRule(BSVProgram & bsv, const IR::BSV::ParseStep* state);
   void emitAcceptRule(BSVProgram & bsv);

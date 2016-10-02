@@ -18,15 +18,334 @@
 #include "fstruct.h"
 #include <algorithm>
 #include "ir/ir.h"
-//#include "codegeninspector.h"
 #include "string_utils.h"
 #include "vector_utils.h"
 
 namespace FPGA {
 
+
+class SelectStmtCodeGen : public Inspector {
+ public:
+  explicit SelectStmtCodeGen ( const IR::ParserState* state,
+                               const P4::TypeMap* typeMap,
+                               CodeBuilder* builder) :
+    builder(builder), typeMap(typeMap), state(state) {}
+  bool preorder(const IR::SelectExpression* expr) override;
+  bool preorder(const IR::ListExpression* expr) override;
+  bool preorder(const IR::PathExpression* path) override;
+  bool preorder(const IR::SelectCase* cas) override;
+ private:
+  CodeBuilder* builder;
+  const IR::ParserState* state;
+  const P4::TypeMap* typeMap;
+  std::vector<cstring> match;
+  std::vector<cstring> params;
+  void emitFunctionProlog();
+  void emitFunctionEpilog();
+};
+
+bool SelectStmtCodeGen::preorder(const IR::ListExpression* expr) {
+  // QUESTION: how does typeMap maps ListExpression to Tuple#(Type_Bits)??
+  auto widthTuple = typeMap->getType(expr, true);
+  CHECK_NULL(widthTuple);
+  const IR::Type_Tuple* tpl = widthTuple->to<IR::Type_Tuple>();
+  CHECK_NULL(tpl);
+  // select -> (Bit#(n) key1, Bit#(n) key2) and list (key1, key2)
+  for (auto h : MakeZipRange(*tpl->components, *expr->components)) {
+    auto w = h.get<0>();
+    auto k = h.get<1>();
+    const IR::Member* member = k->to<IR::Member>();
+    if (member != nullptr) {
+      int width = w->width_bits();
+      // LOG1(" >>> select key " << member);
+      params.push_back("Bit#(" + std::to_string(width) + ") " + member->member);
+      match.push_back(member->member);
+    } else {
+      ::error("lookahead not handled yet");
+    }
+  }
+  // LOG1("param: " << params);
+  // LOG1("match: " << match);
+  return false;
+}
+
+void SelectStmtCodeGen::emitFunctionProlog() {
+  cstring name = state->name.toString();
+  if (params.size() != 0) {
+    builder->append_format("function Action compute_next_state_%s(%s);", name, join(params, ","));
+  } else {
+    builder->append_format("function Action compute_next_state_%s();", name);
+  }
+  builder->incr_indent();
+  builder->append_line("action");
+  if (match.size() != 0) {
+    builder->append_format("let v = {%s};", join(match, ","));
+  } else {
+    builder->append_line("let v = 0;");
+  }
+}
+
+void SelectStmtCodeGen::emitFunctionEpilog() {
+  builder->append_line("endaction");
+  builder->decr_indent();
+  builder->append_line("endfunction");
+}
+
+bool SelectStmtCodeGen::preorder(const IR::SelectCase* cas) {
+  cstring name = state->name.toString();
+  if (cas->keyset->is<IR::Constant>()) {
+    builder->append_format("%d: begin", cas->keyset->toString());
+    builder->incr_indent();
+    builder->append_line("w_%s_%s.send();", name, cas->state->toString());
+    builder->decr_indent();
+    builder->append_line("end");
+  } else if (cas->keyset->is<IR::DefaultExpression>()) {
+    builder->append_line("default: begin");
+    builder->incr_indent();
+    builder->append_line("w_%s_%s.send();", name, cas->state->toString());
+    builder->decr_indent();
+    builder->append_line("end");
+  }
+  return false;
+}
+
+bool SelectStmtCodeGen::preorder(const IR::SelectExpression* expr) {
+  // class SelectExpression : Expression
+  //   ListExpression            select;
+  //   inline Vector<SelectCase> selectCases;
+  CHECK_NULL(typeMap);
+  builder->append_line("`ifdef PARSER_FUNCTION");
+  visit(expr->select);
+  emitFunctionProlog();
+  builder->append_line("case(v) matches");
+  builder->incr_indent();
+  for (auto c: expr->selectCases) {
+    visit(c);
+  }
+  builder->decr_indent();
+  builder->append_line("endcase");
+  emitFunctionEpilog();
+  builder->append_line("`endif");
+  return false;
+}
+
+bool SelectStmtCodeGen::preorder(const IR::PathExpression* path) {
+  ::error("parser: path expression in select statement not handled");
+  return false;
+}
+
+class ExtractStmtCodeGen : public Inspector {
+ public:
+  explicit ExtractStmtCodeGen( const IR::ParserState* state,
+                               const P4::TypeMap* typeMap,
+                               CodeBuilder* builder,
+                               int& num_rules) :
+    builder(builder), typeMap(typeMap), state(state), num_rules(num_rules) {}
+  bool preorder(const IR::AssignmentStatement* stmt) override;
+  bool preorder(const IR::MethodCallExpression* expr) override;
+  bool preorder(const IR::SelectCase* cas) override;
+  bool preorder(const IR::SelectExpression* expr) override;
+ private:
+  CodeBuilder* builder;
+  const IR::ParserState* state;
+  const P4::TypeMap* typeMap;
+  int& num_rules;
+};
+
+bool ExtractStmtCodeGen::preorder (const IR::AssignmentStatement* stmt) {
+  ::error("parser: metadata assignment not handled");
+  return false;
+}
+
+bool ExtractStmtCodeGen::preorder (const IR::SelectCase* cas) {
+  cstring this_state = state->name.toString();
+  if (cas->keyset->is<IR::Constant>()) {
+    cstring next_state = cas->state->toString();
+    if (next_state == "accept")
+      return false;
+    builder->append_line("`COLLECT_RULE(parse_fsm, joinRules(vec(genContRule(w_%s_%s, State%s, valueOf(%sSz)))));", this_state, next_state, CamelCase(next_state), CamelCase(next_state));
+    num_rules++;
+  } else if (cas->keyset->is<IR::DefaultExpression>()) {
+    cstring next_state = cas->state->toString();
+    builder->append_line("`COLLECT_RULE(parse_fsm, joinRules(vec(genAcceptRule(w_%s_%s))));", this_state, next_state);
+    num_rules++;
+  }
+  return false;
+}
+
+bool ExtractStmtCodeGen::preorder (const IR::SelectExpression* expr) {
+  for (auto c: expr->selectCases) {
+    visit(c);
+  }
+  return false;
+}
+
+bool ExtractStmtCodeGen::preorder (const IR::MethodCallExpression* expr) {
+  cstring this_state = state->name.toString();
+  for (auto h: MakeZipRange(*expr->typeArguments, *expr->arguments)) {
+    auto typeName = h.get<0>();
+    auto instName = h.get<1>();
+    //FIXME: must fix for stack
+    // const IR::Member* member = instName->to<IR::Member>();
+    // if (member->member == "next") {
+    //   ::error("must not print next as state");
+    // }
+    builder->append_line("`COLLECT_RULE(parse_fsm, joinRules(vec(genLoadRule(State%s, valueOf(%sSz)))));", CamelCase(this_state), CamelCase(this_state));
+    num_rules++;
+    builder->append_line("`COLLECT_RULE(parse_fsm, joinRules(vec(genExtractRule(State%s, valueOf(%sSz)))));", CamelCase(this_state), CamelCase(this_state));
+    num_rules++;
+  }
+  return false;
+}
+
+class ExtractLenCodeGen : public Inspector {
+ public:
+  explicit ExtractLenCodeGen ( const IR::ParserState* state,
+                               const P4::TypeMap* typeMap,
+                               CodeBuilder* builder) :
+    builder(builder), typeMap(typeMap), state(state) {}
+  bool preorder(const IR::MethodCallExpression* expr) override;
+ private:
+  CodeBuilder* builder;
+  const IR::ParserState* state;
+  const P4::TypeMap* typeMap;
+};
+
+bool ExtractLenCodeGen::preorder (const IR::MethodCallExpression* expr) {
+  for (auto h: MakeZipRange(*expr->typeArguments, *expr->arguments)) {
+    auto typeName = h.get<0>();
+    auto instName = h.get<1>();
+    auto header_type = typeMap->getType(typeName, true);
+    int header_width = header_type->width_bits();
+    builder->append_line("typedef %d %sSz;", header_width, CamelCase(state->toString()));
+  }
+  return false;
+}
+
+class ExtractFuncCodeGen : public Inspector {
+ public:
+  explicit ExtractFuncCodeGen ( const IR::ParserState* state,
+                                const P4::TypeMap* typeMap,
+                                CodeBuilder* builder) :
+    builder(builder), typeMap(typeMap), state(state) {}
+  bool preorder(const IR::MethodCallExpression* expr) override;
+  bool preorder(const IR::ListExpression* expr) override;
+ private:
+  CodeBuilder* builder;
+  const IR::ParserState* state;
+  const P4::TypeMap* typeMap;
+  std::vector<cstring> match;
+};
+
+bool ExtractFuncCodeGen::preorder(const IR::ListExpression* expr) {
+  // select -> list (key1, key2)
+  for (auto h : *expr->components) {
+    const IR::Member* member = h->to<IR::Member>();
+    // header->member corresponding IR.
+    // <Vector<Expression>>(1558), size=1
+    //   <Member>(1557)ethernet
+    //     <PathExpression>(1537)
+    //       <Path>(1538):hdr */
+    if (member != nullptr) {
+      auto header = member->expr->to<IR::Member>();
+      cstring name = header->member.toString() + "." + member->member.toString();
+      match.push_back(name);
+    } else {
+      ::error("lookahead not handled yet");
+    }
+  }
+  return false;
+}
+
+bool ExtractFuncCodeGen::preorder (const IR::MethodCallExpression* expr) {
+  cstring this_state = state->name.toString();
+  visit(state->selectExpression);
+  for (auto h: MakeZipRange(*expr->typeArguments, *expr->arguments)) {
+    auto typeName = h.get<0>();
+    auto instName = h.get<1>();
+    auto header_type = typeMap->getType(typeName, true);
+    int header_width = header_type->width_bits();
+    auto name = state->name.toString();
+    const IR::Member* member = instName->to<IR::Member>();
+    cstring header = member->member.toString();
+    builder->append_line("State%s : begin", CamelCase(this_state));
+    builder->incr_indent();
+    builder->append_line("let %s = extract_%s(truncate(data));", header, typeName->toString());
+    if (match.size() != 0) {
+      builder->append_format("compute_next_state_%s(%s);", name, join(match, ","));
+    } else {
+      builder->append_format("compute_next_state_%s();", name);
+    }
+
+    builder->append_format("%s_out_ff.enq(tagged Valid %s);", header, header);
+    builder->decr_indent();
+    builder->append_line("end");
+  }
+  return false;
+}
+
+class PulseWireCodeGen : public Inspector {
+ public:
+  explicit PulseWireCodeGen ( const IR::ParserState* state,
+                              const P4::TypeMap* typeMap,
+                              CodeBuilder* builder) :
+    builder(builder), typeMap(typeMap), state(state) {}
+  bool preorder(const IR::SelectCase* cas) override;
+  bool preorder (const IR::SelectExpression* expr) override;
+ private:
+  CodeBuilder* builder;
+  const IR::ParserState* state;
+  const P4::TypeMap* typeMap;
+};
+
+bool PulseWireCodeGen::preorder(const IR::SelectCase* cas) {
+  cstring this_state = state->name.toString();
+  cstring next_state = cas->state->toString();
+  if (cas->keyset->is<IR::Constant>()) {
+    builder->append_line("PulseWire w_%s_%s <- mkPulseWire();", this_state, next_state);
+  } else if (cas->keyset->is<IR::DefaultExpression>()) {
+    builder->append_line("PulseWire w_%s_%s <- mkPulseWire();", this_state, next_state);
+  }
+  return false;
+}
+
+bool PulseWireCodeGen::preorder (const IR::SelectExpression* expr) {
+  for (auto c: expr->selectCases) {
+    visit(c);
+  }
+  return false;
+}
+
+class DfifoCodeGen : public Inspector {
+ public:
+  explicit DfifoCodeGen (const IR::ParserState* state,
+                         const P4::TypeMap* typeMap,
+                         CodeBuilder* builder) :
+    builder(builder), typeMap(typeMap), state(state) {}
+  bool preorder(const IR::MethodCallExpression* expr) override;
+
+ private:
+  CodeBuilder* builder;
+  const IR::ParserState* state;
+  const P4::TypeMap* typeMap;
+};
+
+bool DfifoCodeGen::preorder(const IR::MethodCallExpression* expr) {
+  for (auto h: MakeZipRange(*expr->typeArguments, *expr->arguments)) {
+    auto typeName = h.get<0>();
+    auto instName = h.get<1>();
+    cstring type = CamelCase(typeName->toString());
+    const IR::Member* member = instName->to<IR::Member>();
+    cstring name = member->member;
+    builder->append_line("FIFOF#(Maybe#(%s)) %s_out_ff <- mkDFIFOF(tagged Invalid);", type, name);
+  }
+  return false;
+}
+
 class ParserBuilder : public Inspector {
  public:
-  ParserBuilder(FPGAParser* parser) : parser(parser) {
+  ParserBuilder(FPGAParser* parser) :
+    parser(parser) {
     statements = new IR::IndexedVector<IR::AssignmentStatement>();
     cases = new IR::IndexedVector<IR::SelectCase>();
     fields = new IR::IndexedVector<IR::StructField>();
@@ -125,7 +444,6 @@ bool ParserBuilder::preorder(const IR::SelectExpression* expression) {
 }
 
 // handle 'extract' method call
-// 
 bool ParserBuilder::preorder(const IR::MethodCallExpression* expression) {
   auto m = expression->method->to<IR::Expression>();
   if (m == nullptr) return false;
@@ -176,15 +494,20 @@ FPGAParser::FPGAParser(FPGAProgram* program,
   refMap(refMap), headers(nullptr), headerType(nullptr) {
 }
 
+// FIXME: stack is not handled
 void FPGAParser::emitEnums(BSVProgram & bsv) {
   builder->append_line("`ifdef PARSER_STRUCT");
   builder->append_line("typedef enum {");
   builder->incr_indent();
-  for (auto s : parseSteps) {
-    if (s == parseSteps.back())
-      builder->append_format("State%s", CamelCase(s->name));
+  std::vector<cstring> state_vec;
+  for (auto state: *parserBlock->container->states) {
+    state_vec.push_back(state->name.toString());
+  }
+  for (auto s : state_vec) {
+    if (s == state_vec.back())
+      builder->append_format("State%s", CamelCase(s));
     else
-      builder->append_format("State%s,", CamelCase(s->name));
+      builder->append_format("State%s,", CamelCase(s));
   }
   builder->decr_indent();
   builder->append_line("} ParserState deriving (Bits, Eq);");
@@ -227,236 +550,14 @@ void FPGAParser::emitStructs(BSVProgram & bsv) {
 
 void FPGAParser::emitFunctions(BSVProgram & bsv) {
   builder->append_line("`ifdef PARSER_FUNCTION");
-  for (auto state : parseSteps) {
-    // find out type and name of each field
-    auto name = state->name.toString();
-    std::vector<cstring> match;
-    std::vector<cstring> params;
-    if (state->keys != nullptr) {
-      // get type for 'select' keys
-      auto type = typeMap->getType(state->keys, true);
-      if (type->is<IR::Type_Tuple>()) {
-        auto tpl = type->to<IR::Type_Tuple>();
-        if (state->keys->is<IR::ListExpression>()) {
-          auto keys = state->keys->to<IR::ListExpression>();
-          for (auto h : MakeZipRange(*tpl->components, *keys->components)) {
-            auto w = h.get<0>();
-            auto k = h.get<1>();
-            if (k->is<IR::Member>()) {
-              auto name = k->to<IR::Member>();
-              auto width = w->width_bits();
-              params.push_back("Bit#(" + std::to_string(width) + ") " + name->member);
-              match.push_back(name->member);
-            }
-          }
-        }
-      }
-    }
-    if (params.size() != 0) {
-      builder->append_format("function Action compute_next_state_%s(%s);", name, join(params, ","));
-    } else {
-      builder->append_format("function Action compute_next_state_%s();", name);
-    }
-    builder->incr_indent();
-    builder->append_line("action");
-    // bit vector from ListExpression
-    if (match.size() != 0) {
-      builder->append_format("let v = {%s};", join(match, ","));
-    } else {
-      builder->append_line("let v = 0;");
-    }
-    builder->append_line("case(v) matches");
-    builder->incr_indent();
-    if (state->cases != nullptr) {
-      for (auto c : *state->cases) {
-        if (c->keyset->is<IR::Constant>()) {
-          builder->append_format("%d: begin", c->keyset->toString());
-          builder->incr_indent();
-          builder->append_line("w_%s_%s.send();", name, c->state->toString());
-          builder->decr_indent();
-          builder->append_line("end");
-        } else if (c->keyset->is<IR::DefaultExpression>()) {
-          builder->append_line("default: begin");
-          builder->incr_indent();
-          builder->append_line("w_%s_%s.send();", name, c->state->toString());
-          builder->decr_indent();
-          builder->append_line("end");
-        }
-      }
-    } else {
-      // no case.
-    }
-    builder->decr_indent();
-    builder->append_line("endcase");
-    builder->append_line("endaction");
-    builder->decr_indent();
-    builder->append_line("endfunction");
-  }
-
   auto initStep = parseStateMap[initState];
   builder->append_line("let initState = State%s;", CamelCase(initStep->name.toString()));
-
   builder->append_line("`endif");
-}
-
-void FPGAParser::emitBufferRule(BSVProgram & bsv, const IR::BSV::ParseStep* state) {
-    auto name = state->name.toString();
-    // Rule: load data
-    builder->append_format("rule rl_%s_load if ((parse_state_ff.first == State%s) && rg_buffered[0] < %d);", name, CamelCase(name), state->width_bits);
-    builder->incr_indent();
-    builder->append_line("report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);");
-    builder->append_line("if (isValid(data_ff.first)) begin");
-    builder->incr_indent();
-    builder->append_line("data_ff.deq;");
-    builder->append_line("let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];");
-    builder->append_line("rg_tmp[0] <= zeroExtend(data);");
-    builder->append_line("move_shift_amt(128);");
-    builder->decr_indent();
-    builder->append_line("end");
-    builder->decr_indent();
-    builder->append_line("endrule");
-    builder->append_line("");
-}
-
-void FPGAParser::emitExtractionRule(BSVProgram & bsv, const IR::BSV::ParseStep* state) {
-    auto name = state->name.toString();
-    auto type = state->type->toString();
-    builder->append_format("rule rl_%s_extract if ((parse_state_ff.first == State%s) && (rg_buffered[0] > %d));", name, CamelCase(name), state->width_bits);
-    builder->incr_indent();
-    builder->append_line("let data = rg_tmp[0];");
-    builder->append_line("if (isValid(data_ff.first)) begin");
-    builder->incr_indent();
-    builder->append_line("data_ff.deq;");
-    builder->append_line("data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];");
-    builder->decr_indent();
-    builder->append_line("end");
-    builder->append_line("report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);");
-    builder->append_line("let %s = extract_%s(truncate(data));", name, type);
-    auto params = cstring("");
-    if (state->keys != nullptr) {
-      auto lk = state->keys->to<IR::ListExpression>();
-      if (lk != nullptr) {
-        for (auto key : *lk->components) {
-          if (key->is<IR::Member>()) {
-            auto field = key->to<IR::Member>();
-            if (field->expr->is<IR::Member>()) {
-              auto header = field->expr->to<IR::Member>();
-              // NOTE: what if header has a nested struture, i.e. header inside header?
-              params += header->member.toString() + "." + field->member.toString();
-            } else if (field->expr->is<IR::ArrayIndex>()) {
-              ::warning("handle stack header");
-            }
-          }
-        }
-      }
-    }
-    builder->append_line("compute_next_state_%s(%s);", name, params);
-    builder->append_format("rg_tmp[0] <= zeroExtend(data >> %d);", state->width_bits);
-    builder->append_format("succeed_and_next(%d);", state->width_bits);
-    builder->append_line("parse_state_ff.deq;");
-    builder->append_format("%s_out_ff.enq(tagged Valid %s);", name, name);
-    builder->decr_indent();
-    builder->append_line("endrule");
-    builder->append_line("");
-}
-
-void FPGAParser::emitTransitionRule(BSVProgram & bsv, const IR::BSV::ParseStep* state) {
-  auto name = state->name.toString();
-  auto type = state->type->toString();
-  std::set<cstring> rule_set;
-  if (state->cases == nullptr) {
-    // direct transition path
-    ::warning("directly transit to next state", state->toString());
-  } else {
-    for (auto c : *state->cases) {
-      auto rl_name = name + "_" + c->state->toString();
-      if (rule_set.find(rl_name) != rule_set.end()) {
-        // already generated.
-        continue;
-      } else {
-        rule_set.insert(rl_name);
-      }
-      builder->append_line("rule rl_%s if (w_%s);", rl_name, rl_name);
-      auto type = typeMap->getType(c->state, true);
-      auto decl = refMap->getDeclaration(c->state->path, true);
-      builder->incr_indent();
-      if (c->state->toString() == IR::ParserState::accept) {
-        builder->append_line("parse_done[0] <= True;");
-        builder->append_line("w_parse_done.send();");
-        builder->append_line("fetch_next_header0(0);");
-      } else {
-        // ParserState* -> BSV::ParseStep --> width_bits
-        // LOG1("decl" << decl << " " << c->state << " " << decl->node_type_name());
-        if (decl->is<IR::ParserState>()) {
-          auto s = decl->to<IR::ParserState>();
-          auto bsv_parse_state = parseStateMap[s];
-          builder->append_format("parse_state_ff.enq(State%s);", CamelCase(bsv_parse_state->name.toString()));
-          builder->append_line("fetch_next_header0(%d);", bsv_parse_state->width_bits);
-        }
-      }
-      builder->decr_indent();
-      builder->append_line("endrule");
-    }
-  }
 }
 
 void FPGAParser::emitRules(BSVProgram & bsv) {
   builder->append_line("`ifdef PARSER_RULES");
-  // deparse rules are mutually exclusive
-  std::vector<cstring> exclusive_rules;
-  std::set<cstring> rule_set;
-  for (auto r : parseSteps) {
-    for (auto c : *r->cases) {
-      cstring name = r->name.toString();
-      cstring rl_name = "rl_" + name + "_" + c->state->toString();
-      if (rule_set.find(rl_name) != rule_set.end()) {
-        // already generated.
-        continue;
-      } else {
-        rule_set.insert(rl_name);
-        exclusive_rules.push_back(rl_name);
-      }
-    }
-  }
-  auto exclusive_annotation = cstring("(* mutually_exclusive=\"");
-  for (auto r : exclusive_rules) {
-    exclusive_annotation += r;
-    if (r != exclusive_rules.back()) {
-      exclusive_annotation += cstring(",");
-    }
-  }
-  exclusive_annotation += cstring("\" *)");
-  builder->append_line(exclusive_annotation);
-
-  for (auto s : parseSteps) {
-    emitBufferRule(bsv, s);
-    emitExtractionRule(bsv, s);
-    emitTransitionRule(bsv, s);
-  }
   emitAcceptRule(bsv);
-  builder->append_line("`endif");
-}
-
-void FPGAParser::emitStateElements(BSVProgram & bsv) {
-  builder->append_line("`ifdef PARSER_STATE");
-  // pulsewire to communicate between different parse parseSteps
-  for (auto state : parseSteps) {
-    if (state->cases == nullptr) continue;
-    cstring name = state->name.toString();
-    for (auto c : *state->cases) {
-      cstring wire_name = "w_" + name + "_" + c->state->toString();
-      pulse_wire_set.insert(wire_name);
-    }
-  }
-  for (auto n : pulse_wire_set) {
-    builder->append_line("PulseWire %s <- mkPulseWire;", n);
-  }
-  // dfifo to output parsed header
-  for (auto state : parseSteps) {
-    auto name = state->name.toString();
-    auto type = CamelCase(state->type->toString());
-    builder->append_line("FIFOF#(Maybe#(%s)) %s_out_ff <- mkDFIFOF(tagged Invalid);", type, name);
-  }
   builder->append_line("`endif");
 }
 
@@ -546,12 +647,69 @@ void FPGAParser::emitAcceptRule(BSVProgram & bsv) {
 
 // emit BSV_IR with BSV-specific CodeGenInspector
 void FPGAParser::emit(BSVProgram & bsv) {
+  CHECK_NULL(typeMap);
+
   builder = &bsv.getParserBuilder();
+
+  // translate
   emitEnums(bsv);
+  // translate
   emitStructs(bsv);
+  // translate select statement to bluespec function
+  for (auto state: *parserBlock->container->states) {
+    SelectStmtCodeGen selectCodeGen(state, typeMap, builder);
+    state->selectExpression->apply(selectCodeGen);
+  }
   emitFunctions(bsv);
+
+  builder->append_line("`ifdef PARSER_STRUCT");
+  int num_rules = 0;
+  for (auto state: *parserBlock->container->states) {
+    ExtractLenCodeGen extractLenCodeGen(state, typeMap, builder);
+    state->apply(extractLenCodeGen);
+  }
+  builder->append_line("`endif");
+
+  builder->append_line("`ifdef PARSER_FUNCTION");
+  builder->append_line("function Action extract_header(ParserState state, Bit#(512) data);");
+  builder->incr_indent();
+  builder->append_line("action");
+  builder->append_line("case (state) matches");
+  builder->incr_indent();
+  for (auto state: *parserBlock->container->states) {
+    ExtractFuncCodeGen extractCodeGen(state, typeMap, builder);
+    state->apply(extractCodeGen);
+  }
+  builder->decr_indent();
+  builder->append_line("endcase");
+  builder->append_line("endaction");
+  builder->decr_indent();
+  builder->append_line("endfunction");
+  builder->append_line("`endif");
+
+  builder->append_line("`ifdef PARSER_RULES");
+  for (auto state: *parserBlock->container->states) {
+    ExtractStmtCodeGen extractCodeGen(state, typeMap, builder, num_rules);
+    state->apply(extractCodeGen);
+  }
+  builder->append_line("Vector#(%d, Rules) fsmRules = toVector(parse_fsm);", num_rules);
+  builder->append_line("`endif");
+
+  // translate extract statement to bluespec rule
   emitRules(bsv);
-  emitStateElements(bsv);
+
+  // translate parser metadata
+  builder->append_line("`ifdef PARSER_STATE");
+  for (auto state: *parserBlock->container->states) {
+    PulseWireCodeGen pulsewireCodeGen(state, typeMap, builder);
+    state->selectExpression->apply(pulsewireCodeGen);
+  }
+
+  for (auto state: *parserBlock->container->states) {
+    DfifoCodeGen dfifoCodeGen(state, typeMap, builder);
+    state->apply(dfifoCodeGen);
+  }
+  builder->append_line("`endif");
 }
 
 // build IR::BSV from mid-end IR
@@ -571,6 +729,7 @@ bool FPGAParser::build() {
 
   auto states = parserBlock->container->states;
   for (auto state : *states) {
+    LOG1("<<<<< state " << state);
     ParserBuilder visitor(this);
     state->apply(visitor);
   }
