@@ -342,147 +342,35 @@ bool DfifoCodeGen::preorder(const IR::MethodCallExpression* expr) {
   return false;
 }
 
-class ParserBuilder : public Inspector {
+class InitStateCodeGen : public Inspector {
  public:
-  ParserBuilder(FPGAParser* parser) :
-    parser(parser) {
-    statements = new IR::IndexedVector<IR::AssignmentStatement>();
-    cases = new IR::IndexedVector<IR::SelectCase>();
-    fields = new IR::IndexedVector<IR::StructField>();
-    header_width = 0;
-  }
+  explicit InitStateCodeGen (const IR::ParserState* state,
+                             const P4::ReferenceMap* refMap,
+                             CodeBuilder* builder) :
+    builder(builder), state(state), refMap(refMap) {}
   bool preorder(const IR::ParserState* state) override;
-  bool preorder(const IR::SelectExpression* expression) override;
-  bool preorder(const IR::MethodCallStatement* stmt) override
-  { visit(stmt->methodCall); return false; };
-  bool preorder(const IR::AssignmentStatement* stmt) override;
-  bool preorder(const IR::MethodCallExpression* expression) override;
  private:
-  IR::IndexedVector<IR::AssignmentStatement>* statements;
-  IR::IndexedVector<IR::SelectCase>*          cases;
-  const IR::ListExpression*                   select;
-  const IR::IndexedVector<IR::StructField>*   fields;
-  int                                         header_width;
-  const IR::Type_Name*                        header_type_name;
-  const IR::ID*                           header_name;
-
-  const IR::ParserState* parser_state;
-  FPGAParser* parser;
+  CodeBuilder* builder;
+  const IR::ParserState* state;
+  const P4::ReferenceMap* refMap;
 };
 
-// A P4 parse state corresponds to one or more Bluespec parse state,
-// depends on how many 'extract' method are used.
-// There are two variants of 'extract' method:
-// - one-argument variant for extracting fixed-size headers
-// - two-argument variant for extracting variable-size headers
-bool ParserBuilder::preorder(const IR::ParserState* state) {
-  // skip accept / reject states
-  if (state->isBuiltin()) {
-    LOG1("skip built in state " << state);
-  return false;
-  }
-
+bool InitStateCodeGen::preorder(const IR::ParserState* state) {
   if (state->name.toString() == "start") {
     // NOTE: assume start state is actually called 'start'
-    LOG1(state->components);
     if (state->components->size() == 0) {
       if (state->selectExpression->is<IR::PathExpression>()) {
         auto expr = state->selectExpression->to<IR::PathExpression>();
-        auto inst = parser->refMap->getDeclaration(expr->path, true);
+        auto inst = refMap->getDeclaration(expr->path, true);
         if (inst->is<IR::ParserState>()) {
           auto pstate = inst->to<IR::ParserState>();
-          parser->initState = pstate;
-          LOG1("parse init state");
+          builder->append_line("let initState = State%s;", CamelCase(pstate->name.toString()));
         }
       }
-      return false;
     } else {
-      parser->initState = state;
+      builder->append_line("let initState = State%s;", CamelCase(state->name.toString()));
     }
   }
-
-  // take a note of current p4 parse state
-  parser_state = state;
-
-  // process 'extract' or 'set_metadata'
-  visit(state->components);
-
-  // process 'select' statement
-  if (state->selectExpression->is<IR::SelectExpression>()) {
-    // multiple next step
-    LOG1("select in state " << state);
-    visit(state->selectExpression);
-  } else if (state->selectExpression->is<IR::PathExpression>()){
-    // only one next step
-    LOG1("select only one " << state);
-    auto path = state->selectExpression->to<IR::PathExpression>();
-    auto nextState = new IR::SelectCase(new IR::DefaultExpression(), path);
-    cases->push_back(nextState);
-    select = nullptr;
-  }
-
-  // create one parse step
-  //auto name = state->name.toString();
-  // FIXME: set parseStep name to header_name because we assume each step extracts a header.
-  auto name = header_name->toString();
-  LOG1("create parse step " << fields << header_name << state);
-  auto step = new IR::BSV::ParseStep(name, fields, header_width, header_type_name, select, cases, statements);
-  parser->parseSteps.push_back(step);
-  parser->parseStateMap[state] = step;
-  return false;
-}
-
-bool ParserBuilder::preorder(const IR::SelectExpression* expression) {
-  LOG1("select expression " << expression);
-  select = expression->select;
-  for (auto e : expression->selectCases) {
-    if (e->is<IR::SelectCase>()) {
-      cases->push_back(e->to<IR::SelectCase>());
-    }
-  }
-  return false;
-}
-
-// handle 'extract' method call
-bool ParserBuilder::preorder(const IR::MethodCallExpression* expression) {
-  auto m = expression->method->to<IR::Expression>();
-  if (m == nullptr) return false;
-
-  auto e = m->to<IR::Member>();
-  if (e == nullptr) return false;
-
-  if (e->member == "extract") {
-    // argument types
-    for (auto h: MakeZipRange(*expression->typeArguments, *expression->arguments)) {
-      auto typeName = h.get<0>();
-      auto instName = h.get<1>();
-      auto header_type = parser->program->typeMap->getType(typeName, true);
-      header_width += header_type->width_bits();
-      if (header_type->is<IR::Type_StructLike>()) {
-        auto header = header_type->to<IR::Type_StructLike>();
-        fields = header->fields;
-        LOG1("fields" << header->fields);
-      }
-
-      header_type_name = typeName->to<IR::Type_Name>();
-      if (instName->is<IR::Member>()) {
-        header_name = &instName->to<IR::Member>()->member;
-      } else if (instName->is<IR::ArrayIndex>()) {
-        //header_name = instName->to<IR::ArrayIndex>()->typeName;
-        ::warning("extract expression, handle stack header");
-      }
-      LOG1("header_type " << header_type_name);
-    }
-    // TODO: implement two-argument variant for extracting variable-size headers
-  } else {
-    // TODO: handle 'lookahead' method
-    warning("unhandled method %1%.", e->member);
-  }
-  return false;
-}
-
-bool ParserBuilder::preorder(const IR::AssignmentStatement* statement) {
-  statements->push_back(statement);
   return false;
 }
 
@@ -546,19 +434,6 @@ void FPGAParser::emitStructs(BSVProgram & bsv) {
       header_t->apply(visitor);
     }
   }
-}
-
-void FPGAParser::emitFunctions(BSVProgram & bsv) {
-  builder->append_line("`ifdef PARSER_FUNCTION");
-  auto initStep = parseStateMap[initState];
-  builder->append_line("let initState = State%s;", CamelCase(initStep->name.toString()));
-  builder->append_line("`endif");
-}
-
-void FPGAParser::emitRules(BSVProgram & bsv) {
-  builder->append_line("`ifdef PARSER_RULES");
-  emitAcceptRule(bsv);
-  builder->append_line("`endif");
 }
 
 // convert every field in struct headers to its origial header type
@@ -655,12 +530,20 @@ void FPGAParser::emit(BSVProgram & bsv) {
   emitEnums(bsv);
   // translate
   emitStructs(bsv);
+
   // translate select statement to bluespec function
   for (auto state: *parserBlock->container->states) {
     SelectStmtCodeGen selectCodeGen(state, typeMap, builder);
     state->selectExpression->apply(selectCodeGen);
   }
-  emitFunctions(bsv);
+
+  builder->append_line("`ifdef PARSER_FUNCTION");
+  //builder->append_line("let initState = State%s;");
+  for (auto state: *parserBlock->container->states) {
+    InitStateCodeGen initStateCodeGen(state, refMap, builder);
+    state->apply(initStateCodeGen);
+  }
+  builder->append_line("`endif");
 
   builder->append_line("`ifdef PARSER_STRUCT");
   int num_rules = 0;
@@ -695,8 +578,9 @@ void FPGAParser::emit(BSVProgram & bsv) {
   builder->append_line("Vector#(%d, Rules) fsmRules = toVector(parse_fsm);", num_rules);
   builder->append_line("`endif");
 
-  // translate extract statement to bluespec rule
-  emitRules(bsv);
+  builder->append_line("`ifdef PARSER_RULES");
+  emitAcceptRule(bsv);
+  builder->append_line("`endif");
 
   // translate parser metadata
   builder->append_line("`ifdef PARSER_STATE");
@@ -726,14 +610,6 @@ bool FPGAParser::build() {
   headers = pl->getParameter(model.parser.headersParam.index);
   userMetadata = pl->getParameter(model.parser.metadataParam.index);
   stdMetadata = pl->getParameter(model.parser.standardMetadataParam.index);
-
-  auto states = parserBlock->container->states;
-  for (auto state : *states) {
-    LOG1("<<<<< state " << state);
-    ParserBuilder visitor(this);
-    state->apply(visitor);
-  }
-
   return true;
 }
 
