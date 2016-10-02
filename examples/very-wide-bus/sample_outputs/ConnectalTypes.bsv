@@ -7,6 +7,7 @@ typedef struct {
     Bit#(48) dmac;
 } ForwardRspT deriving (Bits, FShow);
 typedef struct{
+    Bit#(4) padding;
     Bit#(32) dstAddr;
 } Ipv4LpmReqT deriving (Bits, FShow);
 typedef struct {
@@ -21,4 +22,3 @@ typedef struct {
     Bit#(2) _action;
     Bit#(48) smac;
 } SendFrameRspT deriving (Bits, FShow);
-
