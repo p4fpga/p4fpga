@@ -21,4 +21,23 @@ typedef union tagged {
   } HeaderState
 deriving (Bits, Eq, FShow);
 
+typedef struct {
+   HeaderState state;
+   hdrType hdr;
+} Header#(type hdrType) deriving (Bits, Eq, FShow);
+instance DefaultValue#(Header#(t))
+   provisos(Bits#(StructDefines::Header#(t), a__));
+   defaultValue = unpack(0);
+endinstance
+
+//NOTE: MetadataT struct based on v1model
+typedef struct {
+    Headers hdr;
+    Metadata meta;
+    //StandardMetadataT standard_metadata;
+} MetadataT deriving (Bits, Eq, FShow);
+instance DefaultValue#(MetadataT);
+    defaultValue = unpack(0);
+endinstance
+
 `include "StructGenerated.bsv"
