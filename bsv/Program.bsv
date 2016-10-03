@@ -67,7 +67,7 @@ module mkProgram(Program#(nrx, ntx, nhs))
    rule egress_demux;
       let v = egress.next.first;
       egress.next.deq;
-      if (v.meta.egress_port matches tagged Valid .prt) begin
+      if (v.meta.standard_metadata.egress_port matches tagged Valid .prt) begin
          let tpl = tuple2(truncate(prt), v);
          writeData.enq(tpl);
       end

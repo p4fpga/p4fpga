@@ -81,6 +81,7 @@ class FPGAProgram : public FPGAObject {
   void emitPipeline(CodeBuilder* builder);
   void emitHeaders(CodeBuilder* builder);
   void emitMetadata(CodeBuilder* builder);
+  void emitBuiltinMetadata(CodeBuilder* builder);
   void emitLicense(CodeBuilder* builder);
 };
 

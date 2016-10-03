@@ -34,7 +34,7 @@ endinstance
 typedef struct {
     Headers hdr;
     Metadata meta;
-    //StandardMetadataT standard_metadata;
+    StandardMetadataT standard_metadata;
 } MetadataT deriving (Bits, Eq, FShow);
 instance DefaultValue#(MetadataT);
     defaultValue = unpack(0);

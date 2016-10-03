@@ -153,7 +153,7 @@ cstring TableCodeGen::gatherTableKeys() {
     LOG1("key size" << s);
     field_width += s;
     cstring name = f->name.toString();
-    builder->append_line("let %s = fromMaybe(?, data.meta.%s);", name, name);
+    builder->append_line("let %s = fromMaybe(?, data.meta.meta.%s);", name, name);
     fields += name + cstring(": ") + name;
     if (k != key_vec.back()) {
       fields += cstring(",");

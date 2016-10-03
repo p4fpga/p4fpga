@@ -92,22 +92,45 @@ void FPGAProgram::emitIncludeStatements(BSVProgram & bsv) {
   builder->append_line("`include \"MatchTable.defines\"");
 }
 
-void FPGAProgram::emitMetadata(CodeBuilder* builder) {
-  // metadata used in table
-//  for (auto p : ingress->metadata_to_table) {
-//    auto name = nameFromAnnotation(p.first->annotations, p.first->name);
-//    auto size = p.first->type->to<IR::Type_Bits>()->size;
-//    builder->append_line("Maybe#(Bit#(%d)) %s;", size, name);
-//  }
-//  for (auto p : egress->metadata_to_table) {
-//    auto name = nameFromAnnotation(p.first->annotations, p.first->name);
-//    auto size = p.first->type->to<IR::Type_Bits>()->size;
-//    builder->append_line("Maybe#(Bit#(%d)) %s;", size, name);
-//  }
-  // metadata used in control flow
-
+void FPGAProgram::emitBuiltinMetadata(CodeBuilder* builder) {
+  const IR::Type_Struct* stdmeta = typeMap->getType(parser->stdMetadata)->to<IR::Type_Struct>();
   builder->append_line("typedef struct {");
   builder->incr_indent();
+  for (auto h : *stdmeta->fields) {
+    auto type = typeMap->getType(h);
+    auto name = h->name.toString();
+    builder->append_format("Maybe#(Bit#(%d)) %s;", type->width_bits(), name);
+  }
+  builder->decr_indent();
+  builder->append_line("} StandardMetadataT deriving (Bits, Eq, FShow);");
+  builder->append_line("instance DefaultValue#(StandardMetadataT);");
+  builder->incr_indent();
+  builder->append_line("defaultValue = unpack(0);");
+  builder->decr_indent();
+  builder->append_line("endinstance");
+
+}
+void FPGAProgram::emitMetadata(CodeBuilder* builder) {
+  builder->append_line("typedef struct {");
+  builder->incr_indent();
+  // implicit metadata in table.
+  for (auto p : ingress->metadata_to_table) {
+    auto name = nameFromAnnotation(p.first->annotations, p.first->name);
+    auto size = p.first->type->to<IR::Type_Bits>()->size;
+    builder->append_line("Maybe#(Bit#(%d)) %s;", size, name);
+  }
+  for (auto p : egress->metadata_to_table) {
+    auto name = nameFromAnnotation(p.first->annotations, p.first->name);
+    auto size = p.first->type->to<IR::Type_Bits>()->size;
+    builder->append_line("Maybe#(Bit#(%d)) %s;", size, name);
+  }
+
+  // FIXME: place into Metadata?
+  // Implicit metadata in control flow.
+
+  // Standard Metadata
+
+  // Metadata declared by user.
   const IR::Type_Struct* usermeta = typeMap->getType(parser->userMetadata)->to<IR::Type_Struct>();
   CHECK_NULL(usermeta);
   for (auto h : *usermeta->fields) {
@@ -156,5 +179,7 @@ void FPGAProgram::emit(BSVProgram & bsv, CppProgram & cpp) {
   CodeBuilder* builder = &bsv.getStructBuilder();
   emitHeaders(builder);
   emitMetadata(builder);
+  emitBuiltinMetadata(builder);
+
 }
 }  // namespace FPGA
