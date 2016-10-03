@@ -131,6 +131,15 @@ bool SelectStmtCodeGen::preorder(const IR::SelectExpression* expr) {
 
 bool SelectStmtCodeGen::preorder(const IR::PathExpression* path) {
   ::error("parser: path expression in select statement not handled");
+  builder->append_line("`ifdef PARSER_FUNCTION");
+  builder->append_line("function Action compute_next_state_%s();", state->toString());
+  builder->incr_indent();
+  builder->append_line("action");
+  builder->append_line("w_%s_%s.send();", state->toString(), path->toString());
+  builder->append_line("endaction");
+  builder->decr_indent();
+  builder->append_line("endfunction");
+  builder->append_line("`endif");
   return false;
 }
 
@@ -145,6 +154,7 @@ class ExtractStmtCodeGen : public Inspector {
   bool preorder(const IR::MethodCallExpression* expr) override;
   bool preorder(const IR::SelectCase* cas) override;
   bool preorder(const IR::SelectExpression* expr) override;
+  bool preorder(const IR::PathExpression* expr) override;
  private:
   CodeBuilder* builder;
   const IR::ParserState* state;
@@ -177,6 +187,13 @@ bool ExtractStmtCodeGen::preorder (const IR::SelectExpression* expr) {
   for (auto c: expr->selectCases) {
     visit(c);
   }
+  return false;
+}
+
+bool ExtractStmtCodeGen::preorder (const IR::PathExpression* expr) {
+  cstring this_state = state->name.toString();
+  builder->append_line("`COLLECT_RULE(parse_fsm, joinRules(vec(genAcceptRule(w_%s_%s))));", this_state, expr->toString());
+  num_rules++;
   return false;
 }
 
@@ -292,6 +309,7 @@ class PulseWireCodeGen : public Inspector {
     builder(builder), typeMap(typeMap), state(state) {}
   bool preorder(const IR::SelectCase* cas) override;
   bool preorder (const IR::SelectExpression* expr) override;
+  bool preorder (const IR::PathExpression* expr) override;
  private:
   CodeBuilder* builder;
   const IR::ParserState* state;
@@ -306,6 +324,13 @@ bool PulseWireCodeGen::preorder(const IR::SelectCase* cas) {
   } else if (cas->keyset->is<IR::DefaultExpression>()) {
     builder->append_line("PulseWire w_%s_%s <- mkPulseWire();", this_state, next_state);
   }
+  return false;
+}
+
+bool PulseWireCodeGen::preorder(const IR::PathExpression* expr) {
+  cstring this_state = state->name.toString();
+  cstring next_state = expr->toString();
+  builder->append_line("PulseWire w_%s_%s <- mkPulseWire();", this_state, next_state);
   return false;
 }
 
