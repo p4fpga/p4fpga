@@ -130,7 +130,6 @@ bool SelectStmtCodeGen::preorder(const IR::SelectExpression* expr) {
 }
 
 bool SelectStmtCodeGen::preorder(const IR::PathExpression* path) {
-  ::error("parser: path expression in select statement not handled");
   builder->append_line("`ifdef PARSER_FUNCTION");
   builder->append_line("function Action compute_next_state_%s();", state->toString());
   builder->incr_indent();
@@ -150,7 +149,6 @@ class ExtractStmtCodeGen : public Inspector {
                                CodeBuilder* builder,
                                int& num_rules) :
     builder(builder), typeMap(typeMap), state(state), num_rules(num_rules) {}
-  bool preorder(const IR::AssignmentStatement* stmt) override;
   bool preorder(const IR::MethodCallExpression* expr) override;
   bool preorder(const IR::SelectCase* cas) override;
   bool preorder(const IR::SelectExpression* expr) override;
@@ -162,18 +160,15 @@ class ExtractStmtCodeGen : public Inspector {
   int& num_rules;
 };
 
-bool ExtractStmtCodeGen::preorder (const IR::AssignmentStatement* stmt) {
-  ::error("parser: metadata assignment not handled");
-  return false;
-}
-
 bool ExtractStmtCodeGen::preorder (const IR::SelectCase* cas) {
   cstring this_state = state->name.toString();
   if (cas->keyset->is<IR::Constant>()) {
     cstring next_state = cas->state->toString();
-    if (next_state == "accept")
-      return false;
-    builder->append_line("`COLLECT_RULE(parse_fsm, joinRules(vec(genContRule(w_%s_%s, State%s, valueOf(%sSz)))));", this_state, next_state, CamelCase(next_state), CamelCase(next_state));
+    if (next_state == "accept") {
+      builder->append_line("`COLLECT_RULE(parse_fsm, joinRules(vec(genAcceptRule(w_%s_%s))));", this_state, next_state);
+    } else {
+      builder->append_line("`COLLECT_RULE(parse_fsm, joinRules(vec(genContRule(w_%s_%s, State%s, valueOf(%sSz)))));", this_state, next_state, CamelCase(next_state), CamelCase(next_state));
+    }
     num_rules++;
   } else if (cas->keyset->is<IR::DefaultExpression>()) {
     cstring next_state = cas->state->toString();
@@ -192,8 +187,8 @@ bool ExtractStmtCodeGen::preorder (const IR::SelectExpression* expr) {
 
 bool ExtractStmtCodeGen::preorder (const IR::PathExpression* expr) {
   cstring this_state = state->name.toString();
-  builder->append_line("`COLLECT_RULE(parse_fsm, joinRules(vec(genAcceptRule(w_%s_%s))));", this_state, expr->toString());
-  num_rules++;
+  //builder->append_line("`COLLECT_RULE(parse_fsm, joinRules(vec(genAcceptRule(w_%s_%s))));", this_state, expr->toString());
+  //num_rules++;
   return false;
 }
 
@@ -244,14 +239,20 @@ class ExtractFuncCodeGen : public Inspector {
   explicit ExtractFuncCodeGen ( const IR::ParserState* state,
                                 const P4::TypeMap* typeMap,
                                 CodeBuilder* builder) :
-    builder(builder), typeMap(typeMap), state(state) {}
+    builder(builder), typeMap(typeMap), state(state) {
+      printPath = false;
+    }
   bool preorder(const IR::MethodCallExpression* expr) override;
   bool preorder(const IR::ListExpression* expr) override;
+  bool preorder(const IR::AssignmentStatement* stmt) override;
+  bool preorder(const IR::Member* member) override;
+  bool preorder(const IR::Constant* constant) override;
  private:
   CodeBuilder* builder;
   const IR::ParserState* state;
   const P4::TypeMap* typeMap;
   std::vector<cstring> match;
+  bool printPath;
 };
 
 bool ExtractFuncCodeGen::preorder(const IR::ListExpression* expr) {
@@ -274,6 +275,95 @@ bool ExtractFuncCodeGen::preorder(const IR::ListExpression* expr) {
   return false;
 }
 
+bool ExtractFuncCodeGen::preorder (const IR::AssignmentStatement* stmt) {
+  ::error("parser: metadata assignment not handled");
+  if (stmt->right->is<IR::Member>()) {
+    const IR::Member* expr = stmt->right->to<IR::Member>();
+    const IR::Member* header = expr->expr->to<IR::Member>();
+    cstring src_name = header->member.toString() + "." + expr->member.toString();
+
+    if (stmt->left->is<IR::Member>()) {
+      const IR::Member* left = stmt->left->to<IR::Member>();
+      auto type = typeMap->getType(left->expr);
+      const IR::Member* dst_hdr = left->expr->to<IR::Member>();
+      CHECK_NULL(dst_hdr);
+      cstring dst_name = dst_hdr->member.toString();
+      cstring tmp_var = left->member.toString();
+
+      builder->append_line("let %s = %s;", tmp_var, src_name);
+
+      builder->emitIndent();
+      builder->appendFormat("%s ", CamelCase(type->getP4Type()->toString()));
+      builder->appendFormat("%s ", dst_name);
+      builder->appendLine("= defaultValue;");
+
+      builder->emitIndent();
+      builder->appendFormat("%s.%s", dst_name, tmp_var);
+      builder->appendFormat("= %s;", tmp_var);
+      builder->newline();
+
+      builder->emitIndent();
+      builder->appendFormat("rg_%s", dst_name);
+      builder->appendFormat("<= tagged Valid %s;", dst_name);
+      builder->newline();
+    }
+  } else if (stmt->right->is<IR::Operation_Binary>()) {
+    auto expr = stmt->right->to<IR::Operation_Binary>();
+    if (stmt->left->is<IR::Member>()) {
+      const IR::Member* left = stmt->left->to<IR::Member>();
+      auto type = typeMap->getType(left->expr);
+      const IR::Member* dst_hdr = left->expr->to<IR::Member>();
+      CHECK_NULL(dst_hdr);
+      cstring dst_name = dst_hdr->member.toString();
+      cstring tmp_var = left->member.toString();
+
+      builder->emitIndent();
+      builder->appendFormat("%s ", CamelCase(type->getP4Type()->toString()));
+      builder->appendFormat("%s ", dst_name);
+      builder->appendFormat("= fromMaybe(?, rg_%s);", dst_name);
+      builder->newline();
+
+      // build expression tree properly
+      builder->emitIndent();
+      builder->appendFormat("let %s = ", tmp_var);
+      printPath=true;
+      visit(expr->left);
+      builder->appendFormat(stmt->right->toString());
+      visit(expr->right);
+      printPath=false;
+      builder->appendLine(";");
+
+      builder->emitIndent();
+      builder->appendFormat("%s.%s", dst_name, tmp_var);
+      builder->appendFormat("= %s;", tmp_var);
+      builder->newline();
+
+      builder->emitIndent();
+      builder->appendFormat("rg_%s", dst_name);
+      builder->appendFormat("<= tagged Valid %s;", dst_name);
+      builder->newline();
+    }
+  }
+  return false;
+}
+
+bool ExtractFuncCodeGen::preorder (const IR::Member* member) {
+  if (!printPath) return false;
+  const IR::Member* dst_hdr = member->expr->to<IR::Member>();
+  CHECK_NULL(dst_hdr);
+  cstring dst_name = dst_hdr->member.toString();
+  cstring dst_field = member->member.toString();
+  cstring dst_path = dst_name + "." + dst_field;
+  builder->appendFormat("%s", dst_path);
+  return false;
+}
+
+bool ExtractFuncCodeGen::preorder (const IR::Constant* constant) {
+  if (!printPath) return false;
+  builder->appendFormat(constant->toString());
+  return false;
+}
+
 bool ExtractFuncCodeGen::preorder (const IR::MethodCallExpression* expr) {
   cstring this_state = state->name.toString();
   visit(state->selectExpression);
@@ -285,18 +375,22 @@ bool ExtractFuncCodeGen::preorder (const IR::MethodCallExpression* expr) {
     auto name = state->name.toString();
     const IR::Member* member = instName->to<IR::Member>();
     cstring header = member->member.toString();
-    builder->append_line("State%s : begin", CamelCase(this_state));
-    builder->incr_indent();
     builder->append_line("let %s = extract_%s(truncate(data));", header, typeName->toString());
+    for (auto stmt : *state->components) {
+      if (stmt->is<IR::AssignmentStatement>()) {
+        visit(stmt);
+      }
+    }
+
+    builder->append_line("Header#(%s) header = defaultValue;", CamelCase(typeName->toString()));
+    builder->append_line("header.hdr = %s;", header);
+    builder->append_line("header.state = tagged Forward;");
     if (match.size() != 0) {
       builder->append_format("compute_next_state_%s(%s);", name, join(match, ","));
     } else {
       builder->append_format("compute_next_state_%s();", name);
     }
-
-    builder->append_format("%s_out_ff.enq(tagged Valid %s);", header, header);
-    builder->decr_indent();
-    builder->append_line("end");
+    builder->append_format("%s_out_ff.enq(tagged Valid header);", header);
   }
   return false;
 }
@@ -314,15 +408,22 @@ class PulseWireCodeGen : public Inspector {
   CodeBuilder* builder;
   const IR::ParserState* state;
   const P4::TypeMap* typeMap;
+  std::set<cstring> done_set;
 };
 
 bool PulseWireCodeGen::preorder(const IR::SelectCase* cas) {
   cstring this_state = state->name.toString();
   cstring next_state = cas->state->toString();
+  auto it = done_set.find(next_state);
+  if (it != done_set.end()) {
+    return false;
+  }
   if (cas->keyset->is<IR::Constant>()) {
     builder->append_line("PulseWire w_%s_%s <- mkPulseWire();", this_state, next_state);
+    done_set.insert(next_state);
   } else if (cas->keyset->is<IR::DefaultExpression>()) {
     builder->append_line("PulseWire w_%s_%s <- mkPulseWire();", this_state, next_state);
+    done_set.insert(next_state);
   }
   return false;
 }
@@ -330,7 +431,12 @@ bool PulseWireCodeGen::preorder(const IR::SelectCase* cas) {
 bool PulseWireCodeGen::preorder(const IR::PathExpression* expr) {
   cstring this_state = state->name.toString();
   cstring next_state = expr->toString();
+  auto it = done_set.find(next_state);
+  if (it != done_set.end()) {
+    return false;
+  }
   builder->append_line("PulseWire w_%s_%s <- mkPulseWire();", this_state, next_state);
+  done_set.insert(next_state);
   return false;
 }
 
@@ -362,7 +468,28 @@ bool DfifoCodeGen::preorder(const IR::MethodCallExpression* expr) {
     cstring type = CamelCase(typeName->toString());
     const IR::Member* member = instName->to<IR::Member>();
     cstring name = member->member;
-    builder->append_line("FIFOF#(Maybe#(%s)) %s_out_ff <- mkDFIFOF(tagged Invalid);", type, name);
+    builder->append_line("FIFOF#(Maybe#(Header#(%s))) %s_out_ff <- mkDFIFOF(tagged Invalid);", type, name);
+  }
+  return false;
+}
+
+class RegCodeGen : public Inspector {
+ public:
+  explicit RegCodeGen (const P4::TypeMap* typeMap,
+                       CodeBuilder* builder) :
+    builder(builder), typeMap(typeMap) {}
+  bool preorder(const IR::Type_Struct* strt);
+ private:
+  CodeBuilder* builder;
+  const P4::TypeMap* typeMap;
+};
+
+bool RegCodeGen::preorder(const IR::Type_Struct* strt) {
+  for (auto f : *strt->fields) {
+    auto type = typeMap->getType(f);
+    auto type_name = CamelCase(type->getP4Type()->toString());
+    auto name = f->toString();
+    builder->append_line("Reg#(Maybe#(%s)) rg_%s <- mkReg(tagged Invalid);", type_name, name);
   }
   return false;
 }
@@ -431,19 +558,13 @@ void FPGAParser::emitStructs(BSVProgram & bsv) {
   // assume all headers are parsed_out
   // optimization opportunity ??
   auto type = typeMap->getType(headers);
-  if (type == nullptr) {
-    ::error("parameter 'headers' is null");
-    return;
-  }
+  CHECK_NULL(type);
 
   CodeBuilder* struct_builder = &bsv.getStructBuilder();
   StructCodeGen visitor(program, struct_builder);
 
   const IR::Type_Struct* ir_struct = type->to<IR::Type_Struct>();
-  if (ir_struct == nullptr) {
-    ::error("ir_struct is null");
-    return;
-  }
+  CHECK_NULL(ir_struct);
 
   for (auto f : *ir_struct->fields) {
     auto field_t = typeMap->getType(f);
@@ -452,11 +573,21 @@ void FPGAParser::emitStructs(BSVProgram & bsv) {
     } else if (field_t->is<IR::Type_Stack>()) {
       const IR::Type_Stack* stack_t = field_t->to<IR::Type_Stack>();
       const IR::Type_Header* header_t = stack_t->elementType->to<IR::Type_Header>();
-      if (header_t == nullptr) {
-        ::error("header_t is null");
-        return;
-      }
+      CHECK_NULL(header_t);
       header_t->apply(visitor);
+    }
+  }
+
+  auto meta = typeMap->getType(userMetadata);
+  CHECK_NULL(meta);
+
+  const IR::Type_Struct* meta_struct = meta->to<IR::Type_Struct>();
+  CHECK_NULL(meta_struct);
+
+  for (auto f : *meta_struct->fields) {
+    auto field_t = typeMap->getType(f);
+    if (field_t->is<IR::Type_Struct>()) {
+      field_t->apply(visitor);
     }
   }
 }
@@ -469,11 +600,6 @@ void FPGAParser::emitAcceptedHeaders(BSVProgram & bsv, const IR::Type_Struct* he
     auto name = h->name.toString();
     if (type->is<IR::Type_Header>()) {
       builder->append_format("let %s <- toGet(%s_out_ff).get;", name, name);
-      builder->append_format("if (isValid(%s)) begin", name);
-      builder->incr_indent();
-      builder->append_format("meta.%s = tagged Forward;", name);
-      builder->decr_indent();
-      builder->append_line("end");
       builder->append_format("meta.hdr.%s = %s;", name, name);
       for (auto m : program->metadata) {
         auto member = m.second;
@@ -497,17 +623,15 @@ void FPGAParser::emitAcceptedHeaders(BSVProgram & bsv, const IR::Type_Struct* he
   }
 }
 
+// User declared metadata are used in two places:
+// - parser
+// - pipeline
+// When used in parser, there is no need to create an out_ff.
+//
 void FPGAParser::emitUserMetadata(BSVProgram & bsv, const IR::Type_Struct* metadata) {
   for (auto h : *metadata->fields) {
-    auto node = h->getNode();
-    auto type = typeMap->getType(node, true);
-    if (type->is<IR::Type_Struct>()) {
-      auto hh = type->to<IR::Type_Struct>();
-      for (auto f : *hh->fields) {
-        auto name = f->toString();
-        builder->append_line("meta.%s = tagged Invalid;", name);
-      }
-    }
+    cstring header = h->toString();
+    builder->append_line("meta.meta.%s = rg_%s;", header, header);
   }
 }
 
@@ -563,7 +687,6 @@ void FPGAParser::emit(BSVProgram & bsv) {
   }
 
   builder->append_line("`ifdef PARSER_FUNCTION");
-  //builder->append_line("let initState = State%s;");
   for (auto state: *parserBlock->container->states) {
     InitStateCodeGen initStateCodeGen(state, refMap, builder);
     state->apply(initStateCodeGen);
@@ -585,8 +708,13 @@ void FPGAParser::emit(BSVProgram & bsv) {
   builder->append_line("case (state) matches");
   builder->incr_indent();
   for (auto state: *parserBlock->container->states) {
+    cstring this_state = state->name.toString();
+    builder->append_line("State%s : begin", CamelCase(this_state));
+    builder->incr_indent();
     ExtractFuncCodeGen extractCodeGen(state, typeMap, builder);
     state->apply(extractCodeGen);
+    builder->decr_indent();
+    builder->append_line("end");
   }
   builder->decr_indent();
   builder->append_line("endcase");
@@ -607,17 +735,25 @@ void FPGAParser::emit(BSVProgram & bsv) {
   emitAcceptRule(bsv);
   builder->append_line("`endif");
 
-  // translate parser metadata
+  // emit state variables
+  // PulseWire for state transition
   builder->append_line("`ifdef PARSER_STATE");
   for (auto state: *parserBlock->container->states) {
     PulseWireCodeGen pulsewireCodeGen(state, typeMap, builder);
     state->selectExpression->apply(pulsewireCodeGen);
   }
 
+  // DFIFOF for exporting extracted header
   for (auto state: *parserBlock->container->states) {
     DfifoCodeGen dfifoCodeGen(state, typeMap, builder);
     state->apply(dfifoCodeGen);
   }
+
+  // Register for local metadata modified by set_metadata()
+  auto usermeta = typeMap->getType(userMetadata);
+  RegCodeGen visitor(typeMap, builder);
+  usermeta->apply(visitor);
+
   builder->append_line("`endif");
 }
 

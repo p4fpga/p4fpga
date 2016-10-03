@@ -93,30 +93,34 @@ void FPGAProgram::emitIncludeStatements(BSVProgram & bsv) {
 }
 
 void FPGAProgram::emitMetadata(CodeBuilder* builder) {
+  // metadata used in table
+//  for (auto p : ingress->metadata_to_table) {
+//    auto name = nameFromAnnotation(p.first->annotations, p.first->name);
+//    auto size = p.first->type->to<IR::Type_Bits>()->size;
+//    builder->append_line("Maybe#(Bit#(%d)) %s;", size, name);
+//  }
+//  for (auto p : egress->metadata_to_table) {
+//    auto name = nameFromAnnotation(p.first->annotations, p.first->name);
+//    auto size = p.first->type->to<IR::Type_Bits>()->size;
+//    builder->append_line("Maybe#(Bit#(%d)) %s;", size, name);
+//  }
+  // metadata used in control flow
+
   builder->append_line("typedef struct {");
   builder->incr_indent();
-  // metadata used in table
-  for (auto p : ingress->metadata_to_table) {
-    auto name = nameFromAnnotation(p.first->annotations, p.first->name);
-    auto size = p.first->type->to<IR::Type_Bits>()->size;
-    builder->append_line("Maybe#(Bit#(%d)) %s;", size, name);
-  }
-  for (auto p : egress->metadata_to_table) {
-    auto name = nameFromAnnotation(p.first->annotations, p.first->name);
-    auto size = p.first->type->to<IR::Type_Bits>()->size;
-    builder->append_line("Maybe#(Bit#(%d)) %s;", size, name);
-  }
-  // metadata used in control flow
-  // TODO:
-
-  builder->append_format("Headers hdr;");
-  // TODO: combine HeaderState with Headers??
-  for (auto s : parser->parseSteps) {
-    builder->append_format("HeaderState %s;", s->name.toString());
+  const IR::Type_Struct* usermeta = typeMap->getType(parser->userMetadata)->to<IR::Type_Struct>();
+  CHECK_NULL(usermeta);
+  for (auto h : *usermeta->fields) {
+    auto type = typeMap->getType(h);
+    auto name = h->name.toString();
+    if (type->is<IR::Type_Struct>()) {
+      const IR::Type_Struct* ty = type->to<IR::Type_Struct>();
+      builder->append_format("Maybe#(%s) %s;", CamelCase(ty->name.toString()), name);
+    }
   }
   builder->decr_indent();
-  builder->append_line("} MetadataT deriving (Bits, Eq, FShow);");
-  builder->append_line("instance DefaultValue#(MetadataT);");
+  builder->append_line("} Metadata deriving (Bits, Eq, FShow);");
+  builder->append_line("instance DefaultValue#(Metadata);");
   builder->incr_indent();
   builder->append_line("defaultValue = unpack(0);");
   builder->decr_indent();
