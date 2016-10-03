@@ -123,7 +123,7 @@ bool DeparserRuleVisitor::preorder(const IR::BSV::DeparseState* state) {
   builder->append_format("succeed_and_next(%d);", width);
   builder->append_line("deparse_state_ff.deq;");
   builder->append_line("let metadata = meta[0];");
-  builder->append_format("metadata.%s = tagged StructDefines::NotPresent;", name);
+  builder->append_format("metadata.hdr.%s = updateState(metadata.hdr.%s, tagged StructDefines::NotPresent);", name, name);
   builder->append_line("transit_next_state(metadata);");
   builder->append_line("meta[0] <= metadata;");
   builder->decr_indent();
@@ -219,7 +219,7 @@ void FPGADeparser::emitStates() {
   builder->append_line("headerValid[0] = False;");
   for (int i = 0; i < states.size(); i++) {
     auto name = states.at(i)->name.name;
-    builder->append_format("headerValid[%d] = metadata.%s matches tagged Forward ? True : False;", i+1, name);
+    builder->append_format("headerValid[%d] = checkForward(metadata.hdr.%s);", i+1, name);
   }
   builder->append_line("let vec = pack(headerValid);");
   builder->append_line("return vec;");

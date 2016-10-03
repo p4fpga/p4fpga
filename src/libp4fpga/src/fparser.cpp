@@ -607,13 +607,6 @@ void FPGAParser::emitAcceptedHeaders(BSVProgram & bsv, const IR::Type_Struct* he
         auto structT = ftype->to<IR::Type_StructLike>();
         auto field = structT->getField(member->member);
         cstring fname = field->name.toString();
-        if (ftype == type) {
-          builder->append_format("if (%s matches tagged Valid .d) begin", name);
-          builder->incr_indent();
-          builder->append_format("meta.%s = tagged Valid d.%s;", fname, fname);
-          builder->decr_indent();
-          builder->append_line("end");
-        }
       }
     } else if (type->is<IR::Type_Stack>()) {
       ::warning("TODO: generate out_ff for header stack;");

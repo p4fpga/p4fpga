@@ -28,6 +28,38 @@ import Library::*;
 `include "DeparserGenerated.bsv"
 `undef DEPARSER_STRUCT
 
+typeclass CheckForward#(type t);
+   function Bool checkForward(t x);
+endtypeclass
+instance CheckForward#(Maybe#(Header#(t)));
+   function Bool checkForward(Maybe#(Header#(t)) x);
+      case (x) matches
+         tagged Valid .h: begin
+            return h.state matches tagged Forward ? True : False;
+         end
+         tagged Invalid: begin
+            return False;
+         end
+      endcase
+   endfunction
+endinstance
+
+typeclass UpdateState#(type t);
+   function t updateState(t x, HeaderState state);
+endtypeclass
+instance UpdateState#(Maybe#(Header#(t)));
+   function Maybe#(Header#(t)) updateState(Maybe#(Header#(t)) x, HeaderState state);
+      case (x) matches
+         tagged Valid .h: begin
+            return tagged Valid Header {hdr: h.hdr, state: state};
+         end
+         tagged Invalid: begin
+            return tagged Invalid;
+         end
+      endcase
+   endfunction
+endinstance
+
 typedef TDiv#(PktDataWidth, 8) MaskWidth;
 typedef TLog#(PktDataWidth) DataSize;
 typedef TLog#(TDiv#(PktDataWidth, 8)) MaskSize;

@@ -47,24 +47,24 @@ class ExpressionConverter : public Inspector {
   bool preorder(const IR::MethodCallExpression* expr){
     auto m = expr->method->to<IR::Member>();
     if (m->member == "isValid") {
-      bsv += cstring("isValid(meta.") + m->expr->toString() + cstring(")");
+      bsv += cstring("meta.") + m->expr->toString() + cstring(" matches tagged Valid .h");
     }
     return false;
   }
   bool preorder(const IR::Grt* expr) {
-    bsv += cstring("(");
+    //bsv += cstring("(");
     visit(expr->left);
     bsv += cstring(" > ");
     visit(expr->right);
-    bsv += cstring(")");
+    //bsv += cstring(")");
     return false;
   }
   bool preorder(const IR::LAnd* expr) {
-    bsv += cstring("(");
+    //bsv += cstring("(");
     visit(expr->left);
-    bsv += cstring(" && ");
+    bsv += cstring(" &&& ");
     visit(expr->right);
-    bsv += cstring(")");
+    //bsv += cstring(")");
     return false;
   }
   bool preorder(const IR::Constant* cst) {
@@ -72,9 +72,7 @@ class ExpressionConverter : public Inspector {
     return false;
   }
   bool preorder(const IR::Member* expr) {
-    // FIXME: use header$field format to avoid naming conflict
-    bsv += RemoveDot(expr->expr->toString()) +
-           cstring(".") + expr->member.toString();
+    bsv += cstring("h.hdr.") + expr->member.toString();
     return false;
   }
 };
@@ -247,11 +245,11 @@ void FPGAControl::emitCondRule(BSVProgram & bsv, const CFG::IfNode* node) {
   builder->append_format("let _req = %s_req_ff.first;", name);
   builder->append_line("let meta = _req.meta;");
 
-  MetadataExtractor metadataVisitor;
-  stmt->condition->apply(metadataVisitor);
-  for (auto str : metadataVisitor.bsv) {
-    builder->append_line(str);
-  }
+//  MetadataExtractor metadataVisitor;
+//  stmt->condition->apply(metadataVisitor);
+//  for (auto str : metadataVisitor.bsv) {
+//    builder->append_line(str);
+//  }
 
   auto ifTrue = cstring("");
   auto ifFalse = cstring("");
