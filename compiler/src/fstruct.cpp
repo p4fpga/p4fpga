@@ -32,7 +32,6 @@ bool StructCodeGen::preorder(const IR::Type_Header* hdr) {
   }
   header_map.emplace(name, hdr);
   // do code gen
-  builder->append_line("import DefaultValue::*;");
   builder->append_line("typedef struct {");
   builder->incr_indent();
   int header_width = 0;
@@ -59,12 +58,36 @@ bool StructCodeGen::preorder(const IR::Type_Header* hdr) {
   return false;
 }
 
+bool StructCodeGen::preorder(const IR::Type_Struct* hdr) {
+  cstring name = hdr->name.toString();
+  cstring header_type = CamelCase(name);
+  builder->append_line("typedef struct {");
+  builder->incr_indent();
+  int header_width = 0;
+  for (auto f : *hdr->fields) {
+    if (f->type->is<IR::Type_Bits>()) {
+      int size = f->type->to<IR::Type_Bits>()->size;
+      cstring name = f->name.toString();
+      builder->append_line("Bit#(%d) %s;", size, name);
+      header_width += size;
+    }
+  }
+  builder->decr_indent();
+  builder->append_format("} %s deriving (Bits, Eq, FShow);", header_type);
+  builder->append_line("instance DefaultValue#(%s);", header_type);
+  builder->incr_indent();
+  builder->append_line("defaultValue = unpack(0);");
+  builder->decr_indent();
+  builder->append_line("endinstance");
+  return false;
+}
+
 bool HeaderCodeGen::preorder(const IR::StructField* field) {
   cstring header_type = CamelCase(field->type->getP4Type()->toString());
   cstring header_name = field->getName().toString();
   if (field->type->is<IR::Type_Header>()) {
     visit(field->type);;
-    builder->append_line("Maybe#(%s) %s;", header_type, header_name);
+    builder->append_line("Maybe#(Header#(%s)) %s;", header_type, header_name);
   } else if (field->type->is<IR::Type_Stack>()) {
     visit(field->type);
     builder->appendFormat(" %s;", header_name);
@@ -80,7 +103,7 @@ bool HeaderCodeGen::preorder(const IR::Type_Header* hdr) {
 bool HeaderCodeGen::preorder(const IR::Type_Stack* stk) {
   builder->emitIndent();
   LOG1("xxxx" << stk->elementType->getP4Type());
-  builder->appendFormat("Vector#(%d, %s)", stk->getSize(), CamelCase(stk->elementType->getP4Type()->toString()));
+  builder->appendFormat("Vector#(%d, Maybe#(Header#(%s)))", stk->getSize(), CamelCase(stk->elementType->getP4Type()->toString()));
   return false;
 }
 

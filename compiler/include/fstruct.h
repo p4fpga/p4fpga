@@ -29,6 +29,7 @@ class StructCodeGen : public Inspector {
   StructCodeGen(const FPGAProgram* program, CodeBuilder* builder) :
     program(program), builder(builder) {}
   bool preorder(const IR::Type_Header* header) override;
+  bool preorder(const IR::Type_Struct* header) override;
   void emit();
  private:
   const FPGAProgram* program;
