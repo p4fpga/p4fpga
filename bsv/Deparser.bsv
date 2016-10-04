@@ -243,7 +243,8 @@ module mkDeparser (Deparser);
     endrules);
   endfunction
 
-  function Rules genDeparseSendRule();
+  function Rules genDeparseSendRule(DeparserState state, Integer i);
+    let len = fromInteger(i);
     return (rules 
       rule rl_deparse_send if ((deparse_state_ff.first == state) && (rg_buffered[0] >= len));
         succeed_and_next(len);
