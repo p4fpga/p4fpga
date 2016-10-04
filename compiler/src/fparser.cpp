@@ -276,7 +276,6 @@ bool ExtractFuncCodeGen::preorder(const IR::ListExpression* expr) {
 }
 
 bool ExtractFuncCodeGen::preorder (const IR::AssignmentStatement* stmt) {
-  ::error("parser: metadata assignment not handled");
   if (stmt->right->is<IR::Member>()) {
     const IR::Member* expr = stmt->right->to<IR::Member>();
     const IR::Member* header = expr->expr->to<IR::Member>();

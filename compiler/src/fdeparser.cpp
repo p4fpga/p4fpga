@@ -48,9 +48,10 @@ bool DeparserBuilder::preorder(const IR::MethodCallExpression* expression) {
     if (type->is<IR::Type_StructLike>()) {
       auto t = type->to<IR::Type_StructLike>();
       if (instName->is<IR::Member>()) {
-        auto member = instName->to<IR::Member>();
-        auto name = member->member;
-        deparser->states.push_back(new IR::BSV::DeparseState(name, t->fields, hdr_width));
+        const IR::Member* member = instName->to<IR::Member>();
+        cstring name = member->member;
+        cstring indexed_name = name;
+        deparser->states.push_back(new IR::BSV::DeparseState(name, t->fields, hdr_width, indexed_name));
       }
     }
     // unroll header stack to individual headers and create deparse state for each one
@@ -59,11 +60,12 @@ bool DeparserBuilder::preorder(const IR::MethodCallExpression* expression) {
       for (int i = 0; i < stk->getSize(); i++) {
         if (stk->elementType->is<IR::Type_StructLike>()) {
           auto t = stk->elementType->to<IR::Type_StructLike>();
-          auto hdr_width = stk->elementType->width_bits();
+          int hdr_width = stk->elementType->width_bits();
           if (instName->is<IR::Member>()) {
-            auto member = instName->to<IR::Member>();
-            auto name = member->member + std::to_string(i);
-            deparser->states.push_back(new IR::BSV::DeparseState(name.c_str(), t->fields, hdr_width));
+            const IR::Member* member = instName->to<IR::Member>();
+            cstring name = member->member + std::to_string(i);
+            cstring indexed_name = member->member + "[" + std::to_string(i) + "]";
+            deparser->states.push_back(new IR::BSV::DeparseState(name.c_str(), t->fields, hdr_width, indexed_name));
           }
         }
       }
@@ -82,12 +84,13 @@ bool DeparserBuilder::preorder(const IR::Member* member) {
 
 class DeparserRuleVisitor : public Inspector {
   public:
-    DeparserRuleVisitor(const FPGADeparser* deparser, CodeBuilder* builder) :
-      builder(builder) {}
+    DeparserRuleVisitor(const FPGADeparser* deparser, CodeBuilder* builder, int& num_rules) :
+      builder(builder), num_rules(num_rules) {}
     bool preorder(const IR::BSV::DeparseState* state) override;
   private:
     const FPGAProgram* program;
     CodeBuilder* builder;
+    int& num_rules;
 };
 
 bool DeparserRuleVisitor::preorder(const IR::BSV::DeparseState* state) {
@@ -95,40 +98,10 @@ bool DeparserRuleVisitor::preorder(const IR::BSV::DeparseState* state) {
   auto hdr = state->to<IR::Type_Header>();
   auto name = hdr->name.name;
 
-  // Rule: next deparse state
-  builder->append_format("rule rl_deparse_%s_next if (w_%s);", name, name);
-  builder->incr_indent();
-  builder->append_format("deparse_state_ff.enq(StateDeparse%s);", CamelCase(name));
-  builder->append_format("fetch_next_header(%d);", width);
-  builder->decr_indent();
-  builder->append_line("endrule");
-  builder->append_line("");
-
-  // Rule: append bits to buffer
-  builder->append_format("rule rl_deparse_%s_load if ((deparse_state_ff.first == StateDeparse%s) && (rg_buffered[0] < %d));", name, CamelCase(name), width);
-  builder->incr_indent();
-  builder->append_format("dbprint(3, $format(\"deparse load %s\"));", name);
-  builder->append_format("rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];");
-  builder->append_format("UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);");
-  builder->append_format("UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;");
-  builder->append_format("move_buffered_amt(cExtend(n_bits_used));");
-  builder->decr_indent();
-  builder->append_line("endrule");
-  builder->append_line("");
-
-  // Rule: enough bits in buffer, send header
-  builder->append_format("rule rl_deparse_%s_send if ((deparse_state_ff.first == StateDeparse%s) && (rg_buffered[0] > %d));", name, CamelCase(name), width);
-  builder->incr_indent();
-  builder->append_format("dbprint(3, $format(\"deparse send %s\"));", name);
-  builder->append_format("succeed_and_next(%d);", width);
-  builder->append_line("deparse_state_ff.deq;");
-  builder->append_line("let metadata = meta[0];");
-  builder->append_format("metadata.hdr.%s = updateState(metadata.hdr.%s, tagged StructDefines::NotPresent);", name, name);
-  builder->append_line("transit_next_state(metadata);");
-  builder->append_line("meta[0] <= metadata;");
-  builder->decr_indent();
-  builder->append_line("endrule");
-  builder->append_line("");
+  builder->append_line("`COLLECT_RULE(deparse_fsm, joinRules(vec(genDeparseNextRule(w_%s, StateDeparse%s, %d))));", name, CamelCase(name), width);
+  builder->append_line("`COLLECT_RULE(deparse_fsm, joinRules(vec(genDeparseLoadRule(StateDeparse%s, %d))));", CamelCase(name), width);
+  builder->append_line("`COLLECT_RULE(deparse_fsm, joinRules(vec(genDeparseSendRule(StateDeparse%s, %d))));", CamelCase(name), width);
+  num_rules += 3;
   return false;
 }
 
@@ -178,24 +151,27 @@ void FPGADeparser::emitEnums() {
 void FPGADeparser::emitRules() {
   builder->append_line("`ifdef DEPARSER_RULES");
   // deparse rules are mutually exclusive
-  std::vector<cstring> exclusive_rules;
-  for (auto r : states) {
-    cstring rl = cstring("rl_deparse_") + r->name.toString() + cstring("_next");
-    exclusive_rules.push_back(rl);
-  }
-  auto exclusive_annotation = cstring("(* mutually_exclusive=\"");
-  for (auto r : exclusive_rules) {
-    exclusive_annotation += r;
-    if (r != exclusive_rules.back()) {
-      exclusive_annotation += cstring(",");
-    }
-  }
-  exclusive_annotation += cstring("\" *)");
-  builder->append_line(exclusive_annotation);
-  DeparserRuleVisitor visitor(this, builder);
+//  std::vector<cstring> exclusive_rules;
+//  for (auto r : states) {
+//    cstring rl = cstring("rl_deparse_") + r->name.toString() + cstring("_next");
+//    exclusive_rules.push_back(rl);
+//  }
+//  auto exclusive_annotation = cstring("(* mutually_exclusive=\"");
+//  for (auto r : exclusive_rules) {
+//    exclusive_annotation += r;
+//    if (r != exclusive_rules.back()) {
+//      exclusive_annotation += cstring(",");
+//    }
+//  }
+//  exclusive_annotation += cstring("\" *)");
+//  builder->append_line(exclusive_annotation);
+
+  int num_rules = 0;
+  DeparserRuleVisitor visitor(this, builder, num_rules);
   for (auto r : states) {
     r->apply(visitor);
   }
+  builder->append_line("Vector#(%d, Rules) fsmRules = toVector(deparse_fsm);", num_rules);
   builder->append_line("`endif  // DEPARSER_RULES");
 }
 
@@ -218,7 +194,7 @@ void FPGADeparser::emitStates() {
   builder->append_format("Vector#(%d, Bool) headerValid;", lenp1);
   builder->append_line("headerValid[0] = False;");
   for (int i = 0; i < states.size(); i++) {
-    auto name = states.at(i)->name.name;
+    cstring name = states.at(i)->indexed_name;
     builder->append_format("headerValid[%d] = checkForward(metadata.hdr.%s);", i+1, name);
   }
   builder->append_line("let vec = pack(headerValid);");
@@ -256,8 +232,29 @@ void FPGADeparser::emitStates() {
   builder->append_line("endaction");
   builder->decr_indent();
   builder->append_line("endfunction");
+
+  // Function: update_metadata
+  builder->append_line("function MetadataT update_metadata(DeparserState state);");
+  builder->incr_indent();
+  builder->append_line("let metadata = meta[0];");
+  builder->append_line("case (state) matches");
+  builder->incr_indent();
+  for (auto s : states) {
+    cstring name = s->name.toString();
+    cstring indexed_name = s->indexed_name;
+    builder->append_line("StateDeparse%s :", CamelCase(name));
+    builder->incr_indent();
+    builder->append_format("metadata.hdr.%s = updateState(metadata.hdr.%s, tagged StructDefines::NotPresent);", indexed_name, indexed_name);
+    builder->decr_indent();
+  }
+  builder->decr_indent();
+  builder->append_line("endcase");
+  builder->append_line("return metadata;");
+  builder->decr_indent();
+  builder->append_line("endfunction");
   builder->append_line("let initState = StateDeparse%s;", CamelCase(states[0]->name.toString()));
   builder->append_line("`endif  // DEPARSER_STATE");
+
 }
 
 void FPGADeparser::emit(BSVProgram & bsv) {

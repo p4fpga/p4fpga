@@ -25,21 +25,6 @@
 
 namespace FPGA {
 
-class MetadataExtractor : public Inspector {
- public:
-  std::vector<cstring> bsv;
-  explicit MetadataExtractor () {}
-
-  bool preorder(const IR::Member* expr) {
-    // isValid is handled elsewhere
-    if (expr->member == "isValid") return false;
-    bsv.push_back(cstring("let ") + RemoveDot(expr->expr->toString()) +
-           cstring(" = fromMaybe(?, meta.") + expr->expr->toString() +
-           cstring(");"));
-    return false;
-  }
-};
-
 class ExpressionConverter : public Inspector {
  public:
   cstring bsv = "";
@@ -244,12 +229,6 @@ void FPGAControl::emitCondRule(BSVProgram & bsv, const CFG::IfNode* node) {
   builder->append_format("%s_req_ff.deq;", name);
   builder->append_format("let _req = %s_req_ff.first;", name);
   builder->append_line("let meta = _req.meta;");
-
-//  MetadataExtractor metadataVisitor;
-//  stmt->condition->apply(metadataVisitor);
-//  for (auto str : metadataVisitor.bsv) {
-//    builder->append_line(str);
-//  }
 
   auto ifTrue = cstring("");
   auto ifFalse = cstring("");
