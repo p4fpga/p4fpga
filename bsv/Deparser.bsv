@@ -28,6 +28,8 @@ import Library::*;
 `include "DeparserGenerated.bsv"
 `undef DEPARSER_STRUCT
 
+`define COLLECT_RULE(collectrule, rl) collectrule = List::cons (rl, collectrule)
+
 typeclass CheckForward#(type t);
    function Bool checkForward(t x);
 endtypeclass
@@ -219,9 +221,48 @@ module mkDeparser (Deparser);
     dbprint(4, $format("Deparser:rl_deparse_send rg_processed=%d rg_shift_amt=%d amt=%d", rg_processed[1], rg_shift_amt[1], amt, fshow(data)));
   endrule
 
+  function Rules genDeparseNextRule(PulseWire wl, DeparserState state, Integer i);
+    let len = fromInteger(i);
+    return (rules
+      rule rl_deparse_next if (wl);
+        deparse_state_ff.enq(state);
+        fetch_next_header(len);
+      endrule
+    endrules);
+  endfunction
+
+  function Rules genDeparseLoadRule(DeparserState state, Integer i);
+    let len = fromInteger(i);
+    return (rules
+      rule rl_deparse_load if ((deparse_state_ff.first == state) && (rg_buffered[0] < len));
+        rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+        UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
+        UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
+        move_buffered_amt(cExtend(n_bits_used));
+      endrule
+    endrules);
+  endfunction
+
+  function Rules genDeparseSendRule();
+    return (rules 
+      rule rl_deparse_send if ((deparse_state_ff.first == state) && (rg_buffered[0] >= len));
+        succeed_and_next(len);
+        deparse_state_ff.deq;
+        let metadata = meta[0];
+        metadata = update_metadata(state);
+        transit_next_state(metadata);
+        meta[0] <= metadata;
+      endrule
+    endrules);
+  endfunction
+
+  List#(Rules) deparse_fsm = List::nil;
+
   `define DEPARSER_RULES
   `include "DeparserGenerated.bsv"
   `undef DEPARSER_RULES
+
+  Empty fsmrl <- addRules(foldl(rJoin, emptyRules, fsmRules));
 
   interface metadata = toPipeIn(meta_in_ff);
   interface PktWriteServer writeServer;

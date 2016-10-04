@@ -17,6 +17,7 @@ class Runtime : Type {
 
 class DeparseState : IR::Type_Header {
 	int width_bits;
+  cstring indexed_name;
 #nodbprint
 }
 
