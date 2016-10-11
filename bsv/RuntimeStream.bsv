@@ -30,7 +30,14 @@ import StreamChannel::*;
 import SharedBuff::*;
 import PacketBuffer::*;
 import Stream::*;
+import XBar::*;
 `include "ConnectalProjectConfig.bsv"
+
+// FIXME: make this right
+function Bit#(32) destOf (ByteStream#(8) x);
+   // return egress_port in metadata
+   return truncate(pack (x.data)) & 'hF;
+endfunction
 
 /*
    P4FPGA runtime consists of 5 types of channels and optional packet memory
@@ -48,11 +55,20 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    Vector#(nhs, StreamInChannel) _hostchan <- genWithM(mkStreamInChannel);
    Vector#(nrx, StreamInChannel) _rxchan <- genWithM(mkStreamInChannel);//FIXME, clocked_by rxClock, reset_by rxReset);
    Vector#(ntx, StreamOutChannel) _txchan <- replicateM(mkStreamOutChannel(txClock, txReset));
-
    // drop streamed bytes on the floor
    mkTieOff(_hostchan[0].writeClient.writeData);
 
+   // each rxchan exposes a writeClient ..
+   // each hostchan exposes a writeClient -> buffer
+
+   // Method 1: one extra copy..
    // Optimization: Gearbox to 512 bit
+   // readClient -> logic // 512 read, 128 write
+   // xbar 512 bit
+
+   // Method 2: streaming, enough buffer for processing delay..
+   XBar#(8) xbar <- mkXBar(2, 0, destOf, mkMerge2x1_lru);
+
    // Optimization: Optional Packet Memory
 
    interface rxchan = _rxchan;

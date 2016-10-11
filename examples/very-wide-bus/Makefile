@@ -20,7 +20,7 @@ CONNECTALFLAGS += -D STREAM
 CPPFILES = $(P4FPGADIR)/cpp/main.cpp $(SONICDIR)/sw/lpcap.c app_init.cpp
 
 build:
-	p4fpga -o generatedbsv --p4-14 -v --top4 Evaluator -Tfcontrol:1,fparser:1,fstruct:1 $(P4FILE)
+	p4fpga -o generatedbsv --p4-14 -v --top4 Evaluator -Tfparser:1,fstruct:1,fcontrol:1,program:1 $(P4FILE)
 
 run-thru:
 	(cd bluesim; ./bin/ubuntu.exe -p ../${T} -r ${R} -n ${N})
