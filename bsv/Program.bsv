@@ -43,6 +43,7 @@ module mkProgram(Program#(nrx, ntx, nhs))
            ,NumAlias#(TAdd#(nrx, nhs), npi)
            ,NumAlias#(TLog#(ntx), wpo)
            ,NumAlias#(ntx, npo));
+
    // N-to-1 arbitration
    Vector#(npi, FIFOF#(MetadataRequest)) funnel_ff <- replicateM(mkFIFOF);
    function PipeIn#(MetadataRequest) metaPipeIn(Integer i);
