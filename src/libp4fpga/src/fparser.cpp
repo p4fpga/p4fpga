@@ -158,21 +158,33 @@ class ExtractStmtCodeGen : public Inspector {
   const IR::ParserState* state;
   const P4::TypeMap* typeMap;
   int& num_rules;
+  std::set<cstring> visited;
 };
 
 bool ExtractStmtCodeGen::preorder (const IR::SelectCase* cas) {
   cstring this_state = state->name.toString();
   if (cas->keyset->is<IR::Constant>()) {
     cstring next_state = cas->state->toString();
+    if (visited.find(this_state + next_state) != visited.end()) {
+      return false;
+    }
     if (next_state == "accept") {
       builder->append_line("`COLLECT_RULE(parse_fsm, joinRules(vec(genAcceptRule(w_%s_%s))));", this_state, next_state);
     } else {
       builder->append_line("`COLLECT_RULE(parse_fsm, joinRules(vec(genContRule(w_%s_%s, State%s, valueOf(%sSz)))));", this_state, next_state, CamelCase(next_state), CamelCase(next_state));
     }
+    visited.insert(this_state + next_state);
     num_rules++;
   } else if (cas->keyset->is<IR::DefaultExpression>()) {
     cstring next_state = cas->state->toString();
+
+    if (visited.find(this_state + next_state) != visited.end()) {
+      return false;
+    }
+
     builder->append_line("`COLLECT_RULE(parse_fsm, joinRules(vec(genAcceptRule(w_%s_%s))));", this_state, next_state);
+
+    visited.insert(this_state + next_state);
     num_rules++;
   }
   return false;
@@ -224,12 +236,18 @@ class ExtractLenCodeGen : public Inspector {
 };
 
 bool ExtractLenCodeGen::preorder (const IR::MethodCallExpression* expr) {
-  for (auto h: MakeZipRange(*expr->typeArguments, *expr->arguments)) {
-    auto typeName = h.get<0>();
-    auto instName = h.get<1>();
-    auto header_type = typeMap->getType(typeName, true);
-    int header_width = header_type->width_bits();
-    builder->append_line("typedef %d %sSz;", header_width, CamelCase(state->toString()));
+  LOG1("<<<" << expr->method->toString());
+  if (expr->method->toString() == "packet.extract") {
+    for (auto h: MakeZipRange(*expr->typeArguments, *expr->arguments)) {
+      auto typeName = h.get<0>();
+      auto instName = h.get<1>();
+      auto header_type = typeMap->getType(typeName, true);
+      CHECK_NULL(header_type);
+      int header_width = header_type->width_bits();
+      builder->append_line("typedef %d %sSz;", header_width, CamelCase(state->toString()));
+    }
+  } else if (expr->method->toString() == "packet.lookahead") {
+    ::warning("look ahead not handled");
   }
   return false;
 }
@@ -253,6 +271,7 @@ class ExtractFuncCodeGen : public Inspector {
   const P4::TypeMap* typeMap;
   std::vector<cstring> match;
   bool printPath;
+  int index = 0;
 };
 
 bool ExtractFuncCodeGen::preorder(const IR::ListExpression* expr) {
@@ -371,7 +390,6 @@ bool ExtractFuncCodeGen::preorder (const IR::MethodCallExpression* expr) {
     auto instName = h.get<1>();
     auto header_type = typeMap->getType(typeName, true);
     int header_width = header_type->width_bits();
-    auto name = state->name.toString();
     const IR::Member* member = instName->to<IR::Member>();
     cstring header = member->member.toString();
     builder->append_line("let %s = extract_%s(truncate(data));", header, typeName->toString());
@@ -381,15 +399,16 @@ bool ExtractFuncCodeGen::preorder (const IR::MethodCallExpression* expr) {
       }
     }
 
-    builder->append_line("Header#(%s) header = defaultValue;", CamelCase(typeName->toString()));
-    builder->append_line("header.hdr = %s;", header);
-    builder->append_line("header.state = tagged Forward;");
-    if (match.size() != 0) {
-      builder->append_format("compute_next_state_%s(%s);", name, join(match, ","));
-    } else {
-      builder->append_format("compute_next_state_%s();", name);
-    }
-    builder->append_format("%s_out_ff.enq(tagged Valid header);", header);
+    builder->append_line("Header#(%s) header%d = defaultValue;", CamelCase(typeName->toString()), index);
+    builder->append_line("header%d.hdr = %s;", index, header);
+    builder->append_line("header%d.state = tagged Forward;", index);
+    builder->append_format("%s_out_ff.enq(tagged Valid header%d);", header, index);
+    index++;
+  }
+  if (match.size() != 0) {
+    builder->append_format("compute_next_state_%s(%s);", this_state, join(match, ","));
+  } else {
+    builder->append_format("compute_next_state_%s();", this_state);
   }
   return false;
 }
@@ -407,22 +426,21 @@ class PulseWireCodeGen : public Inspector {
   CodeBuilder* builder;
   const IR::ParserState* state;
   const P4::TypeMap* typeMap;
-  std::set<cstring> done_set;
+  std::set<cstring> visited;
 };
 
 bool PulseWireCodeGen::preorder(const IR::SelectCase* cas) {
   cstring this_state = state->name.toString();
   cstring next_state = cas->state->toString();
-  auto it = done_set.find(next_state);
-  if (it != done_set.end()) {
+  if (visited.find(next_state) != visited.end()) {
     return false;
   }
   if (cas->keyset->is<IR::Constant>()) {
     builder->append_line("PulseWire w_%s_%s <- mkPulseWire();", this_state, next_state);
-    done_set.insert(next_state);
+    visited.insert(next_state);
   } else if (cas->keyset->is<IR::DefaultExpression>()) {
     builder->append_line("PulseWire w_%s_%s <- mkPulseWire();", this_state, next_state);
-    done_set.insert(next_state);
+    visited.insert(next_state);
   }
   return false;
 }
@@ -430,12 +448,11 @@ bool PulseWireCodeGen::preorder(const IR::SelectCase* cas) {
 bool PulseWireCodeGen::preorder(const IR::PathExpression* expr) {
   cstring this_state = state->name.toString();
   cstring next_state = expr->toString();
-  auto it = done_set.find(next_state);
-  if (it != done_set.end()) {
+  if (visited.find(next_state) != visited.end()) {
     return false;
   }
   builder->append_line("PulseWire w_%s_%s <- mkPulseWire();", this_state, next_state);
-  done_set.insert(next_state);
+  visited.insert(next_state);
   return false;
 }
 
@@ -458,16 +475,25 @@ class DfifoCodeGen : public Inspector {
   CodeBuilder* builder;
   const IR::ParserState* state;
   const P4::TypeMap* typeMap;
+  std::set<cstring> visited;
 };
 
 bool DfifoCodeGen::preorder(const IR::MethodCallExpression* expr) {
-  for (auto h: MakeZipRange(*expr->typeArguments, *expr->arguments)) {
-    auto typeName = h.get<0>();
-    auto instName = h.get<1>();
-    cstring type = CamelCase(typeName->toString());
-    const IR::Member* member = instName->to<IR::Member>();
-    cstring name = member->member;
-    builder->append_line("FIFOF#(Maybe#(Header#(%s))) %s_out_ff <- mkDFIFOF(tagged Invalid);", type, name);
+  if (expr->method->toString() == "packet.extract") {
+    for (auto h: MakeZipRange(*expr->typeArguments, *expr->arguments)) {
+      auto typeName = h.get<0>();
+      auto instName = h.get<1>();
+      cstring type = CamelCase(typeName->toString());
+      const IR::Member* member = instName->to<IR::Member>();
+      cstring name = member->member;
+      if (visited.find(name) != visited.end()) {
+        return false;
+      }
+      builder->append_line("FIFOF#(Maybe#(Header#(%s))) %s_out_ff <- mkDFIFOF(tagged Invalid);", type, name);
+      visited.insert(name);
+    }
+  } else if (expr->method->toString() == "packet.lookahead") {
+    ::warning("look ahead not handled");
   }
   return false;
 }
