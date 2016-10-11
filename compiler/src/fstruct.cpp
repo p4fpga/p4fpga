@@ -42,6 +42,10 @@ bool StructCodeGen::preorder(const IR::Type_Header* hdr) {
       if (size > 64) {
         int vec_size = size / 64;
         builder->append_line("Vector#(%d, Bit#(64)) %s;", vec_size, name);
+        int remainder = size % 64; //FIXME:
+        if (remainder != 0) {
+          builder->append_line("Bit#(%d) %s_;", remainder, name);
+        }
       } else {
         builder->append_line("Bit#(%d) %s;", size, name);
       }
