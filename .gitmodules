@@ -1,3 +1,0 @@
-[submodule "submodules/p4c-bm"]
-	path = submodules/p4c-bm
-	url = https://github.com/p4lang/p4c-bm.git
