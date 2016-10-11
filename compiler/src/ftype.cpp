@@ -40,12 +40,6 @@ FPGABoolType::declare(BSVProgram & bsv, cstring id, bool asPointer) {
     bsv.getParserBuilder().appendFormat(" %s", id.c_str());
 }
 
-// cstring FPGAType::toString(const Target* target) {
-//    CodeBuilder builder(target);
-//    emit(&builder);
-//    return builder.toString();
-// }
-
 unsigned FPGAScalarType::alignment() const {
     if (width <= 8)
         return 1;
@@ -125,25 +119,6 @@ FPGAStructType::declare(BSVProgram & bsv, cstring id, bool asPointer) {
     bsv.getParserBuilder().appendFormat(" %s %s", n, id.c_str());
 }
 
-void FPGAStructType::emitInitializer(BSVProgram & bsv) {
-    bsv.getParserBuilder().blockStart();
-    if (type->is<IR::Type_Struct>() || type->is<IR::Type_Union>()) {
-        for (auto f : fields) {
-            bsv.getParserBuilder().emitIndent();
-            bsv.getParserBuilder().appendFormat(".%s = ", f->field->name.name);
-            f->type->emitInitializer(bsv);
-            bsv.getParserBuilder().append(",");
-            bsv.getParserBuilder().newline();
-        }
-    } else if (type->is<IR::Type_Header>()) {
-        bsv.getParserBuilder().emitIndent();
-        bsv.getParserBuilder().appendLine(".ebpf_valid = 0");
-    } else {
-        BUG("Unexpected type %1%", type);
-    }
-    bsv.getParserBuilder().blockEnd(false);
-}
-
 void FPGAStructType::emit(BSVProgram & bsv) {
     bsv.getParserBuilder().emitIndent();
     bsv.getParserBuilder().append(kind);
@@ -179,10 +154,6 @@ void FPGAStructType::emit(BSVProgram & bsv) {
 
 void FPGATypeName::declare(BSVProgram & bsv, cstring id, bool asPointer) {
     canonical->declare(bsv, id, asPointer);
-}
-
-void FPGATypeName::emitInitializer(BSVProgram & bsv) {
-    canonical->emitInitializer(bsv);
 }
 
 unsigned FPGATypeName::widthInBits() {

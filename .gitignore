@@ -36,3 +36,8 @@ build/
 dist/
 p4c_bm.egg-info/
 pif_ir/
+examples/*/*.p4
+examples/*/matchtable_model.cpp
+examples/*/generatedbsv*
+examples/*/nfsume*
+examples/*/bluesim*

@@ -1,8 +1,54 @@
-#pragma once
+//#pragma once
 
-#include "codebuilder.h"
+#ifndef P4FPGA_INCLUDE_BSVPROGRAM_H_
+#define P4FPGA_INCLUDE_BSVPROGRAM_H_
+
+#include "ir/ir.h"
+#include "lib/sourceCodeBuilder.h"
+#include "frontends/p4/typeMap.h"
 
 namespace FPGA {
+
+class CodeBuilder : public Util::SourceCodeBuilder {
+ public:
+    explicit CodeBuilder() {}
+
+    template <typename... TArgs>
+    void append_line(const char* fmt, TArgs&&... args);
+
+    template <typename... TArgs>
+    void append_format(const char* fmt, TArgs&&... args);
+
+    void incr_indent() { increaseIndent(); }
+    void decr_indent() { decreaseIndent(); }
+
+    template <typename TValue, typename... TArgs>
+      std::string format_string(boost::format& message, TValue&& arg, TArgs&&... args);
+    std::string format_string(boost::format& message) { return message.str(); };
+};
+
+template <typename TValue, typename... TArgs>
+  std::string CodeBuilder::format_string(boost::format& message, TValue&& arg, TArgs&&... args) {
+  message % std::forward<TValue>(arg);
+  return format_string(message, std::forward<TArgs>(args)...);
+}
+
+template <typename... TArgs>
+  void CodeBuilder::append_format(const char* fmt, TArgs&&... args) {
+  emitIndent();
+  boost::format msg(fmt);
+  std::string s = format_string(msg, std::forward<TArgs>(args)...);
+  appendFormat(s.c_str());
+  newline();
+}
+
+template <typename... TArgs>
+  void CodeBuilder::append_line(const char* fmt, TArgs&&... args) {
+    emitIndent();
+    boost::format msg(fmt);
+    std::string s = format_string(msg, std::forward<TArgs>(args)...);
+    appendLine(s.c_str());
+  }
 
 class BSVProgram {
  public:
@@ -12,8 +58,9 @@ class BSVProgram {
   CodeBuilder& getStructBuilder() { return structBuilder_; }
   CodeBuilder& getUnionBuilder()  { return unionBuilder_; }
   CodeBuilder& getControlBuilder() { return controlBuilder_; }
-  CodeBuilder& getAPIIntfDefBuilder() { return apiIntfDefBuilder_; }
-  CodeBuilder& getAPIIntfDeclBuilder() { return apiIntfDeclBuilder_; }
+  CodeBuilder& getAPIDefBuilder() { return apiDefBuilder_; }
+  CodeBuilder& getAPIDeclBuilder() { return apiDeclBuilder_; }
+  CodeBuilder& getProgDeclBuilder() { return progDeclBuilder_; }
   CodeBuilder& getConnectalTypeBuilder() { return connectalTypeBuilder_; }
 
  private:
@@ -22,8 +69,9 @@ class BSVProgram {
   CodeBuilder structBuilder_;
   CodeBuilder unionBuilder_;
   CodeBuilder controlBuilder_;
-  CodeBuilder apiIntfDefBuilder_;
-  CodeBuilder apiIntfDeclBuilder_;
+  CodeBuilder apiDefBuilder_;
+  CodeBuilder apiDeclBuilder_;
+  CodeBuilder progDeclBuilder_;
   CodeBuilder connectalTypeBuilder_;
 };
 
@@ -52,3 +100,5 @@ class Partitioner {
 };
 
 } // namespace FPGA
+
+#endif  /* P4FPGA_INCLUDE_BSVPROGRAM_H_ */

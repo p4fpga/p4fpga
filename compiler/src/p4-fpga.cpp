@@ -9,18 +9,17 @@
 #include "lib/gc.h"
 
 #include "midend.h"
-#include "options.h"
+#include "foptions.h"
 #include "backend.h"
 #include "partition.h"
 #include "profile.h"
-#include "bsvprogram.h"
 #include "frontends/common/parseInput.h"
 #include "frontends/p4/frontend.h"
 #include "frontends/p4/evaluator/evaluator.h"
 #include "frontends/p4/simplify.h"
 
 // generate bsv
-void compile(Options& options, const IR::P4Program* program) {
+void compile(FPGAOptions& options, const IR::P4Program* program) {
     auto hook = options.getDebugHook();
 
     P4::FrontEnd frontend;
@@ -47,7 +46,7 @@ void compile(Options& options, const IR::P4Program* program) {
 }
 
 // partition p4 control flow
-void partition(Options& options, const IR::P4Program* program) {
+void partition(FPGAOptions& options, const IR::P4Program* program) {
     auto hook = options.getDebugHook();
     P4::FrontEnd frontend;
     frontend.addDebugHook(hook);
@@ -92,7 +91,7 @@ int main(int argc, char *const argv[]) {
     setup_gc_logging();
     setup_signals();
 
-    Options options;
+    FPGAOptions options;
     if (options.process(argc, argv) != nullptr)
         options.setInputFile();
     if (::errorCount() > 0)

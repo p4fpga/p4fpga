@@ -33,7 +33,7 @@ CONNECTALFLAGS += -D IMPORT_HOSTIF
 CONNECTALFLAGS += -D BYTE_ENABLES
 CONNECTALFLAGS += --bscflags="-show-range-conflict +RTS -K596777766 -RTS -demote-errors G0066:G0045 -suppress-warnings G0046:G0020:G0023:S0015:S0080:S0039 -steps-max-intervals 20"
 CONNECTALFLAGS += -m $(P4EXAMPLEDIR)/bsv/AsymmetricBRAM/mem_model.c
-CONNECTALFLAGS += --bscflags="-fdir $(CURDIR)/sample_input"
+#CONNECTALFLAGS += --bscflags="-fdir $(CURDIR)/sample_input"
 CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/bsv/
 CONNECTALFLAGS += --nocache
 CONNECTALFLAGS += --cxxflags=-std=c++11
@@ -62,22 +62,11 @@ CONNECTALFLAGS += -D XILINX_SYS_CLK
 #CONNECTALFLAGS += --xci=$(IPDIR)/$(BOARD)/ten_gig_eth_mac_0/ten_gig_eth_mac_0.xci
 CONNECTALFLAGS += --xci=$(IPDIR)/$(BOARD)/ten_gig_eth_pcs_pma_shared/ten_gig_eth_pcs_pma_shared.xci
 CONNECTALFLAGS += --xci=$(IPDIR)/$(BOARD)/ten_gig_eth_pcs_pma_non_shared/ten_gig_eth_pcs_pma_non_shared.xci
-#CONNECTALFLAGS += --constraint=timing_constraints.xdc --implconstraint=timing_constraints.xdc
+CONNECTALFLAGS += --constraint=timing_constraints.xdc --implconstraint=timing_constraints.xdc
 prebuild::
 #	(cd $(BOARD); BUILDCACHE_CACHEDIR=$(BUILDCACHE_CACHEDIR) $(BUILDCACHE) vivado -notrace -mode batch -source $(SONICDIR)/hw/scripts/generate-mac.tcl)
 	(cd $(BOARD); BUILDCACHE_CACHEDIR=$(BUILDCACHE_CACHEDIR) $(BUILDCACHE) vivado -notrace -mode batch -source $(SONICDIR)/hw/scripts/connectal-synth-phy.tcl)
 endif
-
-ALL: codegen simgen
-
-codegen: $(P4FILE)
-	$(foreach file, $(P4FILE), python ${P4FPGADIR}/p4c/bsvgen.py --mem $(file);)
-
-codegen-stream: $(P4File)
-	$(foreach file, $(P4FILE), python ${P4FPGADIR}/p4c/bsvgen.py $(file);)
-
-simgen: codegen
-	make build.bluesim
 
 run:
 	(cd bluesim; ./bin/ubuntu.exe -p ../${T})

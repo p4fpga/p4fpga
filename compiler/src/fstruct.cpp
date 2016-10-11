@@ -22,8 +22,6 @@
 
 namespace FPGA {
 
-using namespace Struct;
-
 bool StructCodeGen::preorder(const IR::Type_Header* hdr) {
   cstring name = hdr->name.toString();
   cstring header_type = CamelCase(name);
@@ -34,54 +32,83 @@ bool StructCodeGen::preorder(const IR::Type_Header* hdr) {
   }
   header_map.emplace(name, hdr);
   // do code gen
-  append_line(bsv, "import DefaultValue::*;");
-  append_line(bsv, "typedef struct {");
-  incr_indent(bsv);
-  auto header_width = 0;
+  builder->append_line("typedef struct {");
+  builder->incr_indent();
+  int header_width = 0;
   for (auto f : *hdr->fields) {
     if (f->type->is<IR::Type_Bits>()) {
-      auto width = f->type->to<IR::Type_Bits>()->size;
-      auto name = f->name;
-      append_format(bsv, "Bit#(%d) %s;", width, name.toString());
-      header_width += width;
+      int size = f->type->to<IR::Type_Bits>()->size;
+      cstring name = f->name.toString();
+      if (size > 64) {
+        int vec_size = size / 64;
+        builder->append_line("Vector#(%d, Bit#(64)) %s;", vec_size, name);
+        int remainder = size % 64; //FIXME:
+        if (remainder != 0) {
+          builder->append_line("Bit#(%d) %s_;", remainder, name);
+        }
+      } else {
+        builder->append_line("Bit#(%d) %s;", size, name);
+      }
+      header_width += size;
     }
   }
-  decr_indent(bsv);
-  append_format(bsv, "} %s deriving (Bits, Eq);", header_type);
-  append_format(bsv, "function %s extract_%s(Bit#(%d) data);", header_type, name, header_width);
-  incr_indent(bsv);
-  append_line(bsv, "return unpack(byteSwap(data));");
-  decr_indent(bsv);
-  append_line(bsv, "endfunction");
+  builder->decr_indent();
+  builder->append_format("} %s deriving (Bits, Eq, FShow);", header_type);
+  builder->append_format("function %s extract_%s(Bit#(%d) data);", header_type, name, header_width);
+  builder->incr_indent();
+  builder->append_line("return unpack(byteSwap(data));");
+  builder->decr_indent();
+  builder->append_line("endfunction");
   return false;
 }
 
-void StructCodeGen::emit() {
-  append_line(bsv, "typedef struct {");
-  incr_indent(bsv);
-  // metadata used in table
-  for (auto p : program->ingress->metadata_to_table) {
-    auto name = nameFromAnnotation(p.first->annotations, p.first->name);
-    auto size = p.first->type->to<IR::Type_Bits>()->size;
-    append_line(bsv, "Maybe#(Bit#(%d)) %s;", size, name);
+bool StructCodeGen::preorder(const IR::Type_Struct* hdr) {
+  cstring name = hdr->name.toString();
+  cstring header_type = CamelCase(name);
+  builder->append_line("typedef struct {");
+  builder->incr_indent();
+  int header_width = 0;
+  for (auto f : *hdr->fields) {
+    if (f->type->is<IR::Type_Bits>()) {
+      int size = f->type->to<IR::Type_Bits>()->size;
+      cstring name = f->name.toString();
+      builder->append_line("Bit#(%d) %s;", size, name);
+      header_width += size;
+    }
   }
-  for (auto p : program->egress->metadata_to_table) {
-    auto name = nameFromAnnotation(p.first->annotations, p.first->name);
-    auto size = p.first->type->to<IR::Type_Bits>()->size;
-    append_line(bsv, "Maybe#(Bit#(%d)) %s;", size, name);
-  }
-  // metadata used in control flow
-  // TODO:
-  for (auto s : program->parser->parseSteps) {
-    append_format(bsv, "HeaderState %s;", s->name.toString());
-  }
-  decr_indent(bsv);
-  append_line(bsv, "} MetadataT deriving (Bits, Eq, FShow);");
-  append_line(bsv, "instance DefaultValue#(MetadataT);");
-  incr_indent(bsv);
-  append_line(bsv, "defaultValue = unpack(0);");
-  decr_indent(bsv);
-  append_line(bsv, "endinstance");
+  builder->decr_indent();
+  builder->append_format("} %s deriving (Bits, Eq, FShow);", header_type);
+  builder->append_line("instance DefaultValue#(%s);", header_type);
+  builder->incr_indent();
+  builder->append_line("defaultValue = unpack(0);");
+  builder->decr_indent();
+  builder->append_line("endinstance");
+  return false;
+}
+
+bool HeaderCodeGen::preorder(const IR::StructField* field) {
+  cstring header_type = CamelCase(field->type->getP4Type()->toString());
+  cstring header_name = field->getName().toString();
+  if (field->type->is<IR::Type_Header>()) {
+    visit(field->type);;
+    builder->append_line("Maybe#(Header#(%s)) %s;", header_type, header_name);
+  } else if (field->type->is<IR::Type_Stack>()) {
+    visit(field->type);
+    builder->appendFormat(" %s;", header_name);
+    builder->newline();
+  } else {}
+  return false;
+}
+
+bool HeaderCodeGen::preorder(const IR::Type_Header* hdr) {
+  return false;
+}
+
+bool HeaderCodeGen::preorder(const IR::Type_Stack* stk) {
+  builder->emitIndent();
+  LOG1("xxxx" << stk->elementType->getP4Type());
+  builder->appendFormat("Vector#(%d, Maybe#(Header#(%s)))", stk->getSize(), CamelCase(stk->elementType->getP4Type()->toString()));
+  return false;
 }
 
 }  // namespace FPGA

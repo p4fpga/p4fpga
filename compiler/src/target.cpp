@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// target implements IR::
-//
+// Target
 
 #include <lib/cstring.h>
 
@@ -30,11 +29,5 @@ class Target {
  public:
   virtual void emit() {}
 };
-
-/* Target Shared Memory Runtime */
-
-
-/* Target Streaming Runtime */
-
 
 }

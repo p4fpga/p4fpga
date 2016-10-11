@@ -21,40 +21,46 @@
 // SOFTWARE.
 
 // Deparser Template
-
-import BUtils::*;
-import BuildVector::*;
-import CBus::*;
-import ClientServer::*;
-import ConfigReg::*;
-import Connectable::*;
-import DefaultValue::*;
-import DbgDefs::*;
-import Ethernet::*;
-import FIFO::*;
-import FIFOF::*;
-import FShow::*;
-import GetPut::*;
-import List::*;
-import MIMO::*;
-import MatchTable::*;
-import PacketBuffer::*;
-import Pipe::*;
-import PrintTrace::*;
-import Register::*;
-import SpecialFIFOs::*;
-import SharedBuff::*;
-import StmtFSM::*;
-import TxRx::*;
-import Utils::*;
-import Vector::*;
-import StructDefines::*;
-import UnionDefines::*;
+import Library::*;
 
 // app-specific structs
 `define DEPARSER_STRUCT
 `include "DeparserGenerated.bsv"
 `undef DEPARSER_STRUCT
+
+`define COLLECT_RULE(collectrule, rl) collectrule = List::cons (rl, collectrule)
+
+typeclass CheckForward#(type t);
+   function Bool checkForward(t x);
+endtypeclass
+instance CheckForward#(Maybe#(Header#(t)));
+   function Bool checkForward(Maybe#(Header#(t)) x);
+      case (x) matches
+         tagged Valid .h: begin
+            return h.state matches tagged Forward ? True : False;
+         end
+         tagged Invalid: begin
+            return False;
+         end
+      endcase
+   endfunction
+endinstance
+
+typeclass UpdateState#(type t);
+   function t updateState(t x, HeaderState state);
+endtypeclass
+instance UpdateState#(Maybe#(Header#(t)));
+   function Maybe#(Header#(t)) updateState(Maybe#(Header#(t)) x, HeaderState state);
+      case (x) matches
+         tagged Valid .h: begin
+            return tagged Valid Header {hdr: h.hdr, state: state};
+         end
+         tagged Invalid: begin
+            return tagged Invalid;
+         end
+      endcase
+   endfunction
+endinstance
 
 typedef TDiv#(PktDataWidth, 8) MaskWidth;
 typedef TLog#(PktDataWidth) DataSize;
@@ -79,8 +85,8 @@ module mkDeparser (Deparser);
       endaction
    endfunction
 
-   FIFOF#(EtherData) data_in_ff <- mkFIFOF;
-   FIFOF#(EtherData) data_out_ff <- mkFIFOF;
+   FIFOF#(ByteStream#(16)) data_in_ff <- mkFIFOF;
+   FIFOF#(ByteStream#(16)) data_out_ff <- mkFIFOF;
    FIFOF#(MetadataT) meta_in_ff <- mkSizedFIFOF(16);
    FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
    FIFO#(DeparserState) deparse_state_ff <- mkPipelineFIFO();
@@ -152,7 +158,7 @@ module mkDeparser (Deparser);
     if (rg_shift_amt[1] != 0) begin
       Bit#(128) data_mask = create_mask(cExtend(rg_shift_amt[1]));
       Bit#(16) mask_out = create_mask(cExtend(rg_shift_amt[1] >> 3));
-      let data = EtherData { sop: v.sop, eop: v.eop, data: truncate(rg_tmp[1]) & data_mask, mask: mask_out};
+      let data = ByteStream { sop: v.sop, eop: v.eop, data: truncate(rg_tmp[1]) & data_mask, mask: mask_out};
       data_out_ff.enq(data);
       dbprint(4, $format("Deparser:rl_deparse_payload rg_shift_amt=%d", rg_shift_amt[1], fshow(data)));
       rg_shift_amt[1] <= 0;
@@ -207,7 +213,7 @@ module mkDeparser (Deparser);
     dbprint(3, $format("Deparser:rl_deparse_send ", fshow(v)));
     Bit#(128) data_out = truncate(rg_tmp[1] & create_mask(cExtend(amt)));
     Bit#(16) mask_out = create_mask(cExtend(amt >> 3));
-    let data = EtherData { sop: sop_this_cycle, eop: False, data: data_out, mask: mask_out };
+    let data = ByteStream { sop: sop_this_cycle, eop: False, data: data_out, mask: mask_out };
     rg_tmp[1] <= rg_tmp[1] >> amt;
     rg_processed[1] <= rg_processed[1] - amt;
     rg_shift_amt[1] <= rg_shift_amt[1] - amt;
@@ -215,9 +221,49 @@ module mkDeparser (Deparser);
     dbprint(4, $format("Deparser:rl_deparse_send rg_processed=%d rg_shift_amt=%d amt=%d", rg_processed[1], rg_shift_amt[1], amt, fshow(data)));
   endrule
 
+  function Rules genDeparseNextRule(PulseWire wl, DeparserState state, Integer i);
+    let len = fromInteger(i);
+    return (rules
+      rule rl_deparse_next if (wl);
+        deparse_state_ff.enq(state);
+        fetch_next_header(len);
+      endrule
+    endrules);
+  endfunction
+
+  function Rules genDeparseLoadRule(DeparserState state, Integer i);
+    let len = fromInteger(i);
+    return (rules
+      rule rl_deparse_load if ((deparse_state_ff.first == state) && (rg_buffered[0] < len));
+        rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+        UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
+        UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
+        move_buffered_amt(cExtend(n_bits_used));
+      endrule
+    endrules);
+  endfunction
+
+  function Rules genDeparseSendRule(DeparserState state, Integer i);
+    let len = fromInteger(i);
+    return (rules 
+      rule rl_deparse_send if ((deparse_state_ff.first == state) && (rg_buffered[0] >= len));
+        succeed_and_next(len);
+        deparse_state_ff.deq;
+        let metadata = meta[0];
+        metadata = update_metadata(state);
+        transit_next_state(metadata);
+        meta[0] <= metadata;
+      endrule
+    endrules);
+  endfunction
+
+  List#(Rules) deparse_fsm = List::nil;
+
   `define DEPARSER_RULES
   `include "DeparserGenerated.bsv"
   `undef DEPARSER_RULES
+
+  Empty fsmrl <- addRules(foldl(rJoin, emptyRules, fsmRules));
 
   interface metadata = toPipeIn(meta_in_ff);
   interface PktWriteServer writeServer;

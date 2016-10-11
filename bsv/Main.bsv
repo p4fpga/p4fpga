@@ -1,91 +1,3 @@
-import BuildVector::*;
-import Clocks::*;
-import Connectable::*;
-import GetPut::*;
-import HostChannel::*;
-import MainAPI::*;
-import PacketBuffer::*;
-import SharedBuff::*;
-import Sims::*;
-import TxChannel::*;
-import Control::*;
-import HostInterface::*;
-import RxChannel::*;
-import PktGenChannel::*;
-import PktCapChannel::*;
-import PktGen::*;
-
-`include "ConnectalProjectConfig.bsv"
-
-`ifdef BOARD_nfsume
-import XilinxEthPhy::*;
-import NfsumePins::*;
-`endif
-
-interface Main;
-  interface MainRequest request;
-  interface `PinType pins;
-endinterface
-module mkMain #(HostInterface host,MainIndication indication,ConnectalMemory::MemServerIndication memServerInd) (Main);
-  let verbose = True;
-  Clock defaultClock <- exposeCurrentClock();
-  Reset defaultReset <- exposeCurrentReset();
-  `ifdef SIMULATION
-  SimClocks clocks <- mkSimClocks();
-  Clock txClock = clocks.clock_156_25;
-  Clock phyClock = clocks.clock_644_53;
-  Clock mgmtClock = clocks.clock_50;
-  Clock rxClock = txClock;
-  Reset txReset <- mkSyncReset(2, defaultReset, txClock);
-  Reset phyReset <- mkSyncReset(2, defaultReset, phyClock);
-  Reset mgmtReset <- mkSyncReset(2, defaultReset, mgmtClock);
-  Reset rxReset = txReset;
-  `endif
-  `ifdef BOARD_nfsume
-  Clock mgmtClock = host.tsys_clk_200mhz_buf;
-  EthPhyIfc phys <- mkXilinxEthPhy(mgmtClock);
-  Clock txClock = phys.tx_clkout;
-  Reset txReset <- mkSyncReset(2, defaultReset, txClock);
-  Clock rxClock = txClock;
-  Reset rxReset = txReset;
-  NfsumeLeds leds <- mkNfsumeLeds(mgmtClock, txClock);
-  NfsumeSfpCtrl sfpctrl <- mkNfsumeSfpCtrl(phys);
-  `endif
-
-  HostChannel hostchan <- mkHostChannel();
-  RxChannel rxchan <- mkRxChannel(rxClock, rxReset);
-  Ingress ingress <- mkIngress(vec(hostchan.next, rxchan.next));
-  Egress egress <- mkEgress(vec(ingress.next));
-  TxChannel txchan <- mkTxChannel(txClock, txReset);
-  SharedBuffer#(12, 128, 1) mem <- mkSharedBuffer(vec(txchan.readClient),
-                                                  vec(txchan.freeClient),
-                                                  vec(hostchan.writeClient, rxchan.writeClient),
-                                                  vec(hostchan.mallocClient, rxchan.mallocClient),
-                                                  memServerInd);
-  mkConnection(egress.next, txchan.prev);
-
-  PktGenChannel pktgen <- mkPktGenChannel(txClock, txReset);
-  PktCapChannel pktcap <- mkPktCapChannel(rxClock, rxReset);
-
-  `ifdef SIMULATION
-  rule drain_mac;
-     let v <- toGet(txchan.macTx).get;
-     if (verbose) $display("(%0d) tx data ", $time, fshow(v));
-     //pktcap.macRx.put(v);
-  endrule
-  rule drain_pkgen;
-     let v <- toGet(pktgen.macTx).get;
-     if (verbose) $display("(%0d) pktgen data", $time, fshow(v));
-     rxchan.macRx.put(v);
-  endrule
-  `endif
-  MainAPI api <- mkMainAPI(indication, hostchan, ingress, egress, txchan, pktgen, pktcap);
-  interface request = api.request;
-
-`ifdef BOARD_nfsume
-  interface pins = mkNfsumePins(defaultClock, phys, leds, sfpctrl);
-`endif
-endmodule
 // Copyright (c) 2016 P4FPGA Project
 
 // Permission is hereby granted, free of charge, to any person
@@ -107,3 +19,74 @@ endmodule
 // ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
+
+import BuildVector::*;
+import Clocks::*;
+import Connectable::*;
+import GetPut::*;
+import Vector::*;
+import HostInterface::*;
+import MainAPI::*;
+import DbgDefs::*;
+import Sims::*;
+import TieOff::*;
+import PktGenChannel::*;
+import PktCapChannel::*;
+import TxChannel::*;
+import RxChannel::*;
+import HostChannel::*;
+import StreamChannel::*;
+import PktGen::*;
+import Board::*;
+import Runtime::*;
+import Program::*;
+import Pipe::*;
+import StructDefines::*;
+import ConnectalTypes::*;
+`include "ConnectalProjectConfig.bsv"
+
+interface Main;
+  interface MainRequest request;
+  interface `PinType pins;
+endinterface
+module mkMain #(HostInterface host, MainIndication indication, ConnectalMemory::MemServerIndication memServerInd) (Main);
+  let verbose = True;
+  Clock defaultClock <- exposeCurrentClock();
+  Reset defaultReset <- exposeCurrentReset();
+
+  Board board <- mkBoardSynth(host.tsys_clk_200mhz_buf);
+  Clock txClock = board.txClock;
+  Reset txReset = board.txReset;
+  Clock rxClock = board.rxClock;
+  Reset rxReset = board.rxReset;
+
+  Runtime#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) runtime <- mkRuntime(rxClock, rxReset, txClock, txReset);
+  Program#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) prog <- mkProgram();
+
+  // Port 0 is HostChan
+  for (Integer i=0; i<`NUM_HOSTCHAN; i=i+1) begin
+    mkConnection(runtime.hostchan[i].next, prog.prev[i]);
+  end
+
+  // Port 1-4 is RxChan
+  for (Integer i=0; i<`NUM_RXCHAN; i=i+1) begin
+    messageM(printType(typeOf(prog.prev)) + printType(typeOf(runtime.rxchan)));
+    mkConnection(runtime.rxchan[i].next, prog.prev[i+`NUM_HOSTCHAN]);
+  end
+
+  // Port 5 is PktGen
+  PktGenChannel pktgen <- mkPktGenChannel(txClock, txReset);
+  PktCapChannel pktcap <- mkPktCapChannel(rxClock, rxReset);
+
+`ifdef SIMULATION
+  mkTieOff(runtime.txchan[0].macTx);
+  mapM_(mkTieOff, prog.next);
+  //mkConnection(pktgen.macTx, runtime.rxchan[0].macRx);
+`endif
+
+  MainAPI api <- mkMainAPI(indication, runtime, prog, pktgen, pktcap);
+  interface request = api.request;
+`ifdef BOARD_nfsume
+  interface pins = board.pins;
+`endif
+endmodule

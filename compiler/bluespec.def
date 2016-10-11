@@ -5,60 +5,19 @@
 
 namespace BSV {
 
-class Reg : Type {
-    cstring     name;
-    cstring     type;
-	int			size;
-#nodbprint
-	toString{ return "Reg#(Bit#(" + cstring::to_cstring(size) + "))"; }
-}
-
-class PulseWire : Type {
-    cstring     name;
-#nodbprint
-    toString{ return "PulseWire " + name; }
-}
-
-class PulseWireOR : Type {
-    cstring     name;
-#nodbprint
-    toString{ return "PulseWireOR " + name; }
-}
-
-class DWire : Type {
-    cstring     name;
-    cstring     type;
-    int         size;
-#nodbprint
-    toString{ return "DWire"; }
-}
-
-class Interface : Type {
-#nodbprint
-}
-
-class Module : Type {
-#nodbprint
-}
-
-class FIFOF : Type {
-#nodbprint
-}
-
-class FIFO : Type {
-#nodbprint
-}
-
 class Rule : Type {
 #nodbprint
+  const IR::Type* getP4Type() const override { return this; }
 }
 
-class Function : Type {
+class Runtime : Type {
 #nodbprint
+  const IR::Type* getP4Type() const override { return this; }
 }
 
 class DeparseState : IR::Type_Header {
 	int width_bits;
+  cstring indexed_name;
 #nodbprint
 }
 

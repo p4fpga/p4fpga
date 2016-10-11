@@ -1,0 +1,10 @@
+`define PRINT_DEBUG_MSG \
+   Reg#(int) cf_verbosity <- mkConfigRegU; \
+   function Action dbprint(Integer level, Fmt msg); \
+      action \
+         if (cf_verbosity > fromInteger(level)) begin \
+            $display("(%0d) " , $time, msg); \
+         end \
+      endaction \
+   endfunction
+

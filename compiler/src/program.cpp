@@ -35,6 +35,7 @@ bool FPGAProgram::build() {
   auto pb = pack->getParameterValue(v1model.sw.parser.name)
                 ->to<IR::ParserBlock>();
   BUG_CHECK(pb != nullptr, "No parser block found");
+  CHECK_NULL(typeMap);
   parser = new FPGAParser(this, pb, typeMap, refMap);
   success = parser->build();
   if (!success)
@@ -71,26 +72,114 @@ bool FPGAProgram::build() {
   return true;
 }
 
+void FPGAProgram::emitImportStatements(BSVProgram & bsv) {
+  CodeBuilder* builder = &bsv.getControlBuilder();
+  builder->append_line("import Library::*;");
+  builder->append_line("import StructDefines::*;");
+  builder->append_line("import UnionDefines::*;");
+  builder->append_line("import ConnectalTypes::*;");
+  builder->append_line("import Table::*;");
+  builder->append_line("import Engine::*;");
+  builder->append_line("import Pipe::*;");
+  builder->append_line("import Lists::*;");
+}
+
+void FPGAProgram::emitIncludeStatements(BSVProgram & bsv) {
+  CodeBuilder* builder = &bsv.getControlBuilder();
+  builder->append_line("`include \"TieOff.defines\"");
+  builder->append_line("`include \"Debug.defines\"");
+  builder->append_line("`include \"SynthBuilder.defines\"");
+  builder->append_line("`include \"MatchTable.defines\"");
+}
+
+void FPGAProgram::emitBuiltinMetadata(CodeBuilder* builder) {
+  const IR::Type_Struct* stdmeta = typeMap->getType(parser->stdMetadata)->to<IR::Type_Struct>();
+  builder->append_line("typedef struct {");
+  builder->incr_indent();
+  for (auto h : *stdmeta->fields) {
+    auto type = typeMap->getType(h);
+    auto name = h->name.toString();
+    builder->append_format("Maybe#(Bit#(%d)) %s;", type->width_bits(), name);
+  }
+  builder->decr_indent();
+  builder->append_line("} StandardMetadataT deriving (Bits, Eq, FShow);");
+  builder->append_line("instance DefaultValue#(StandardMetadataT);");
+  builder->incr_indent();
+  builder->append_line("defaultValue = unpack(0);");
+  builder->decr_indent();
+  builder->append_line("endinstance");
+
+}
+void FPGAProgram::emitMetadata(CodeBuilder* builder) {
+  builder->append_line("typedef struct {");
+  builder->incr_indent();
+  // implicit metadata in table.
+  for (auto p : ingress->metadata_to_table) {
+    auto name = nameFromAnnotation(p.first->annotations, p.first->name);
+    auto size = p.first->type->to<IR::Type_Bits>()->size;
+    builder->append_line("Maybe#(Bit#(%d)) %s;", size, name);
+  }
+  for (auto p : egress->metadata_to_table) {
+    auto name = nameFromAnnotation(p.first->annotations, p.first->name);
+    auto size = p.first->type->to<IR::Type_Bits>()->size;
+    builder->append_line("Maybe#(Bit#(%d)) %s;", size, name);
+  }
+
+  // FIXME: place into Metadata?
+  // Implicit metadata in control flow.
+
+  // Standard Metadata
+
+  // Metadata declared by user.
+  const IR::Type_Struct* usermeta = typeMap->getType(parser->userMetadata)->to<IR::Type_Struct>();
+  CHECK_NULL(usermeta);
+  for (auto h : *usermeta->fields) {
+    auto type = typeMap->getType(h);
+    auto name = h->name.toString();
+    if (type->is<IR::Type_Struct>()) {
+      const IR::Type_Struct* ty = type->to<IR::Type_Struct>();
+      builder->append_format("Maybe#(%s) %s;", CamelCase(ty->name.toString()), name);
+    }
+  }
+  builder->decr_indent();
+  builder->append_line("} Metadata deriving (Bits, Eq, FShow);");
+  builder->append_line("instance DefaultValue#(Metadata);");
+  builder->incr_indent();
+  builder->append_line("defaultValue = unpack(0);");
+  builder->decr_indent();
+  builder->append_line("endinstance");
+}
+
+void FPGAProgram::emitHeaders(CodeBuilder* builder) {
+  builder->append_line("typedef struct {");
+  builder->incr_indent();
+  HeaderCodeGen visitor(this, builder);
+  auto type = typeMap->getType(parser->headers);
+  if (type != nullptr) {
+    type->apply(visitor);
+  }
+  builder->decr_indent();
+  builder->append_line("} Headers deriving (Bits, Eq, FShow);");
+}
+
 void FPGAProgram::emit(BSVProgram & bsv, CppProgram & cpp) {
-  LOG1("Emitting FPGA program");
   for (auto f : parser->parseStateMap) {
     LOG1(f.first << f.second);
   }
+  // emits import statement to all generated files
+  emitImportStatements(bsv);
+  emitIncludeStatements(bsv);
+
   parser->emit(bsv);
   ingress->emit(bsv, cpp);
   egress->emit(bsv, cpp);
   deparser->emit(bsv);
 
-  // generate MetadataT
-  StructCodeGen visitor(this, bsv);
-  visitor.emit();
+  // must generate metadata after processing pipelines
+  CodeBuilder* builder = &bsv.getStructBuilder();
+  emitHeaders(builder);
+  emitMetadata(builder);
+  emitBuiltinMetadata(builder);
+
 }
-
-//void FPGAProgram::generateGraph(Graph & graph) {
-//  ingress->plot_v_table_e_meta(graph);
-//  egress->plot_v_table_e_meta(graph);
-//  ingress->plot_v_meta_e_table(graph);
-//  egress->plot_v_meta_e_table(graph);
-//}
-
 }  // namespace FPGA

@@ -9,42 +9,23 @@ p4fpga_CPPFLAGS = -I$(srcdir)/extensions/c++/libp4fpga/include
 
 p4fpga_SOURCES = \
 	extensions/c++/p4fpga/src/p4-fpga.cpp \
-	extensions/c++/libp4fpga/include/analyzer.h \
 	extensions/c++/libp4fpga/src/analyzer.cpp \
-	extensions/c++/libp4fpga/include/backend.h \
 	extensions/c++/libp4fpga/src/backend.cpp \
-	extensions/c++/libp4fpga/include/codebuilder.h \
-	extensions/c++/libp4fpga/include/codegeninspector.h \
-	extensions/c++/libp4fpga/src/codegeninspector.cpp \
-	extensions/c++/libp4fpgaincludesrc/string_utils.h \
 	extensions/c++/libp4fpga/src/string_utils.cpp \
-	extensions/c++/libp4fpga/include/ftype.h \
 	extensions/c++/libp4fpga/src/ftype.cpp \
-	extensions/c++/libp4fpga/include/fparser.h \
 	extensions/c++/libp4fpga/src/fparser.cpp \
-	extensions/c++/libp4fpga/include/fstruct.h \
 	extensions/c++/libp4fpga/src/fstruct.cpp \
-	extensions/c++/libp4fpga/include/funion.h \
 	extensions/c++/libp4fpga/src/funion.cpp \
 	extensions/c++/libp4fpga/src/fdeparser.cpp \
-	extensions/c++/libp4fpga/include/fcontrol.h \
 	extensions/c++/libp4fpga/src/fcontrol.cpp \
 	extensions/c++/libp4fpga/src/program.cpp \
-	extensions/c++/libp4fpga/include/translator.h \
 	extensions/c++/libp4fpga/src/translator.cpp \
-	extensions/c++/libp4fpga/include/ftest.h \
 	extensions/c++/libp4fpga/src/ftest.cpp \
-	extensions/c++/libp4fpga/include/midend.h \
 	extensions/c++/libp4fpga/src/midend.cpp \
-	extensions/c++/libp4fpga/include/partition.h \
 	extensions/c++/libp4fpga/src/partition.cpp \
-	extensions/c++/libp4fpga/include/profile.h \
 	extensions/c++/libp4fpga/src/profile.cpp \
-	extensions/c++/libp4fpga/include/metadata-analysis.h \
 	extensions/c++/libp4fpga/src/metadata-analysis.cpp \
-	extensions/c++/libp4fpga/include/table.h \
 	extensions/c++/libp4fpga/src/table.cpp \
-	extensions/c++/libp4fpga/include/action.h \
 	extensions/c++/libp4fpga/src/action.cpp
 
 cpplint_FILES += $(p4fpga_SOURCES)

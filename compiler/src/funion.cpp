@@ -20,64 +20,53 @@
 
 namespace FPGA {
 
-using namespace Union;
-
-bool UnionCodeGen::preorder(const IR::P4Table* table) {
-  auto name = nameFromAnnotation(table->annotations, table->name);
-  auto type = CamelCase(name);
-
-  append_line(bsv, "typedef union tagged {");
-  incr_indent(bsv);
-  for (auto act : *table->getActionList()->actionList) {
-    auto elem = act->to<IR::ActionListElement>();
-    if (elem->expression->is<IR::MethodCallExpression>()) {
-      auto expr = elem->expression->to<IR::MethodCallExpression>();
-      auto action = expr->method->toString();
-      LOG1("action type " << action << " " << expr->method->node_type_name());
-      auto ty = CamelCase(action);
-      append_line(bsv, "struct {");
-      incr_indent(bsv);
-      append_line(bsv, "PacketInstance pkt;");
-      append_line(bsv, "MetadataT meta;");
-      auto k = control->basicBlock.find(action);
-      if (k != control->basicBlock.end()) {
-        auto params = k->second->parameters;
-        for (auto p : *params->parameters) {
-          auto type = p->type->to<IR::Type_Bits>();
-          append_line(bsv, "Bit#(%d) %s;", type->size, p->name.toString() );
+bool UnionCodeGen::preorder(const IR::MethodCallExpression* expr) {
+  cstring union_name = control->toP4Action(expr->method->toString());
+  cstring union_type = CamelCase(union_name);
+  builder->append_line("struct {");
+  builder->incr_indent();
+  auto k = control->basicBlock.find(expr->method->toString());
+  if (k != control->basicBlock.end()) {
+    const IR::ParameterList* params = k->second->parameters;
+    if (params->parameters->size() != 0) {
+      for (auto p : *params->parameters) {
+        int size = p->type->width_bits();
+        cstring name = p->name.toString();
+        // NOTE: only deal with Bit#(128) ipv4_address
+        if (size > 64) {
+          int vec_size = size / 64;
+          builder->append_line("Vector#(%d, Bit#(64)) %s;", vec_size, name);
+        } else {
+          builder->append_line("Bit#(%d) %s;", size, name);
         }
       }
-      decr_indent(bsv);
-      append_line(bsv, "} %sReqT;", ty);
+    } else {
+      builder->append_line("Bit#(0) unused;");
     }
   }
-  decr_indent(bsv);
-  append_line(bsv, "} %sActionReq deriving (Bits, Eq, FShow);", type);
+  builder->decr_indent();
+  builder->append_line("} %sReqT;", union_type);
+  return false;
+}
 
-  append_line(bsv, "typedef union tagged {");
-  incr_indent(bsv);
-  for (auto act : *table->getActionList()->actionList) {
-    auto elem = act->to<IR::ActionListElement>();
-    if (elem->expression->is<IR::MethodCallExpression>()) {
-      auto expr = elem->expression->to<IR::MethodCallExpression>();
-      auto action = expr->method->toString();
-      auto ty = CamelCase(action);
-      append_line(bsv, "struct {");
-      incr_indent(bsv);
-      append_line(bsv, "PacketInstance pkt;");
-      append_line(bsv, "MetadataT meta;");
-      decr_indent(bsv);
-      append_line(bsv, "} %sRspT;", ty);
-    }
-  }
-  decr_indent(bsv);
-  append_line(bsv, "} %sActionRsp deriving (Bits, Eq, FShow);", type);
+bool UnionCodeGen::preorder(const IR::P4Table* table) {
+  CHECK_NULL(table);
+  cstring name = nameFromAnnotation(table->annotations, table->name);
+  cstring type = CamelCase(name);
+
+  CHECK_NULL(builder);
+  builder->append_line("typedef union tagged {");
+  builder->incr_indent();
+  UnionCodeGen visitor(control, builder);
+  table->getActionList()->apply(visitor);
+  builder->decr_indent();
+  builder->append_line("} %sParam deriving (Bits, Eq, FShow);", type);
   return false;
 }
 
 void UnionCodeGen::emit() {
-  append_line(bsv, "import Ethernet::*;");
-  append_line(bsv, "import StructDefines::*;");
+  builder->append_line("import Ethernet::*;");
+  builder->append_line("import StructDefines::*;");
 }
 
 }  // namespace FPGA

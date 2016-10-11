@@ -11,33 +11,29 @@
 #include "program.h"
 #include "ftest.h"
 #include "ftype.h"
+#include "foptions.h"
 #include "bsvprogram.h"
 
 namespace FPGA {
-void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
-                      P4::ReferenceMap* refMap, const P4::TypeMap* typeMap) {
-    if (toplevel == nullptr)
-        return;
 
-    auto main = toplevel->getMain();
-    if (main == nullptr) {
-        ::error("Could not locate top-level block; is there a %1% module?", IR::P4Program::main);
-        return;
-    }
+void run_fpga_backend(const FPGAOptions& options, const IR::ToplevelBlock* toplevel,
+                      P4::ReferenceMap* refMap, P4::TypeMap* typeMap) {
+    CHECK_NULL(toplevel);
+    CHECK_NULL(toplevel->getMain());
 
+    // If you ever need to create FPGAType from P4Type
     FPGATypeFactory::createFactory(typeMap);
 
-    const IR::P4Program* program = toplevel->getProgram();
+    // create Main.bsv
+    // Runtime runtime();
 
-    FPGAProgram fpgaprog(program, refMap, typeMap, toplevel);
-    if (!fpgaprog.build()) {
-        ::error("FPGAprog build failed");
-        return;
-    }
-    if (options.outputFile.isNullOrEmpty()) {
-        ::error("Must specify output directory");
-        return;
-    }
+    // create Program.bsv
+    FPGAProgram fpgaprog(toplevel, refMap, typeMap);
+    if (!fpgaprog.build())
+      { ::error("FPGAprog build failed"); return; }
+
+    if (options.outputFile.isNullOrEmpty())
+      { ::error("Must specify output directory"); return; }
 
     boost::filesystem::path dir(options.outputFile);
     boost::filesystem::create_directory(dir);
@@ -62,11 +58,14 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
     boost::filesystem::path unionFile("UnionGenerated.bsv");
     boost::filesystem::path unionPath = dir / unionFile;
 
-    boost::filesystem::path apiIntfDefFile("APIDefGenerated.bsv");
-    boost::filesystem::path apiIntfDefPath = dir / apiIntfDefFile;
+    boost::filesystem::path apiDefFile("APIDefGenerated.bsv");
+    boost::filesystem::path apiDefPath = dir / apiDefFile;
 
-    boost::filesystem::path apiIntfDeclFile("APIDeclGenerated.bsv");
-    boost::filesystem::path apiIntfDeclPath = dir / apiIntfDeclFile;
+    boost::filesystem::path apiDeclFile("APIDeclGenerated.bsv");
+    boost::filesystem::path apiDeclPath = dir / apiDeclFile;
+
+    boost::filesystem::path progDeclFile("ProgDeclGenerated.bsv");
+    boost::filesystem::path progDeclPath = dir / progDeclFile;
 
     boost::filesystem::path apiTypeDefFile("ConnectalTypes.bsv");
     boost::filesystem::path apiTypeDefPath = dir / apiTypeDefFile;
@@ -79,8 +78,9 @@ void run_fpga_backend(const Options& options, const IR::ToplevelBlock* toplevel,
     std::ofstream(structPath.native())   <<  bsv.getStructBuilder().toString();
     std::ofstream(controlPath.native())  <<  bsv.getControlBuilder().toString();
     std::ofstream(unionPath.native())    <<  bsv.getUnionBuilder().toString();
-    std::ofstream(apiIntfDefPath.native())  <<  bsv.getAPIIntfDefBuilder().toString();
-    std::ofstream(apiIntfDeclPath.native())   <<  bsv.getAPIIntfDeclBuilder().toString();
+    std::ofstream(apiDefPath.native())  <<  bsv.getAPIDefBuilder().toString();
+    std::ofstream(apiDeclPath.native())   <<  bsv.getAPIDeclBuilder().toString();
+    std::ofstream(progDeclPath.native())   <<  bsv.getProgDeclBuilder().toString();
     std::ofstream(apiTypeDefPath.native()) << bsv.getConnectalTypeBuilder().toString();
 
     std::ofstream(simFile.native())      <<  cpp.getSimBuilder().toString();
@@ -96,7 +96,7 @@ void generate_metadata_profile(const IR::P4Program* program) {
     // std::ofstream(graphPath.native()) << graph.getGraphBuilder().toString();
 }
 
-void generate_table_profile(const Options& options, FPGA::Profiler* profgen) {
+void generate_table_profile(const FPGAOptions& options, FPGA::Profiler* profgen) {
     boost::filesystem::path dir(options.outputFile);
     boost::filesystem::create_directory(dir);
     boost::filesystem::path profileFile("table.prof");
@@ -104,7 +104,7 @@ void generate_table_profile(const Options& options, FPGA::Profiler* profgen) {
     std::ofstream(profilePath.native()) << profgen->getTableProfiler().toString();
 }
 
-void generate_partition(const Options& options, const IR::P4Program* program, cstring idx) {
+void generate_partition(const FPGAOptions& options, const IR::P4Program* program, cstring idx) {
     Util::PathName pathname(options.file);
     auto filename = pathname.getBasename() + idx + cstring(".p4");
     boost::filesystem::path dir(options.outputFile);

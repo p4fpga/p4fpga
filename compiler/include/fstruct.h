@@ -24,54 +24,30 @@
 
 namespace FPGA {
 
-namespace Struct {
-inline static std::string format_string(boost::format& message) {
-  return message.str();
-}
-
-template <typename TValue, typename... TArgs>
-  std::string format_string(boost::format& message, TValue&& arg, TArgs&&... args) {
-  message % std::forward<TValue>(arg);
-  return format_string(message, std::forward<TArgs>(args)...);
-}
-
-template <typename... TArgs>
-  void append_format(BSVProgram & bsv, const char* fmt, TArgs&&... args) {
-  bsv.getStructBuilder().emitIndent();
-  boost::format msg(fmt);
-  std::string s = format_string(msg, std::forward<TArgs>(args)...);
-  bsv.getStructBuilder().appendFormat(s.c_str());
-  bsv.getStructBuilder().newline();
-}
-
-template <typename... TArgs>
-  void append_line(BSVProgram & bsv, const char* fmt, TArgs&&... args) {
-    bsv.getStructBuilder().emitIndent();
-    boost::format msg(fmt);
-    std::string s = format_string(msg, std::forward<TArgs>(args)...);
-    bsv.getStructBuilder().appendLine(s.c_str());
-  }
-
-inline void incr_indent(BSVProgram & bsv) {
-  bsv.getStructBuilder().increaseIndent();
-}
-
-inline void decr_indent(BSVProgram & bsv) {
-  bsv.getStructBuilder().decreaseIndent();
-}
-
-}  // namespace Struct
-
 class StructCodeGen : public Inspector {
  public:
-  StructCodeGen(const FPGAProgram* program, BSVProgram& bsv) :
-    bsv(bsv), program(program) {}
+  StructCodeGen(const FPGAProgram* program, CodeBuilder* builder) :
+    program(program), builder(builder) {}
   bool preorder(const IR::Type_Header* header) override;
+  bool preorder(const IR::Type_Struct* header) override;
   void emit();
  private:
-  BSVProgram & bsv;
   const FPGAProgram* program;
+  CodeBuilder* builder;
   std::map<cstring, const IR::Type_Header*> header_map;
+};
+
+class HeaderCodeGen : public Inspector {
+ public:
+  HeaderCodeGen(const FPGAProgram* program, CodeBuilder* builder) :
+    program(program), builder(builder) {}
+  bool preorder(const IR::StructField* fld) override;
+  bool preorder(const IR::Type_Header* hdr) override;
+  bool preorder(const IR::Type_Stack* stk) override;
+ private:
+  const FPGAProgram* program;
+  CodeBuilder* builder;
+  std::vector<cstring> headers;
 };
 
 }  // namespace FPGA
