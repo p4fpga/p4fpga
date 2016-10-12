@@ -1,465 +1,152 @@
+import Library::*;
 import StructDefines::*;
 import UnionDefines::*;
-import CPU::*;
-import IMem::*;
+import ConnectalTypes::*;
+import Table::*;
+import Engine::*;
+import Pipe::*;
 import Lists::*;
-typedef struct {
-    Bit#(4) padding;
-    Bit#(32) nhop_ipv4;
-} ForwardReqT deriving (Bits, Eq, FShow);
+`include "TieOff.defines"
+`include "Debug.defines"
+`include "SynthBuilder.defines"
+`include "MatchTable.defines"
 typedef enum {
     NOACTION3,
     SETDMAC,
     DROP2
 } ForwardActionT deriving (Bits, Eq, FShow);
-typedef struct {
-    ForwardActionT _action;
-    Bit#(48) dmac;
-} ForwardRspT deriving (Bits, Eq, FShow);
-`ifndef SVDPI
-import "BDPI" function ActionValue#(Bit#(50)) matchtable_read_forward(Bit#(36) msgtype);
-import "BDPI" function Action matchtable_write_forward(Bit#(36) msgtype, Bit#(50) data);
-`endif
-instance MatchTableSim#(28, 36, 50);
-    function ActionValue#(Bit#(50)) matchtable_read(Bit#(28) id, Bit#(36) key);
-    actionvalue
-        let v <- matchtable_read_forward(key);
+`MATCHTABLE_SIM(31, 36, 50, forward)
+typedef Table#(3, MetadataRequest, ForwardParam, ConnectalTypes::ForwardReqT, ConnectalTypes::ForwardRspT) ForwardTable;
+typedef MatchTable#(31, 256, SizeOf#(ConnectalTypes::ForwardReqT), SizeOf#(ConnectalTypes::ForwardRspT)) ForwardMatchTable;
+`SynthBuildModule1(mkMatchTable, String, ForwardMatchTable, mkMatchTable_Forward)
+instance Table_request #(ConnectalTypes::ForwardReqT);
+    function ConnectalTypes::ForwardReqT table_request(MetadataRequest data);
+        let nhop_ipv4 = fromMaybe(?, data.meta.meta.nhop_ipv4);
+        let v = ConnectalTypes::ForwardReqT {nhop_ipv4: nhop_ipv4, padding: 0};
         return v;
-    endactionvalue
-    endfunction
-    function Action matchtable_write(Bit#(28) id, Bit#(36) key, Bit#(50) data);
-    action
-        matchtable_write_forward(key, data);
-    endaction
     endfunction
 endinstance
-(* synthesize *)
-module mkMatchTable_256_Forward(MatchTable#(28, 256, SizeOf#(ForwardReqT), SizeOf#(ForwardRspT)));
-    (* hide *)
-    MatchTable#(28, 256, SizeOf#(ForwardReqT), SizeOf#(ForwardRspT)) ifc <- mkMatchTable("forward.dat");
-    return ifc;
-endmodule
-// =============== table forward ==============
-interface Forward;
-    interface Server#(MetadataRequest, MetadataResponse) prev_control_state;
-    interface Client#(ForwardActionReq, ForwardActionRsp) next_control_state_0;
-    interface Client#(ForwardActionReq, ForwardActionRsp) next_control_state_1;
-    interface Client#(ForwardActionReq, ForwardActionRsp) next_control_state_2;
-    method Action set_verbosity(int verbosity);
-endinterface
-(* synthesize *)
-module mkForward (Control::Forward);
-    Reg#(int) cf_verbosity <- mkConfigRegU;
-    function Action dbprint(Integer level, Fmt msg);
+instance Table_execute #(ConnectalTypes::ForwardRspT, ForwardParam, 3);
+    function Action table_execute(ConnectalTypes::ForwardRspT resp, MetadataRequest metadata, Vector#(3, FIFOF#(Tuple2#(MetadataRequest, ForwardParam))) fifos);
         action
-        if (cf_verbosity > fromInteger(level)) begin
-            $display("(%0d) " , $time, msg);
-        end
-        endaction
-    endfunction
-    RX #(MetadataRequest) rx_metadata <- mkRX;
-    TX #(MetadataResponse) tx_metadata <- mkTX;
-    let rx_info_metadata = rx_metadata.u;
-    let tx_info_metadata = tx_metadata.u;
-    Vector#(3, FIFOF#(ForwardActionReq)) bbReqFifo <- replicateM(mkFIFOF);
-    Vector#(3, FIFOF#(ForwardActionRsp)) bbRspFifo <- replicateM(mkFIFOF);
-    Vector#(2, FIFOF#(PacketInstance)) packet_ff <- replicateM(mkFIFOF);
-    MatchTable#(28, 256, SizeOf#(ForwardReqT), SizeOf#(ForwardRspT)) matchTable <- mkMatchTable_256_Forward;
-    Vector#(3, Bool) readyBits = map(fifoNotEmpty, bbRspFifo);
-    Bool interruptStatus = False;
-    Bit#(3) readyChannel = -1;
-    for (Integer i=2; i>=0; i=i-1) begin
-        if (readyBits[i]) begin
-            interruptStatus = True;
-            readyChannel = fromInteger(i);
-        end
-    end
-    Vector#(2, FIFOF#(MetadataT)) metadata_ff <- replicateM(mkFIFOF);
-    rule rl_handle_request;
-        let data = rx_info_metadata.first;
-        rx_info_metadata.deq;
-        let meta = data.meta;
-        let pkt = data.pkt;
-        let nhop_ipv4 = fromMaybe(?, meta.nhop_ipv4);
-        ForwardReqT req = ForwardReqT{nhop_ipv4:nhop_ipv4};
-        matchTable.lookupPort.request.put(pack(req));
-        packet_ff[0].enq(pkt);
-        metadata_ff[0].enq(meta);
-    endrule
-    rule rl_execute;
-        let rsp <- matchTable.lookupPort.response.get;
-        let pkt <- toGet(packet_ff[0]).get;
-        let meta <- toGet(metadata_ff[0]).get;
-        if (rsp matches tagged Valid .data) begin
-            ForwardRspT resp = unpack(data);
-            case (resp._action) matches
-                SETDMAC: begin
-                    ForwardActionReq req = tagged SetDmacReqT {dmac: resp.dmac};
-                    bbReqFifo[0].enq(req);
-                end
-                NOACTION3: begin
-                    ForwardActionReq req = tagged NoAction3ReqT {};
-                    bbReqFifo[2].enq(req);
-                end
-            endcase
-        end
-    endrule
-    rule rl_handle_response;
-        let v <- toGet(bbRspFifo[readyChannel]).get;
-        case (v) matches
-            tagged SetDmacRspT {pkt: .pkt, meta: .meta} : begin
-                MetadataResponse rsp = MetadataResponse {pkt: pkt, meta: meta};
-                tx_info_metadata.enq(rsp);
+        case (unpack(resp._action)) matches
+            SETDMAC: begin
+                ForwardParam req = tagged SetDmacReqT {dmac: resp.dmac};
+                fifos[0].enq(tuple2(metadata, req));
             end
-            tagged NoAction3RspT {pkt: .pkt, meta: .meta} : begin
-                MetadataResponse rsp = MetadataResponse {pkt: pkt, meta: meta};
-                tx_info_metadata.enq(rsp);
+            DROP2: begin
+                fifos[1].enq(tuple2(metadata, ?));
+            end
+            NOACTION3: begin
+                fifos[2].enq(tuple2(metadata, ?));
             end
         endcase
-    endrule
-    interface prev_control_state = toServer(rx_metadata.e, tx_metadata.e);
-    interface next_control_state_0 = toClient(bbReqFifo[0], bbRspFifo[0]);
-    interface next_control_state_1 = toClient(bbReqFifo[1], bbRspFifo[1]);
-    interface next_control_state_2 = toClient(bbReqFifo[2], bbRspFifo[2]);
-    method Action set_verbosity(int verbosity);
-        cf_verbosity <= verbosity;
-    endmethod
-endmodule
-typedef struct {
-    Bit#(4) padding;
-    Bit#(32) dstAddr;
-} Ipv4LpmReqT deriving (Bits, Eq, FShow);
+        endaction
+    endfunction
+endinstance
 typedef enum {
     NOACTION4,
     SETNHOP,
-    DROP3
+    DROP1
 } Ipv4LpmActionT deriving (Bits, Eq, FShow);
-typedef struct {
-    Ipv4LpmActionT _action;
-    Bit#(32) nhop_ipv4;
-    Bit#(9) port;
-} Ipv4LpmRspT deriving (Bits, Eq, FShow);
-`ifndef SVDPI
-import "BDPI" function ActionValue#(Bit#(43)) matchtable_read_ipv4_lpm(Bit#(36) msgtype);
-import "BDPI" function Action matchtable_write_ipv4_lpm(Bit#(36) msgtype, Bit#(43) data);
-`endif
-instance MatchTableSim#(1, 36, 43);
-    function ActionValue#(Bit#(43)) matchtable_read(Bit#(1) id, Bit#(36) key);
-    actionvalue
-        let v <- matchtable_read_ipv4_lpm(key);
+`MATCHTABLE_SIM(4, 36, 43, ipv4_lpm)
+typedef Table#(3, MetadataRequest, Ipv4LpmParam, ConnectalTypes::Ipv4LpmReqT, ConnectalTypes::Ipv4LpmRspT) Ipv4LpmTable;
+typedef MatchTable#(4, 256, SizeOf#(ConnectalTypes::Ipv4LpmReqT), SizeOf#(ConnectalTypes::Ipv4LpmRspT)) Ipv4LpmMatchTable;
+`SynthBuildModule1(mkMatchTable, String, Ipv4LpmMatchTable, mkMatchTable_Ipv4Lpm)
+instance Table_request #(ConnectalTypes::Ipv4LpmReqT);
+    function ConnectalTypes::Ipv4LpmReqT table_request(MetadataRequest data);
+        let dstAddr = fromMaybe(?, data.meta.meta.dstAddr);
+        let v = ConnectalTypes::Ipv4LpmReqT {dstAddr: dstAddr, padding: 0};
         return v;
-    endactionvalue
-    endfunction
-    function Action matchtable_write(Bit#(1) id, Bit#(36) key, Bit#(43) data);
-    action
-        matchtable_write_ipv4_lpm(key, data);
-    endaction
     endfunction
 endinstance
-(* synthesize *)
-module mkMatchTable_256_Ipv4Lpm(MatchTable#(1, 256, SizeOf#(Ipv4LpmReqT), SizeOf#(Ipv4LpmRspT)));
-    (* hide *)
-    MatchTable#(1, 256, SizeOf#(Ipv4LpmReqT), SizeOf#(Ipv4LpmRspT)) ifc <- mkMatchTable("ipv4_lpm.dat");
-    return ifc;
-endmodule
-// =============== table ipv4_lpm ==============
-interface Ipv4Lpm;
-    interface Server#(MetadataRequest, MetadataResponse) prev_control_state;
-    interface Client#(Ipv4LpmActionReq, Ipv4LpmActionRsp) next_control_state_0;
-    interface Client#(Ipv4LpmActionReq, Ipv4LpmActionRsp) next_control_state_1;
-    interface Client#(Ipv4LpmActionReq, Ipv4LpmActionRsp) next_control_state_2;
-    method Action set_verbosity(int verbosity);
-endinterface
-(* synthesize *)
-module mkIpv4Lpm (Control::Ipv4Lpm);
-    Reg#(int) cf_verbosity <- mkConfigRegU;
-    function Action dbprint(Integer level, Fmt msg);
+instance Table_execute #(ConnectalTypes::Ipv4LpmRspT, Ipv4LpmParam, 3);
+    function Action table_execute(ConnectalTypes::Ipv4LpmRspT resp, MetadataRequest metadata, Vector#(3, FIFOF#(Tuple2#(MetadataRequest, Ipv4LpmParam))) fifos);
         action
-        if (cf_verbosity > fromInteger(level)) begin
-            $display("(%0d) " , $time, msg);
-        end
-        endaction
-    endfunction
-    RX #(MetadataRequest) rx_metadata <- mkRX;
-    TX #(MetadataResponse) tx_metadata <- mkTX;
-    let rx_info_metadata = rx_metadata.u;
-    let tx_info_metadata = tx_metadata.u;
-    Vector#(3, FIFOF#(Ipv4LpmActionReq)) bbReqFifo <- replicateM(mkFIFOF);
-    Vector#(3, FIFOF#(Ipv4LpmActionRsp)) bbRspFifo <- replicateM(mkFIFOF);
-    Vector#(2, FIFOF#(PacketInstance)) packet_ff <- replicateM(mkFIFOF);
-    MatchTable#(1, 256, SizeOf#(Ipv4LpmReqT), SizeOf#(Ipv4LpmRspT)) matchTable <- mkMatchTable_256_Ipv4Lpm;
-    Vector#(3, Bool) readyBits = map(fifoNotEmpty, bbRspFifo);
-    Bool interruptStatus = False;
-    Bit#(3) readyChannel = -1;
-    for (Integer i=2; i>=0; i=i-1) begin
-        if (readyBits[i]) begin
-            interruptStatus = True;
-            readyChannel = fromInteger(i);
-        end
-    end
-    Vector#(2, FIFOF#(MetadataT)) metadata_ff <- replicateM(mkFIFOF);
-    rule rl_handle_request;
-        let data = rx_info_metadata.first;
-        rx_info_metadata.deq;
-        let meta = data.meta;
-        let pkt = data.pkt;
-        let dstAddr = fromMaybe(?, meta.dstAddr);
-        Ipv4LpmReqT req = Ipv4LpmReqT{dstAddr:dstAddr};
-        matchTable.lookupPort.request.put(pack(req));
-        packet_ff[0].enq(pkt);
-        metadata_ff[0].enq(meta);
-    endrule
-    rule rl_execute;
-        let rsp <- matchTable.lookupPort.response.get;
-        let pkt <- toGet(packet_ff[0]).get;
-        let meta <- toGet(metadata_ff[0]).get;
-        if (rsp matches tagged Valid .data) begin
-            Ipv4LpmRspT resp = unpack(data);
-            case (resp._action) matches
-                SETNHOP: begin
-                    Ipv4LpmActionReq req = tagged SetNhopReqT {nhop_ipv4: resp.nhop_ipv4, port: resp.port};
-                    bbReqFifo[0].enq(req);
-                end
-                NOACTION4: begin
-                    Ipv4LpmActionReq req = tagged NoAction4ReqT {};
-                    bbReqFifo[2].enq(req);
-                end
-            endcase
-        end
-    endrule
-    rule rl_handle_response;
-        let v <- toGet(bbRspFifo[readyChannel]).get;
-        case (v) matches
-            tagged SetNhopRspT {pkt: .pkt, meta: .meta} : begin
-                MetadataResponse rsp = MetadataResponse {pkt: pkt, meta: meta};
-                tx_info_metadata.enq(rsp);
+        case (unpack(resp._action)) matches
+            SETNHOP: begin
+                Ipv4LpmParam req = tagged SetNhopReqT {nhop_ipv4: resp.nhop_ipv4, _port: resp._port};
+                fifos[0].enq(tuple2(metadata, req));
             end
-            tagged NoAction4RspT {pkt: .pkt, meta: .meta} : begin
-                MetadataResponse rsp = MetadataResponse {pkt: pkt, meta: meta};
-                tx_info_metadata.enq(rsp);
+            DROP1: begin
+                fifos[1].enq(tuple2(metadata, ?));
+            end
+            NOACTION4: begin
+                fifos[2].enq(tuple2(metadata, ?));
             end
         endcase
-    endrule
-    interface prev_control_state = toServer(rx_metadata.e, tx_metadata.e);
-    interface next_control_state_0 = toClient(bbReqFifo[0], bbRspFifo[0]);
-    interface next_control_state_1 = toClient(bbReqFifo[1], bbRspFifo[1]);
-    interface next_control_state_2 = toClient(bbReqFifo[2], bbRspFifo[2]);
-    method Action set_verbosity(int verbosity);
-        cf_verbosity <= verbosity;
-    endmethod
-endmodule
-// =============== action NoAction_3 ==============
-interface NoAction3;
-    interface Server#(ForwardActionReq, ForwardActionRsp) prev_control_state;
-    method Action set_verbosity(int verbosity);
-endinterface
-(* synthesize *)
-module mkNoAction3 (NoAction3);
-    Reg#(int) cf_verbosity <- mkConfigRegU;
-    function Action dbprint(Integer level, Fmt msg);
-        action
-        if (cf_verbosity > fromInteger(level)) begin
-            $display("(%0d) " , $time, msg);
-        end
         endaction
     endfunction
-    RX #(ForwardActionReq) rx_prev_control_state <- mkRX;
-    TX #(ForwardActionRsp) tx_prev_control_state <- mkTX;
-    let rx_info_prev_control_state = rx_prev_control_state.u;
-    let tx_info_prev_control_state = tx_prev_control_state.u;
-    interface prev_control_state = toServer(rx_prev_control_state.e, tx_prev_control_state.e);
-    method Action set_verbosity(int verbosity);
-        cf_verbosity <= verbosity;
-    endmethod
-endmodule
-// =============== action NoAction_4 ==============
-interface NoAction4;
-    interface Server#(Ipv4LpmActionReq, Ipv4LpmActionRsp) prev_control_state;
-    method Action set_verbosity(int verbosity);
-endinterface
-(* synthesize *)
-module mkNoAction4 (NoAction4);
-    Reg#(int) cf_verbosity <- mkConfigRegU;
-    function Action dbprint(Integer level, Fmt msg);
-        action
-        if (cf_verbosity > fromInteger(level)) begin
-            $display("(%0d) " , $time, msg);
-        end
-        endaction
-    endfunction
-    RX #(Ipv4LpmActionReq) rx_prev_control_state <- mkRX;
-    TX #(Ipv4LpmActionRsp) tx_prev_control_state <- mkTX;
-    let rx_info_prev_control_state = rx_prev_control_state.u;
-    let tx_info_prev_control_state = tx_prev_control_state.u;
-    interface prev_control_state = toServer(rx_prev_control_state.e, tx_prev_control_state.e);
-    method Action set_verbosity(int verbosity);
-        cf_verbosity <= verbosity;
-    endmethod
-endmodule
+endinstance
+typedef Engine#(1, MetadataRequest, ForwardParam) NoAction3Action;
+typedef Engine#(1, MetadataRequest, Ipv4LpmParam) NoAction4Action;
 // mark_to_drop 
-// =============== action _drop_2 ==============
-interface Drop2;
-    interface Server#(ForwardActionReq, ForwardActionRsp) prev_control_state;
-    method Action set_verbosity(int verbosity);
-endinterface
-(* synthesize *)
-module mkDrop2 (Drop2);
-    Reg#(int) cf_verbosity <- mkConfigRegU;
-    function Action dbprint(Integer level, Fmt msg);
-        action
-        if (cf_verbosity > fromInteger(level)) begin
-            $display("(%0d) " , $time, msg);
-        end
-        endaction
+typedef Engine#(1, MetadataRequest, Ipv4LpmParam) Drop1Action;
+// mark_to_drop 
+typedef Engine#(1, MetadataRequest, ForwardParam) Drop2Action;
+// INST (48) <Path>(10585):hdr.ethernet.dstAddr; = <Path>(10588):dmac;
+typedef Engine#(1, MetadataRequest, ForwardParam) SetDmacAction;
+instance Action_execute #(ForwardParam);
+    function ActionValue#(MetadataRequest) step_1 (MetadataRequest meta, ForwardParam param);
+        actionvalue
+            $display("(%0d) step 1: ", $time, fshow(meta));
+            return meta;
+        endactionvalue
     endfunction
-    RX #(ForwardActionReq) rx_prev_control_state <- mkRX;
-    TX #(ForwardActionRsp) tx_prev_control_state <- mkTX;
-    let rx_info_prev_control_state = rx_prev_control_state.u;
-    let tx_info_prev_control_state = tx_prev_control_state.u;
-    rule drop;
-        let v = rx_info_prev_control_state.first;
-        rx_info_prev_control_state.deq;
-    endrule
-    FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;
-    interface prev_control_state = toServer(rx_prev_control_state.e, tx_prev_control_state.e);
-    method Action set_verbosity(int verbosity);
-        cf_verbosity <= verbosity;
-    endmethod
-endmodule
-// <Path>(54262):hdr.ethernet.dstAddr; = <Path>(54266):dmac;
-// =============== action set_dmac ==============
-interface SetDmac;
-    interface Server#(ForwardActionReq, ForwardActionRsp) prev_control_state;
-    method Action set_verbosity(int verbosity);
-endinterface
-(* synthesize *)
-module mkSetDmac (SetDmac);
-    Reg#(int) cf_verbosity <- mkConfigRegU;
-    function Action dbprint(Integer level, Fmt msg);
-        action
-        if (cf_verbosity > fromInteger(level)) begin
-            $display("(%0d) " , $time, msg);
-        end
-        endaction
+endinstance
+// INST (32) <Path>(10619):meta.routing_metadata.nhop_ipv4; = <Path>(10622):nhop_ipv4;
+// INST (9) <Path>(10627):standard_metadata.egress_port; = <Path>(10630):_port;
+// INST (8) <Path>(10636):hdr.ipv4.ttl; = <Path>(10636):hdr.ipv4.ttl + 255;
+typedef Engine#(1, MetadataRequest, Ipv4LpmParam) SetNhopAction;
+instance Action_execute #(Ipv4LpmParam);
+    function ActionValue#(MetadataRequest) step_1 (MetadataRequest meta, Ipv4LpmParam param);
+        actionvalue
+            $display("(%0d) step 1: ", $time, fshow(meta));
+            return meta;
+        endactionvalue
     endfunction
-    RX #(ForwardActionReq) rx_prev_control_state <- mkRX;
-    TX #(ForwardActionRsp) tx_prev_control_state <- mkTX;
-    let rx_info_prev_control_state = rx_prev_control_state.u;
-    let tx_info_prev_control_state = tx_prev_control_state.u;
-    Reg#(MetadataT) metadata <- mkReg(defaultValue);
-    FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;
-    Reg#(Bit#(64)) temp <- mkReg(0);
-    CPU cpu <- mkCPU("set_dmac", list1(temp));
-    IMem imem <- mkIMem("set_dmac.hex");
-    mkConnection(cpu.imem_client, imem.cpu_server);
-    rule rl_cpu_request if (cpu.not_running());
-        let v = rx_info_prev_control_state.first;
-        rx_info_prev_control_state.deq;
-        case (v) matches
-           tagged SetDmacReqT {pkt: .pkt, meta: .meta, dmac: .dmac} : begin
-             metadata <= meta;
-           end
-        endcase
-        cpu.run();
-    endrule
-    rule rl_cpu_resp if (cpu.not_running());
-        let pkt <- toGet(curr_packet_ff).get;
-        ForwardActionRsp rsp = tagged SetDmacRspT {meta : metadata};
-        tx_info_prev_control_state.enq(rsp);
-    endrule
-    interface prev_control_state = toServer(rx_prev_control_state.e, tx_prev_control_state.e);
-    method Action set_verbosity(int verbosity);
-        cf_verbosity <= verbosity;
-        cpu.set_verbosity(verbosity);
-        imem.set_verbosity(verbosity);
-    endmethod
-endmodule
-// <Path>(54310):meta.routing_metadata.nhop_ipv4; = <Path>(54314):nhop_ipv4;
-// <Path>(54320):standard_metadata.egress_port; = <Path>(54324):port;
-// <Path>(54331):hdr.ipv4.ttl; = <Path>(54331):hdr.ipv4.ttl + 255;
-// =============== action set_nhop ==============
-interface SetNhop;
-    interface Server#(Ipv4LpmActionReq, Ipv4LpmActionRsp) prev_control_state;
-    method Action set_verbosity(int verbosity);
-endinterface
-(* synthesize *)
-module mkSetNhop (SetNhop);
-    Reg#(int) cf_verbosity <- mkConfigRegU;
-    function Action dbprint(Integer level, Fmt msg);
-        action
-        if (cf_verbosity > fromInteger(level)) begin
-            $display("(%0d) " , $time, msg);
-        end
-        endaction
-    endfunction
-    RX #(Ipv4LpmActionReq) rx_prev_control_state <- mkRX;
-    TX #(Ipv4LpmActionRsp) tx_prev_control_state <- mkTX;
-    let rx_info_prev_control_state = rx_prev_control_state.u;
-    let tx_info_prev_control_state = tx_prev_control_state.u;
-    FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;
-    Reg#(MetadataT) meta <- mkReg(defaultValue);
-    Reg#(Bit#(64)) temp <- mkReg(0);
-    CPU cpu <- mkCPU("set_nhop", list1(temp));
-    IMem imem <- mkIMem("set_nhop.hex");
-    mkConnection(cpu.imem_client, imem.cpu_server);
-    rule rl_cpu_request if (cpu.not_running());
-        let v = rx_info_prev_control_state.first;
-        rx_info_prev_control_state.deq;
-    endrule
-    rule rl_cpu_resp if (cpu.not_running());
-        let pkt <- toGet(curr_packet_ff).get;
-        Ipv4LpmActionRsp rsp = tagged SetNhopRspT {pkt: pkt, meta: meta};
-        tx_info_prev_control_state.enq(rsp);
-    endrule
-    interface prev_control_state = toServer(rx_prev_control_state.e, tx_prev_control_state.e);
-    method Action set_verbosity(int verbosity);
-        cf_verbosity <= verbosity;
-        cpu.set_verbosity(verbosity);
-        imem.set_verbosity(verbosity);
-    endmethod
-endmodule
+endinstance
 // =============== control ingress ==============
 interface Ingress;
-    interface Client#(MetadataRequest, MetadataResponse) next;
-    interface MemFreeClient freeClient;
+    interface PipeIn#(MetadataRequest) prev;
+    interface PipeOut#(MetadataRequest) next;
+    method Action forward_add_entry(ConnectalTypes::ForwardReqT key, ConnectalTypes::ForwardRspT value);
+    method Action ipv4_lpm_add_entry(ConnectalTypes::Ipv4LpmReqT key, ConnectalTypes::Ipv4LpmRspT value);
     method Action set_verbosity(int verbosity);
 endinterface
-module mkIngress #(Vector#(numClients, Client#(MetadataRequest, MetadataResponse)) mdc) (Ingress);
-    Reg#(int) cf_verbosity <- mkConfigRegU;
-    function Action dbprint(Integer level, Fmt msg);
-        action
-        if (cf_verbosity > fromInteger(level)) begin
-            $display("(%0d) " , $time, msg);
-        end
-        endaction
-    endfunction
-    Control::NoAction3 noAction3 <- mkNoAction3();
-    Control::NoAction4 noAction4 <- mkNoAction4();
-    Control::Drop2 drop2 <- mkDrop2();
-    Control::SetDmac setdmac <- mkSetDmac();
-    Control::SetNhop setnhop <- mkSetNhop();
-    Control::Forward forward <- mkForward();
-    Control::Ipv4Lpm ipv4_lpm <- mkIpv4Lpm();
+module mkIngress (Ingress);
+    `PRINT_DEBUG_MSG
     FIFOF#(MetadataRequest) entry_req_ff <- mkFIFOF;
-    FIFOF#(MetadataResponse) entry_rsp_ff <- mkFIFOF;
+    FIFOF#(MetadataRequest) entry_rsp_ff <- mkFIFOF;
     FIFOF#(MetadataRequest) forward_req_ff <- mkFIFOF;
-    FIFOF#(MetadataResponse) forward_rsp_ff <- mkFIFOF;
-    FIFOF#(MetadataRequest) node_2_req_ff <- mkFIFOF;
-    FIFOF#(MetadataResponse) node_2_rsp_ff <- mkFIFOF;
+    FIFOF#(MetadataRequest) forward_rsp_ff <- mkFIFOF;
     FIFOF#(MetadataRequest) ipv4_lpm_req_ff <- mkFIFOF;
-    FIFOF#(MetadataResponse) ipv4_lpm_rsp_ff <- mkFIFOF;
+    FIFOF#(MetadataRequest) ipv4_lpm_rsp_ff <- mkFIFOF;
+    FIFOF#(MetadataRequest) node_2_req_ff <- mkFIFOF;
     FIFOF#(MetadataRequest) exit_req_ff <- mkFIFOF;
-    FIFOF#(MetadataResponse) exit_rsp_ff <- mkFIFOF;
-    PulseWire w_node_2 <- mkPulseWire;
-    Vector#(numClients, Server#(MetadataRequest, MetadataResponse)) mds = replicate(toServer(entry_req_ff, entry_rsp_ff));
-    mkConnection(mds, mdc);
+    FIFOF#(MetadataRequest) exit_rsp_ff <- mkFIFOF;
+    Control::NoAction3Action noAction3_action <- mkEngine(toList(vec(step_1)));
+    Control::NoAction4Action noAction4_action <- mkEngine(toList(vec(step_1)));
+    Control::Drop1Action drop1_action <- mkEngine(toList(vec(step_1)));
+    Control::Drop2Action drop2_action <- mkEngine(toList(vec(step_1)));
+    Control::SetDmacAction setdmac_action <- mkEngine(toList(vec(step_1)));
+    Control::SetNhopAction setnhop_action <- mkEngine(toList(vec(step_1)));
+    ForwardMatchTable forward_table <- mkMatchTable_Forward("forward");
+    Control::ForwardTable forward <- mkTable(table_request, table_execute, forward_table);
+    messageM(printType(typeOf(forward_table)));
+    messageM(printType(typeOf(forward)));
+    Ipv4LpmMatchTable ipv4_lpm_table <- mkMatchTable_Ipv4Lpm("ipv4_lpm");
+    Control::Ipv4LpmTable ipv4_lpm <- mkTable(table_request, table_execute, ipv4_lpm_table);
+    messageM(printType(typeOf(ipv4_lpm_table)));
+    messageM(printType(typeOf(ipv4_lpm)));
     mkConnection(toClient(forward_req_ff, forward_rsp_ff), forward.prev_control_state);
-    mkChan(mkFIFOF, mkFIFOF, forward.next_control_state_0, setdmac.prev_control_state);
-    mkChan(mkFIFOF, mkFIFOF, forward.next_control_state_1, drop2.prev_control_state);
-    mkChan(mkFIFOF, mkFIFOF, forward.next_control_state_2, noAction3.prev_control_state);
+    mkConnection(forward.next_control_state[0], setdmac_action.prev_control_state);
+    mkConnection(forward.next_control_state[1], drop2_action.prev_control_state);
+    mkConnection(forward.next_control_state[2], noAction3_action.prev_control_state);
     mkConnection(toClient(ipv4_lpm_req_ff, ipv4_lpm_rsp_ff), ipv4_lpm.prev_control_state);
-    mkChan(mkFIFOF, mkFIFOF, ipv4_lpm.next_control_state_0, setnhop.prev_control_state);
-    mkChan(mkFIFOF, mkFIFOF, ipv4_lpm.next_control_state_2, noAction4.prev_control_state);
+    mkConnection(ipv4_lpm.next_control_state[0], setnhop_action.prev_control_state);
+    mkConnection(ipv4_lpm.next_control_state[1], drop1_action.prev_control_state);
+    mkConnection(ipv4_lpm.next_control_state[2], noAction4_action.prev_control_state);
     rule rl_entry if (entry_req_ff.notEmpty);
         entry_req_ff.deq;
         let _req = entry_req_ff.first;
@@ -467,17 +154,19 @@ module mkIngress #(Vector#(numClients, Client#(MetadataRequest, MetadataResponse
         let pkt = _req.pkt;
         MetadataRequest req = MetadataRequest {pkt: pkt, meta: meta};
         node_2_req_ff.enq(req);
+        dbprint(3, $format("node_2", fshow(meta)));
     endrule
-    rule rl_node_2 if (w_node_2);
+    rule rl_node_2 if (node_2_req_ff.notEmpty);
         node_2_req_ff.deq;
         let _req = node_2_req_ff.first;
         let meta = _req.meta;
-        let hdr$ipv4$ttl = fromMaybe(?, meta.ipv4$ttl);
-        if (meta.ipv4 matches tagged Forward &&& (hdr$ipv4$ttl > 0)) begin
+        if (meta.hdr.ipv4 matches tagged Valid .h &&& h.hdr.ttl > 0) begin
             ipv4_lpm_req_ff.enq(_req);
+            dbprint(3, $format("node_2 true", fshow(meta)));
         end
         else begin
             exit_req_ff.enq(_req);
+            dbprint(3, $format("node_2 false", fshow(meta)));
         end
     endrule
     rule rl_ipv4_lpm if (ipv4_lpm_rsp_ff.notEmpty);
@@ -489,6 +178,7 @@ module mkIngress #(Vector#(numClients, Client#(MetadataRequest, MetadataResponse
             default: begin
                 MetadataRequest req = MetadataRequest { pkt : pkt, meta : meta};
                 forward_req_ff.enq(req);
+                dbprint(3, $format("default ", fshow(meta)));
             end
         endcase
     endrule
@@ -501,272 +191,93 @@ module mkIngress #(Vector#(numClients, Client#(MetadataRequest, MetadataResponse
             default: begin
                 MetadataRequest req = MetadataRequest { pkt : pkt, meta : meta};
                 exit_req_ff.enq(req);
+                dbprint(3, $format("default ", fshow(meta)));
             end
         endcase
     endrule
-    rule rl_exit if (exit_req_ff.notEmpty);
-        exit_req_ff.deq;
-    endrule
+    interface prev = toPipeIn(entry_req_ff);
+    interface next = toPipeOut(exit_req_ff);
+    method forward_add_entry = forward.add_entry;
+    method ipv4_lpm_add_entry = ipv4_lpm.add_entry;
+    method Action set_verbosity (int verbosity);
+        cf_verbosity <= verbosity;
+        forward.set_verbosity(verbosity);
+        ipv4_lpm.set_verbosity(verbosity);
+    endmethod
 endmodule
-import StructDefines::*;
-import UnionDefines::*;
-import CPU::*;
-import IMem::*;
-import List::*;
-typedef struct {
-    Bit#(9) egress_port;
-} SendFrameReqT deriving (Bits, Eq, FShow);
 typedef enum {
     NOACTION2,
     REWRITEMAC,
-    DROP
+    DROP3
 } SendFrameActionT deriving (Bits, Eq, FShow);
-typedef struct {
-    SendFrameActionT _action;
-    Bit#(48) smac;
-} SendFrameRspT deriving (Bits, Eq, FShow);
-`ifndef SVDPI
-import "BDPI" function ActionValue#(Bit#(50)) matchtable_read_send_frame(Bit#(9) msgtype);
-import "BDPI" function Action matchtable_write_send_frame(Bit#(9) msgtype, Bit#(50) data);
-`endif
-instance MatchTableSim#(14, 9, 50);
-    function ActionValue#(Bit#(50)) matchtable_read(Bit#(14) id, Bit#(9) key);
-    actionvalue
-        let v <- matchtable_read_send_frame(key);
+`MATCHTABLE_SIM(16, 9, 50, send_frame)
+typedef Table#(3, MetadataRequest, SendFrameParam, ConnectalTypes::SendFrameReqT, ConnectalTypes::SendFrameRspT) SendFrameTable;
+typedef MatchTable#(16, 256, SizeOf#(ConnectalTypes::SendFrameReqT), SizeOf#(ConnectalTypes::SendFrameRspT)) SendFrameMatchTable;
+`SynthBuildModule1(mkMatchTable, String, SendFrameMatchTable, mkMatchTable_SendFrame)
+instance Table_request #(ConnectalTypes::SendFrameReqT);
+    function ConnectalTypes::SendFrameReqT table_request(MetadataRequest data);
+        let egress_port = fromMaybe(?, data.meta.meta.egress_port);
+        let v = ConnectalTypes::SendFrameReqT {egress_port: egress_port};
         return v;
-    endactionvalue
-    endfunction
-    function Action matchtable_write(Bit#(14) id, Bit#(9) key, Bit#(50) data);
-    action
-        matchtable_write_send_frame(key, data);
-    endaction
     endfunction
 endinstance
-(* synthesize *)
-module mkMatchTable_256_SendFrame(MatchTable#(14, 256, SizeOf#(SendFrameReqT), SizeOf#(SendFrameRspT)));
-    (* hide *)
-    MatchTable#(14, 256, SizeOf#(SendFrameReqT), SizeOf#(SendFrameRspT)) ifc <- mkMatchTable("send_frame.dat");
-    return ifc;
-endmodule
-// =============== table send_frame ==============
-interface SendFrame;
-    interface Server#(MetadataRequest, MetadataResponse) prev_control_state;
-    interface Client#(SendFrameActionReq, SendFrameActionRsp) next_control_state_0;
-    interface Client#(SendFrameActionReq, SendFrameActionRsp) next_control_state_1;
-    interface Client#(SendFrameActionReq, SendFrameActionRsp) next_control_state_2;
-    method Action set_verbosity(int verbosity);
-endinterface
-(* synthesize *)
-module mkSendFrame (Control::SendFrame);
-    Reg#(int) cf_verbosity <- mkConfigRegU;
-    function Action dbprint(Integer level, Fmt msg);
+instance Table_execute #(ConnectalTypes::SendFrameRspT, SendFrameParam, 3);
+    function Action table_execute(ConnectalTypes::SendFrameRspT resp, MetadataRequest metadata, Vector#(3, FIFOF#(Tuple2#(MetadataRequest, SendFrameParam))) fifos);
         action
-        if (cf_verbosity > fromInteger(level)) begin
-            $display("(%0d) " , $time, msg);
-        end
-        endaction
-    endfunction
-    RX #(MetadataRequest) rx_metadata <- mkRX;
-    TX #(MetadataResponse) tx_metadata <- mkTX;
-    let rx_info_metadata = rx_metadata.u;
-    let tx_info_metadata = tx_metadata.u;
-    Vector#(3, FIFOF#(SendFrameActionReq)) bbReqFifo <- replicateM(mkFIFOF);
-    Vector#(3, FIFOF#(SendFrameActionRsp)) bbRspFifo <- replicateM(mkFIFOF);
-    Vector#(2, FIFOF#(PacketInstance)) packet_ff <- replicateM(mkFIFOF);
-    MatchTable#(14, 256, SizeOf#(SendFrameReqT), SizeOf#(SendFrameRspT)) matchTable <- mkMatchTable_256_SendFrame;
-    Vector#(3, Bool) readyBits = map(fifoNotEmpty, bbRspFifo);
-    Bool interruptStatus = False;
-    Bit#(3) readyChannel = -1;
-    for (Integer i=2; i>=0; i=i-1) begin
-        if (readyBits[i]) begin
-            interruptStatus = True;
-            readyChannel = fromInteger(i);
-        end
-    end
-    Vector#(2, FIFOF#(MetadataT)) metadata_ff <- replicateM(mkFIFOF);
-    rule rl_handle_request;
-        let data = rx_info_metadata.first;
-        rx_info_metadata.deq;
-        let meta = data.meta;
-        let pkt = data.pkt;
-        let egress_port = fromMaybe(?, meta.egress_port);
-        SendFrameReqT req = SendFrameReqT{egress_port:egress_port};
-        matchTable.lookupPort.request.put(pack(req));
-        packet_ff[0].enq(pkt);
-        metadata_ff[0].enq(meta);
-    endrule
-    rule rl_execute;
-        let rsp <- matchTable.lookupPort.response.get;
-        let pkt <- toGet(packet_ff[0]).get;
-        let meta <- toGet(metadata_ff[0]).get;
-        if (rsp matches tagged Valid .data) begin
-            SendFrameRspT resp = unpack(data);
-            case (resp._action) matches
-                REWRITEMAC: begin
-                    SendFrameActionReq req = tagged RewriteMacReqT {pkt: pkt, meta: meta, smac: resp.smac};
-                    bbReqFifo[0].enq(req);
-                end
-                DROP: begin
-                    SendFrameActionReq req = tagged DropReqT {};
-                    bbReqFifo[1].enq(req);
-                end
-                NOACTION2: begin
-                    SendFrameActionReq req = tagged NoAction2ReqT {};
-                    bbReqFifo[2].enq(req);
-                end
-            endcase
-        end
-    endrule
-    rule rl_handle_response;
-        let v <- toGet(bbRspFifo[readyChannel]).get;
-        case (v) matches
-            tagged RewriteMacRspT {pkt: .pkt, meta: .meta} : begin
-                MetadataResponse rsp = MetadataResponse {pkt: pkt, meta: meta};
-                tx_info_metadata.enq(rsp);
+        case (unpack(resp._action)) matches
+            REWRITEMAC: begin
+                SendFrameParam req = tagged RewriteMacReqT {smac: resp.smac};
+                fifos[0].enq(tuple2(metadata, req));
             end
-            tagged DropRspT {} : begin
+            DROP3: begin
+                fifos[1].enq(tuple2(metadata, ?));
             end
-            tagged NoAction2RspT {pkt: .pkt, meta: .meta} : begin
-                MetadataResponse rsp = MetadataResponse {pkt: pkt, meta: meta};
-                tx_info_metadata.enq(rsp);
+            NOACTION2: begin
+                fifos[2].enq(tuple2(metadata, ?));
             end
         endcase
-    endrule
-    interface prev_control_state = toServer(rx_metadata.e, tx_metadata.e);
-    interface next_control_state_0 = toClient(bbReqFifo[0], bbRspFifo[0]);
-    interface next_control_state_1 = toClient(bbReqFifo[1], bbRspFifo[1]);
-    interface next_control_state_2 = toClient(bbReqFifo[2], bbRspFifo[2]);
-    method Action set_verbosity(int verbosity);
-        cf_verbosity <= verbosity;
-    endmethod
-endmodule
-// =============== action NoAction_2 ==============
-interface NoAction2;
-    interface Server#(SendFrameActionReq, SendFrameActionRsp) prev_control_state;
-    method Action set_verbosity(int verbosity);
-endinterface
-(* synthesize *)
-module mkNoAction2 (NoAction2);
-    Reg#(int) cf_verbosity <- mkConfigRegU;
-    function Action dbprint(Integer level, Fmt msg);
-        action
-        if (cf_verbosity > fromInteger(level)) begin
-            $display("(%0d) " , $time, msg);
-        end
         endaction
     endfunction
-    RX #(SendFrameActionReq) rx_prev_control_state <- mkRX;
-    TX #(SendFrameActionRsp) tx_prev_control_state <- mkTX;
-    let rx_info_prev_control_state = rx_prev_control_state.u;
-    let tx_info_prev_control_state = tx_prev_control_state.u;
-    interface prev_control_state = toServer(rx_prev_control_state.e, tx_prev_control_state.e);
-    method Action set_verbosity(int verbosity);
-        cf_verbosity <= verbosity;
-    endmethod
-endmodule
+endinstance
+typedef Engine#(1, MetadataRequest, SendFrameParam) NoAction2Action;
 // mark_to_drop 
-// =============== action _drop ==============
-interface Drop;
-    interface Server#(SendFrameActionReq, SendFrameActionRsp) prev_control_state;
-    method Action set_verbosity(int verbosity);
-endinterface
-(* synthesize *)
-module mkDrop (Drop);
-    Reg#(int) cf_verbosity <- mkConfigRegU;
-    function Action dbprint(Integer level, Fmt msg);
-        action
-        if (cf_verbosity > fromInteger(level)) begin
-            $display("(%0d) " , $time, msg);
-        end
-        endaction
+typedef Engine#(1, MetadataRequest, SendFrameParam) Drop3Action;
+// INST (48) <Path>(10551):hdr.ethernet.srcAddr; = <Path>(10554):smac;
+typedef Engine#(1, MetadataRequest, SendFrameParam) RewriteMacAction;
+instance Action_execute #(SendFrameParam);
+    function ActionValue#(MetadataRequest) step_1 (MetadataRequest meta, SendFrameParam param);
+        actionvalue
+            $display("(%0d) step 1: ", $time, fshow(meta));
+            return meta;
+        endactionvalue
     endfunction
-    RX #(SendFrameActionReq) rx_prev_control_state <- mkRX;
-    TX #(SendFrameActionRsp) tx_prev_control_state <- mkTX;
-    let rx_info_prev_control_state = rx_prev_control_state.u;
-    let tx_info_prev_control_state = tx_prev_control_state.u;
-    rule drop;
-        let v = rx_info_prev_control_state.first;
-        rx_info_prev_control_state.deq;
-    endrule
-    FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;
-    interface prev_control_state = toServer(rx_prev_control_state.e, tx_prev_control_state.e);
-    method Action set_verbosity(int verbosity);
-        cf_verbosity <= verbosity;
-    endmethod
-endmodule
-// <Path>(54214):hdr.ethernet.srcAddr; = <Path>(54218):smac;
-// =============== action rewrite_mac ==============
-interface RewriteMac;
-    interface Server#(SendFrameActionReq, SendFrameActionRsp) prev_control_state;
-    method Action set_verbosity(int verbosity);
-endinterface
-(* synthesize *)
-module mkRewriteMac (RewriteMac);
-    Reg#(int) cf_verbosity <- mkConfigRegU;
-    function Action dbprint(Integer level, Fmt msg);
-        action
-        if (cf_verbosity > fromInteger(level)) begin
-            $display("(%0d) " , $time, msg);
-        end
-        endaction
-    endfunction
-    RX #(SendFrameActionReq) rx_prev_control_state <- mkRX;
-    TX #(SendFrameActionRsp) tx_prev_control_state <- mkTX;
-    let rx_info_prev_control_state = rx_prev_control_state.u;
-    let tx_info_prev_control_state = tx_prev_control_state.u;
-    FIFOF#(PacketInstance) curr_packet_ff <- mkFIFOF;
-    Reg#(MetadataT) meta <- mkReg(defaultValue);
-    Reg#(Bit#(64)) temp <- mkReg(0);
-    CPU cpu <- mkCPU("rewrite_dmac", list1(temp));
-    IMem imem <- mkIMem("rewrite_mac.hex");
-    mkConnection(cpu.imem_client, imem.cpu_server);
-    rule rl_cpu_request if (cpu.not_running());
-        let v = rx_info_prev_control_state.first;
-        rx_info_prev_control_state.deq;
-    endrule
-    rule rl_cpu_resp if (cpu.not_running());
-        let pkt <- toGet(curr_packet_ff).get;
-        SendFrameActionRsp rsp = tagged RewriteMacRspT {pkt: pkt, meta: meta};
-        tx_info_prev_control_state.enq(rsp);
-    endrule
-    interface prev_control_state = toServer(rx_prev_control_state.e, tx_prev_control_state.e);
-    method Action set_verbosity(int verbosity);
-        cf_verbosity <= verbosity;
-        cpu.set_verbosity(verbosity);
-        imem.set_verbosity(verbosity);
-    endmethod
-endmodule
+endinstance
 // =============== control egress ==============
 interface Egress;
-    interface Client#(MetadataRequest, MetadataResponse) next;
-    interface MemFreeClient freeClient;
+    interface PipeIn#(MetadataRequest) prev;
+    interface PipeOut#(MetadataRequest) next;
+    method Action send_frame_add_entry(ConnectalTypes::SendFrameReqT key, ConnectalTypes::SendFrameRspT value);
     method Action set_verbosity(int verbosity);
 endinterface
-module mkEgress #(Vector#(numClients, Client#(MetadataRequest, MetadataResponse)) mdc) (Egress);
-    Reg#(int) cf_verbosity <- mkConfigRegU;
-    function Action dbprint(Integer level, Fmt msg);
-        action
-        if (cf_verbosity > fromInteger(level)) begin
-            $display("(%0d) " , $time, msg);
-        end
-        endaction
-    endfunction
-    Control::NoAction2 noAction2 <- mkNoAction2();
-    Control::Drop drop <- mkDrop();
-    Control::RewriteMac rewritemac <- mkRewriteMac();
-    Control::SendFrame send_frame <- mkSendFrame();
+module mkEgress (Egress);
+    `PRINT_DEBUG_MSG
     FIFOF#(MetadataRequest) entry_req_ff <- mkFIFOF;
-    FIFOF#(MetadataResponse) entry_rsp_ff <- mkFIFOF;
+    FIFOF#(MetadataRequest) entry_rsp_ff <- mkFIFOF;
     FIFOF#(MetadataRequest) send_frame_req_ff <- mkFIFOF;
-    FIFOF#(MetadataResponse) send_frame_rsp_ff <- mkFIFOF;
+    FIFOF#(MetadataRequest) send_frame_rsp_ff <- mkFIFOF;
     FIFOF#(MetadataRequest) exit_req_ff <- mkFIFOF;
-    FIFOF#(MetadataResponse) exit_rsp_ff <- mkFIFOF;
-    Vector#(numClients, Server#(MetadataRequest, MetadataResponse)) mds = replicate(toServer(entry_req_ff, entry_rsp_ff));
-    mkConnection(mds, mdc);
+    FIFOF#(MetadataRequest) exit_rsp_ff <- mkFIFOF;
+    Control::NoAction2Action noAction2_action <- mkEngine(toList(vec(step_1)));
+    Control::Drop3Action drop3_action <- mkEngine(toList(vec(step_1)));
+    Control::RewriteMacAction rewritemac_action <- mkEngine(toList(vec(step_1)));
+    SendFrameMatchTable send_frame_table <- mkMatchTable_SendFrame("send_frame");
+    Control::SendFrameTable send_frame <- mkTable(table_request, table_execute, send_frame_table);
+    messageM(printType(typeOf(send_frame_table)));
+    messageM(printType(typeOf(send_frame)));
     mkConnection(toClient(send_frame_req_ff, send_frame_rsp_ff), send_frame.prev_control_state);
-    mkChan(mkFIFOF, mkFIFOF, send_frame.next_control_state_0, rewritemac.prev_control_state);
-    mkChan(mkFIFOF, mkFIFOF, send_frame.next_control_state_1, drop.prev_control_state);
-    mkChan(mkFIFOF, mkFIFOF, send_frame.next_control_state_2, noAction2.prev_control_state);
+    mkConnection(send_frame.next_control_state[0], rewritemac_action.prev_control_state);
+    mkConnection(send_frame.next_control_state[1], drop3_action.prev_control_state);
+    mkConnection(send_frame.next_control_state[2], noAction2_action.prev_control_state);
     rule rl_entry if (entry_req_ff.notEmpty);
         entry_req_ff.deq;
         let _req = entry_req_ff.first;
@@ -774,6 +285,7 @@ module mkEgress #(Vector#(numClients, Client#(MetadataRequest, MetadataResponse)
         let pkt = _req.pkt;
         MetadataRequest req = MetadataRequest {pkt: pkt, meta: meta};
         send_frame_req_ff.enq(req);
+        dbprint(3, $format("send_frame", fshow(meta)));
     endrule
     rule rl_send_frame if (send_frame_rsp_ff.notEmpty);
         send_frame_rsp_ff.deq;
@@ -784,10 +296,15 @@ module mkEgress #(Vector#(numClients, Client#(MetadataRequest, MetadataResponse)
             default: begin
                 MetadataRequest req = MetadataRequest { pkt : pkt, meta : meta};
                 exit_req_ff.enq(req);
+                dbprint(3, $format("default ", fshow(meta)));
             end
         endcase
     endrule
-    rule rl_exit if (exit_req_ff.notEmpty);
-        exit_req_ff.deq;
-    endrule
+    interface prev = toPipeIn(entry_req_ff);
+    interface next = toPipeOut(exit_req_ff);
+    method send_frame_add_entry = send_frame.add_entry;
+    method Action set_verbosity (int verbosity);
+        cf_verbosity <= verbosity;
+        send_frame.set_verbosity(verbosity);
+    endmethod
 endmodule

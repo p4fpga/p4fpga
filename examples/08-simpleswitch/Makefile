@@ -3,11 +3,6 @@ P4FILE=p4src/simple_router.p4
 CONNECTALDIR?=$(DEV_ROOT)/connectal
 P4FPGADIR?=$(DEV_ROOT)/p4fpga
 
-CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/bsv/library
-CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/bsv/datapath
-CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/bsv/infra
-#CONNECTALFLAGS += --bsvpath=generatedbsv
-
 CONNECTALFLAGS += -D PARSER=Parser
 CONNECTALFLAGS += -D DEPARSER=Deparser
 CONNECTALFLAGS += -D MATCHTABLE=Control
