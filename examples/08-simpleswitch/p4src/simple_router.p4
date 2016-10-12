@@ -102,9 +102,9 @@ header_type routing_metadata_t {
 
 metadata routing_metadata_t routing_metadata;
 
-action set_nhop(nhop_ipv4, port) {
+action set_nhop(nhop_ipv4, _port) {
     modify_field(routing_metadata.nhop_ipv4, nhop_ipv4);
-    modify_field(standard_metadata.egress_port, port);
+    modify_field(standard_metadata.egress_port, _port);
     add_to_field(ipv4.ttl, -1);
 }
 
