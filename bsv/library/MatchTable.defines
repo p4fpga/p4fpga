@@ -1,0 +1,17 @@
+`define MATCHTABLE_SIM(ID, KEYSZ, VALSZ, sfx) \
+import "BDPI" function ActionValue#(Bit#(VALSZ)) matchtable_read_`` sfx (Bit#(KEYSZ) msgtype); \
+import "BDPI" function Action matchtable_write_`` sfx (Bit#(KEYSZ) msgtype, Bit#(VALSZ) data); \
+instance MatchTableSim#(ID, KEYSZ, VALSZ); \
+    function ActionValue#(Bit#(VALSZ)) matchtable_read(Bit#(ID) id, Bit#(KEYSZ) key); \
+    actionvalue \
+        let v <- matchtable_read_`` sfx (key); \
+        return v; \
+    endactionvalue \
+    endfunction \
+    function Action matchtable_write(Bit#(ID) id, Bit#(KEYSZ) key, Bit#(VALSZ) data); \
+    action \
+        matchtable_write_`` sfx (key, data); \
+    endaction \
+    endfunction \
+endinstance
+

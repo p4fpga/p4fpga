@@ -5,6 +5,10 @@ SONICDIR?=$(DEV_ROOT)/sonic-lite
 P4EXAMPLEDIR=$(SONICDIR)/p4
 P4FPGADIR?=$(DEV_ROOT)/p4fpga
 
+CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/bsv/library
+CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/bsv/datapath
+CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/bsv/infra
+
 CONNECTALFLAGS += -D PARSER=Parser
 CONNECTALFLAGS += -D DEPARSER=Deparser
 CONNECTALFLAGS += -D MATCHTABLE=Control
@@ -27,5 +31,5 @@ run-thru:
 
 include ../Makefile.common
 BSVFILES+=generatedbsv/ConnectalTypes.bsv
-BSVFILES+=$(SONICDIR)/hw/bsv/DbgDefs.bsv
+BSVFILES+=$(P4FPGADIR)/bsv/library/DbgDefs.bsv
 

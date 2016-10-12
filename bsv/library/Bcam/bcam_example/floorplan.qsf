@@ -1,0 +1,13 @@
+
+#set_global_assignment -name LL_ENABLED ON -section_id "mkUartRxCtl:uctl"
+#set_global_assignment -name LL_AUTO_SIZE OFF -section_id "mkUartRxCtl:uctl"
+#set_global_assignment -name LL_STATE LOCKED -section_id "mkUartRxCtl:uctl"
+#set_global_assignment -name LL_RESERVED ON -section_id "mkUartRxCtl:uctl"
+#set_global_assignment -name LL_SECURITY_ROUTING_INTERFACE OFF -section_id "mkUartRxCtl:uctl"
+#set_global_assignment -name LL_IGNORE_IO_BANK_SECURITY_CONSTRAINT OFF -section_id "mkUartRxCtl:uctl"
+#set_global_assignment -name LL_PR_REGION OFF -section_id "mkUartRxCtl:uctl"
+#set_global_assignment -name LL_ROUTING_REGION_EXPANSION_SIZE 2147483647 -section_id "mkUartRxCtl:uctl"
+#set_global_assignment -name LL_WIDTH 10 -section_id "mkUartRxCtl:uctl"
+#set_global_assignment -name LL_HEIGHT 10 -section_id "mkUartRxCtl:uctl"
+#set_global_assignment -name LL_ORIGIN X10_Y10 -section_id "mkUartRxCtl:uctl"
+#set_instance_assignment -name LL_MEMBER_OF "mkUartRxCtl:uctl" -to "mkUartRx:uart_rx|mkUartRxCtl:uctl" -section_id "mkUartRxCtl:uctl"

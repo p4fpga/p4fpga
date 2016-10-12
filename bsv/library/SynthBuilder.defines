@@ -1,0 +1,132 @@
+
+// Preprocessor macros for SynthBuilder.
+import SynthBuilder::*;
+
+
+`define SynthBuildModule(CONSTR, IFCTYPE, UNIQ) \
+(*synthesize*) \
+module UNIQ (IFCTYPE);\
+   (*hide*) let _i <- CONSTR;\
+   messageM ("Built SynthModule for type " + (printType (typeOf (_i))));\
+   return _i; \
+endmodule \
+instance SynthBuilder #(IFCTYPE); \
+   module mkSynth #(unused u) (IFCTYPE); \
+      (*hide*) let _i <- UNIQ;  return _i; \
+   endmodule\
+   module mkSynthStrict #(unused u) (IFCTYPE); \
+      (*hide*) let _i <- UNIQ;  return _i; \
+   endmodule\
+endinstance\
+
+`define SynthBuildModule1(CONSTR, PARAT, IFCTYPE, UNIQ) \
+(*synthesize*) \
+module UNIQ #(parameter PARAT param1) (IFCTYPE);\
+   (*hide*) let _i <- CONSTR(param1);\
+   messageM ("Built SynthModule1 for type " + (printType (typeOf (_i))));\
+   return _i; \
+endmodule \
+instance SynthBuilder1 #(IFCTYPE, PARAT); \
+   module mkSynth1 #(unused u, PARAT param1) (IFCTYPE); \
+      (*hide*) let _i <- UNIQ (param1);  return _i; \
+   endmodule\
+   module mkSynthStrict1 #(unused u, PARAT param1) (IFCTYPE); \
+      (*hide*) let _i <- UNIQ (param1);  return _i; \
+   endmodule\
+endinstance\
+
+`define SynthBuildModule2(CONSTR, PARAT0, PARAT1, IFCTYPE, UNIQ) \
+(*synthesize*) \
+module UNIQ #(parameter PARAT0 p0, parameter PARAT1 p1) (IFCTYPE);\
+   (*hide*) let _i <- CONSTR(p0, p1);\
+   messageM ("Built SynthModule2 for type " + (printType (typeOf (_i))));\
+   return _i; \
+endmodule \
+instance SynthBuilder2 #(IFCTYPE, PARAT0, PARAT1); \
+   module mkSynth2 #(unused u, PARAT0 p0, PARAT1 p1) (IFCTYPE); \
+      (*hide*) let _i <- UNIQ (p0, p1);  return _i; \
+   endmodule\
+   module mkSynthStrict2 #(unused u, PARAT0 p0, PARAT1 p1) (IFCTYPE); \
+      (*hide*) let _i <- UNIQ (p0, p1);  return _i; \
+   endmodule\
+endinstance\
+
+`define SynthBuildModule3(CONSTR, PARAT0, PARAT1 PARAT2, IFCTYPE, UNIQ) \
+(*synthesize*) \
+module UNIQ #(parameter PARAT0 p0, parameter PARAT1 p1, parameter PARAT2 p2) (IFCTYPE);\
+   (*hide*) let _i <- CONSTR(p0, p1, p2);\
+   messageM ("Built SynthModule3 for type " + (printType (typeOf (_i))));\
+   return _i; \
+endmodule \
+instance SynthBuilder3 #(IFCTYPE, PARAT0, PARAT1, PARAT2); \
+   module mkSynth3 #(unused u, PARAT0 p0, PARAT1 p1, PARAT2 p2) (IFCTYPE); \
+      (*hide*) let _i <- UNIQ (p0, p1, p2);  return _i; \
+   endmodule\
+   module mkSynthStrict3 #(unused u, PARAT0 p0, PARAT1 p1, PARAT2 p2) (IFCTYPE); \
+      (*hide*) let _i <- UNIQ (p0, p1, p2);  return _i; \
+   endmodule\
+endinstance\
+
+`define SynthBuildModule4(CONSTR, PARAT0, PARAT1, PARAT2, PARAT3, IFCTYPE, UNIQ) \
+(*synthesize*) \
+module UNIQ #(PARAT0 p0, PARAT1 p1, PARAT2 p2, PARAT3 p3) (IFCTYPE);\
+   (*hide*) let _i <- CONSTR(p0, p1, p2, p3);\
+   messageM ("Built SynthModule4 for type " + (printType (typeOf (_i))));\
+   return _i; \
+endmodule \
+instance SynthBuilder4 #(IFCTYPE, PARAT0, PARAT1, PARAT2, PARAT3); \
+   module mkSynth4 #(unused u, PARAT0 p0, PARAT1 p1, PARAT2 p2, PARAT3 p3) (IFCTYPE); \
+      (*hide*) let _i <- UNIQ (p0, p1, p2, p3);  return _i; \
+   endmodule\
+   module mkSynthStrict4 #(unused u, PARAT0 p0, PARAT1 p1, PARAT2 p2, PARAT3 p3) (IFCTYPE); \
+      (*hide*) let _i <- UNIQ (p0, p1, p2, p3);  return _i; \
+   endmodule\
+endinstance\
+
+`define SynthBuildModule6(CONSTR, PARAT0, PARAT1, PARAT2, PARAT3, PARAT4, PARAT5, IFCTYPE, UNIQ) \
+(*synthesize*) \
+module UNIQ #(PARAT0 p0, PARAT1 p1, PARAT2 p2, PARAT3 p3, PARAT4 p4, PARAT5 p5) (IFCTYPE);\
+   (*hide*) let _i <- CONSTR(p0, p1, p2, p3, p4, p5);\
+   messageM ("Built SynthModule6 for type " + (printType (typeOf (_i))));\
+   return _i; \
+endmodule \
+instance SynthBuilder6 #(IFCTYPE, PARAT0, PARAT1, PARAT2, PARAT3, PARAT4, PARAT5); \
+   module mkSynth6 #(unused u, PARAT0 p0, PARAT1 p1, PARAT2 p2, PARAT3 p3, PARAT4 p4, PARAT5 p5) (IFCTYPE); \
+      (*hide*) let _i <- UNIQ (p0, p1, p2, p3, p4, p5);  return _i; \
+   endmodule\
+   module mkSynthStrict6 #(unused u, PARAT0 p0, PARAT1 p1, PARAT2 p2, PARAT3 p3, PARAT4 p4, PARAT5 p5) (IFCTYPE); \
+      (*hide*) let _i <- UNIQ (p0, p1, p2, p3, p4, p5);  return _i; \
+   endmodule\
+endinstance\
+
+
+`define SynthInstance(MOD,IFCTYPE) \
+instance SynthBuilder#(IFCTYPE);\
+   module mkSynth # (unused x) (IFCTYPE);\
+      (*hide*) IFCTYPE _i <- MOD(); return _i;\
+   endmodule\
+   module mkSynthStrict # (unused x) (IFCTYPE);\
+      (*hide*) IFCTYPE _i <- MOD(); return _i;\
+   endmodule\
+endinstance
+
+
+`define SynthInstance1(MOD,IFCTYPE, PARAT) \
+instance SynthBuilder1#(IFCTYPE, PARAT);\
+   module mkSynth1 # (unused x, PARAT p1) (IFCTYPE);\
+      (*hide*) IFCTYPE _i <- MOD(p1); return _i;\
+   endmodule\
+   module mkSynthStrict1 # (unused x, PARAT p1) (IFCTYPE);\
+      (*hide*) IFCTYPE _i <- MOD(p1); return _i;\
+   endmodule\
+endinstance
+
+`define SynthInstance2(MOD,IFCTYPE, PARAT PARAT2) \
+instance SynthBuilder1#(IFCTYPE, PARAT, PARAT2);\
+   module mkSynth1 # (unused x, PARAT p1, PARAT2 p2) (IFCTYPE);\
+      (*hide*) IFCTYPE _i <- MOD(p1, p2); return _i;\
+   endmodule\
+   module mkSynthStrict1 # (unused x, PARAT p1, PARAT2 p2) (IFCTYPE);\
+      (*hide*) IFCTYPE _i <- MOD(p1, p2); return _i;\
+   endmodule\
+endinstance

@@ -15,7 +15,7 @@ P4FPGADIR?=$(DEV_ROOT)/p4fpga
 ###########################################
 S2H_INTERFACES=MainRequest:Main.request
 H2S_INTERFACES=Main:MainIndication,MemServerIndication:host
-BSVFILES=$(P4FPGADIR)/bsv/Main.bsv $(P4FPGADIR)/bsv/MainAPI.bsv
+BSVFILES=$(P4FPGADIR)/bsv/infra/Main.bsv $(P4FPGADIR)/bsv/infra/MainAPI.bsv
 
 ifeq ($(CPPFILES), )
 CPPFILES = $(P4FPGADIR)/cpp/main.cpp $(SONICDIR)/sw/lpcap.c
@@ -25,8 +25,8 @@ CONNECTALFLAGS += -I $(SONICDIR)/sw/
 CONNECTALFLAGS += -lpcap -lpthread
 CONNECTALFLAGS += --bsvpath=$(P4EXAMPLEDIR)/bsv/AsymmetricBRAM
 CONNECTALFLAGS += --bsvpath=$(P4EXAMPLEDIR)/bsv/Bcam
-CONNECTALFLAGS += --bsvpath=$(SONICDIR)/hw/bsv
-CONNECTALFLAGS += --bsvpath=$(SONICDIR)/hw/generated
+#CONNECTALFLAGS += --bsvpath=$(SONICDIR)/hw/bsv
+#CONNECTALFLAGS += --bsvpath=$(SONICDIR)/hw/generated
 CONNECTALFLAGS += -D NicVersion=$(shell printf "%d" 0x`git rev-parse --short=8 HEAD`)
 CONNECTALFLAGS += -D DataBusWidth=128
 CONNECTALFLAGS += -D IMPORT_HOSTIF
@@ -37,7 +37,7 @@ CONNECTALFLAGS += -m $(P4EXAMPLEDIR)/bsv/AsymmetricBRAM/mem_model.c
 CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/bsv/
 CONNECTALFLAGS += --nocache
 CONNECTALFLAGS += --cxxflags=-std=c++11
-CONNECTALFLAGS += --bsvpath=$(SONICDIR)/p4/bsv
+#CONNECTALFLAGS += --bsvpath=$(SONICDIR)/p4/bsv
 
 CONNECTALFLAGS += -D ClockDefaultParam
 
@@ -53,7 +53,7 @@ PROJ_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 ifeq ($(BOARD), nfsume)
 AUTOTOP = --interface pins:Main.pins
 CONNECTALFLAGS += --verilog=$(P4EXAMPLEDIR)/bsv/AsymmetricBRAM
-CONNECTALFLAGS += --bsvpath=$(SONICDIR)/hw/bsv
+#CONNECTALFLAGS += --bsvpath=$(SONICDIR)/hw/bsv
 PIN_TYPE = NfsumePins
 PIN_TYPE_INCLUDE = NfsumePins
 PIN_BINDINGS ?= LED:LED SFP:SFP SFPA:SFPA SFPB:SFPB SFPC:SFPC SFPD:SFPD
