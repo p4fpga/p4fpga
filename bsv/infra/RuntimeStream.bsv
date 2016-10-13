@@ -73,22 +73,17 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    //mkTieOff(_hostchan[0].writeClient.writeData);
    Vector#(nhs, StreamGearbox#(16)) gearbox_up_16 <- replicateM(mkStreamGearbox());
    Vector#(nhs, StreamGearbox#(32)) gearbox_up_32 <- replicateM(mkStreamGearbox());
-   // inputQ must be 512-bit wide, ByteStream#(64)
-   // Vector#(nhs, PacketBuffer) inputQ <- replicateM(mkPacketBuffer());
-
    mapM(uncurry(mkConnection), zip(map(getWriteData, _hostchan), map(getDataIn, gearbox_up_16)));
    mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_up_16), map(getDataIn, gearbox_up_32)));
-   mkTieOff(gearbox_up_32[0].dataout);
-
-   // input queues
+   PacketBuffer#(64) input_queues <- mkPacketBuffer(); // input queue
+   mkConnection(gearbox_up_32[0].dataout, input_queues.writeServer.writeData); // gearbox -> input queue
+   mkConnection(input_queues.readServer.readLen, input_queues.readServer.readReq); // immediate transmit
 
    XBar#(64) xbar <- mkXBar(3, 0, destOf, mkMerge2x1_lru);
-   // mkConnection(input_queues, xbar.input_port);
+   mkConnection(input_queues.readServer.readData, xbar.input_ports[0]); // input queue -> xbar
+
    // mkConnection(xbar.output_port, output_queues);
-
-   Vector#(ntx, Gearbox#(BusRatio, 1, ByteStream#(16))) txGearbox <- replicateM(mkNto1Gearbox(clock, reset, clock, reset));
-   // 512-bit output queues
-
+   PacketBuffer#(64) output_queues <- mkPacketBuffer(); // output queue
    // gearbox down
    // gearbox down
 

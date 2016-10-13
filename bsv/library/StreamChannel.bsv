@@ -33,7 +33,6 @@ import `TYPEDEF::*;
 
 interface StreamOutChannel;
    interface PktWriteServer#(16) writeServer;
-   // Put#
    interface Server#(MetadataRequest, MetadataResponse) prev;
    interface Get#(ByteStream#(8)) macTx;
    method Action set_verbosity (int verbosity);

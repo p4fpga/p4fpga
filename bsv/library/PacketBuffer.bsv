@@ -42,6 +42,7 @@ import Vector::*;
 import DbgDefs::*;
 import Ethernet::*;
 import TieOff::*;
+import PrintTrace::*;
 
 typedef struct {
    Bit#(PktAddrWidth) addr;
@@ -138,7 +139,7 @@ module mkPacketBuffer(PacketBuffer#(n))
 
    FIFOF#(Bit#(EtherLen))    fifoLen     <- mkSizedFIFOF(16);
    FIFOF#(Bit#(EtherLen))    fifoReadReq <- mkSizedFIFOF(4);
-   FIFOF#(ByteStream#(n))         fifoReadData <- mkBypassFIFOF();
+   FIFOF#(ByteStream#(n))    fifoReadData <- printTraceM("buffer read", mkBypassFIFOF());
 
    rule every1 if (verbose);
       cycle <= cycle + 1;
