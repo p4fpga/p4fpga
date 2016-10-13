@@ -50,7 +50,7 @@ endinterface
 interface PktReadClient;
    interface Put#(ByteStream#(16)) readData;
    interface Put#(Bit#(EtherLen)) readLen;
-   interface Get#(EtherReq) readReq;
+   interface Get#(Bit#(EtherLen)) readReq;
 endinterface
 
 interface PktWriteServer;
@@ -60,7 +60,7 @@ endinterface
 interface PktReadServer;
    interface Get#(ByteStream#(16)) readData;
    interface Get#(Bit#(EtherLen)) readLen;
-   interface Put#(EtherReq) readReq;
+   interface Put#(Bit#(EtherLen)) readReq;
 endinterface
 
 interface PacketBuffer;
@@ -219,11 +219,7 @@ module mkPacketBuffer(PacketBuffer);
             return v;
          endmethod
       endinterface
-      interface Put readReq;
-         method Action put(EtherReq r);
-            fifoReadReq.enq(r.len);
-         endmethod
-      endinterface
+      interface Put readReq = toPut(fifoReadReq);
    endinterface
    method PktBuffDbgRec dbg();
       return PktBuffDbgRec { sopEnq: sopEnq

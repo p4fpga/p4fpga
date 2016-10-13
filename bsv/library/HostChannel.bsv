@@ -61,23 +61,23 @@ module mkHostChannel(HostChannel);
    PacketBuffer pktBuff <- mkPacketBuffer();
    TapPktRead tap <- mkTapPktRead();
    Parser parser <- mkParser(0);
-   StoreAndFwdFromRingToMem ingress <- mkStoreAndFwdFromRingToMem();
+   StoreAndFwdFromRingToMem ringToMem <- mkStoreAndFwdFromRingToMem();
 
    mkConnection(tap.readClient, pktBuff.readServer);
-   mkConnection(ingress.readClient, tap.readServer);
+   mkConnection(ringToMem.readClient, tap.readServer);
    mkConnection(tap.tap_out, toPut(parser.frameIn));
 
    rule dispatch_packet;
-      let v <- toGet(ingress.eventPktCommitted).get;
+      let v <- toGet(ringToMem.eventPktCommitted).get;
       let meta <- parser.meta.get;
       MetadataRequest nextReq = MetadataRequest {pkt: v, meta: meta};
       outReqFifo.enq(nextReq);
    endrule
 
    interface writeServer = pktBuff.writeServer;
-   interface writeClient = ingress.writeClient;
+   interface writeClient = ringToMem.writeClient;
    interface next = toPipeOut(outReqFifo);
-   interface mallocClient = ingress.malloc;
+   interface mallocClient = ringToMem.malloc;
    method HostChannelDbgRec read_debug_info;
       return HostChannelDbgRec {
          paxosCount : paxosCount,

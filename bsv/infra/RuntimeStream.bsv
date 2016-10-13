@@ -24,14 +24,19 @@ package Runtime;
 
 import Library::*;
 import RxChannel::*;
-import HostChannel::*;
 import TxChannel::*;
+import HostChannel::*;
 import StreamChannel::*;
+import Channel::*;
+import Gearbox::*;
 import SharedBuff::*;
 import PacketBuffer::*;
 import Stream::*;
 import XBar::*;
 `include "ConnectalProjectConfig.bsv"
+
+typedef 512 DatapathWidth;
+typedef TDiv#(DatapathWidth, ChannelWidth) BusRatio;
 
 // FIXME: make this right
 function Bit#(32) destOf (ByteStream#(8) x);
@@ -52,24 +57,31 @@ interface Runtime#(numeric type nrx, numeric type ntx, numeric type nhs);
 endinterface
 module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Runtime#(nrx, ntx, nhs));
 
+   let clock <- exposeCurrentClock();
+   let reset <- exposeCurrentReset();
+
    Vector#(nhs, StreamInChannel) _hostchan <- genWithM(mkStreamInChannel);
+   // FIXME: StreamRxChannel
    Vector#(nrx, StreamInChannel) _rxchan <- genWithM(mkStreamInChannel);//FIXME, clocked_by rxClock, reset_by rxReset);
    Vector#(ntx, StreamOutChannel) _txchan <- replicateM(mkStreamOutChannel(txClock, txReset));
    // drop streamed bytes on the floor
    mkTieOff(_hostchan[0].writeClient.writeData);
+   // write streamed byte to input queue
+   // gearbox 128 -> 512
+   // input queue 512-bit fifo
+   Gearbox#(1, BusRatio, Bit#(ChannelWidth)) chanWriteGearbox <- mk1toNGearbox(clock, reset, clock, reset);
 
    // each rxchan exposes a writeClient ..
-   // each hostchan exposes a writeClient -> buffer
+   // write stream byte to input queue
+   // gearbox 128 -> 512
+   // input queue 512-bit fifo
 
-   // Method 1: one extra copy..
-   // Optimization: Gearbox to 512 bit
-   // readClient -> logic // 512 read, 128 write
    // xbar 512 bit
-
-   // Method 2: streaming, enough buffer for processing delay..
    XBar#(8) xbar <- mkXBar(2, 0, destOf, mkMerge2x1_lru);
 
-   // Optimization: Optional Packet Memory
+   // 512-bit output queue
+   // gearbox down to 128 bit
+   // write to txchan
 
    interface rxchan = _rxchan;
    interface txchan = _txchan;

@@ -71,7 +71,7 @@ module mkStoreAndFwdFromRingToMem(StoreAndFwdFromRingToMem)
    // RingBuffer Read Client
    FIFO#(ByteStream#(16)) readDataFifo <- mkFIFO;
    FIFO#(Bit#(EtherLen)) readLenFifo <- mkFIFO;
-   FIFO#(EtherReq) readReqFifo <- mkFIFO;
+   FIFO#(Bit#(EtherLen)) readReqFifo <- mkFIFO;
 
    // Memory Client
    FIFO#(MemRequest) writeReqFifo <- mkSizedFIFO(4);
@@ -114,7 +114,7 @@ module mkStoreAndFwdFromRingToMem(StoreAndFwdFromRingToMem)
       let mask = (1<< (pktLen % fromInteger(valueOf(bytesPerBeat))))-1;
       if (isValid(allocId)) begin
          mallocd <= True;
-         readReqFifo.enq(EtherReq{len: truncate(pktLen)});
+         readReqFifo.enq(truncate(pktLen));
          //FIXME use correct sglId
          writeReqFifo.enq(MemRequest {sglId: extend(fromMaybe(?, allocId)), offset: 0,
                                       burstLen: truncate(burstLen), tag:0
@@ -299,7 +299,7 @@ module mkStoreAndFwdFromRingToMac#(Clock txClock, Reset txReset)(StoreAndFwdFrom
    // RingBuffer Read Client
    FIFO#(ByteStream#(16)) readDataFifo <- mkFIFO;
    FIFO#(Bit#(EtherLen)) readLenFifo <- mkFIFO;
-   FIFO#(EtherReq) readReqFifo <- mkFIFO;
+   FIFO#(Bit#(EtherLen)) readReqFifo <- mkFIFO;
 
    // Mac Facing Fifo
    FIFOF#(ByteStream#(8)) writeMacFifo <- mkFIFOF(clocked_by txClock, reset_by txReset);
@@ -317,7 +317,7 @@ module mkStoreAndFwdFromRingToMac#(Clock txClock, Reset txReset)(StoreAndFwdFrom
    rule readDataStart;
       let pktLen <- toGet(readLenFifo).get;
       if (verbose) $display(fshow(" read packt ") + fshow(pktLen));
-      readReqFifo.enq(EtherReq{len: pktLen});
+      readReqFifo.enq(pktLen);
    endrule
 
    function Vector#(2, ByteStream#(8)) split(ByteStream#(16) in);

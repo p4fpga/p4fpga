@@ -64,7 +64,7 @@ module mkPktGen(PktGen)
 
    rule prepare_packet if (pktCount>0 && !idle);
       let pktLen <- buff.readServer.readLen.get;
-      buff.readServer.readReq.put(EtherReq{len:pktLen});
+      buff.readServer.readReq.put(pktLen);
       if (verbose) $display("Pktgen:: fetch_packet pktlen=%h", pktLen);
    endrule
 
@@ -96,7 +96,7 @@ module mkPktGen(PktGen)
    // has to drain buffer at the end of packet generation
    rule cleanup if (pktCount==0 && traceLen>0 && started);
       let pktLen <- buff.readServer.readLen.get;
-      buff.readServer.readReq.put(EtherReq{len: pktLen});
+      buff.readServer.readReq.put(pktLen);
       if (verbose) $display("Pktgen:: drain buffer");
    endrule
 

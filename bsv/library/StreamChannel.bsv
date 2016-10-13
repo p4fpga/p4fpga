@@ -20,30 +20,11 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-import BUtils::*;
-import ClientServer::*;
-import Connectable::*;
-import CBus::*;
-import ConfigReg::*;
-import DbgDefs::*;
-import DefaultValue::*;
-import Ethernet::*;
-import EthMac::*;
-import GetPut::*;
-import FIFO::*;
-import FIFOF::*;
-import MemMgmt::*;
-import MemTypes::*;
-import MIMO::*;
-import Pipe::*;
-import PacketBuffer::*;
-import PrintTrace::*;
+import Library::*;
+import Channel::*;
 import StoreAndForward::*;
-import SpecialFIFOs::*;
-import Stream::*;
 import StreamGearbox::*;
 import SharedBuff::*;
-import TieOff::*;
 import HeaderSerializer::*;
 `include "ConnectalProjectConfig.bsv"
 import `PARSER::*;
@@ -58,6 +39,12 @@ interface StreamOutChannel;
    method Action set_verbosity (int verbosity);
 endinterface
 
+instance GetMacTx#(StreamOutChannel);
+   function Get#(ByteStream#(8)) getMacTx(StreamOutChannel chan);
+      return chan.macTx;
+   endfunction
+endinstance
+
 // Streaming version of TxChannel
 module mkStreamOutChannel#(Clock txClock, Reset txReset)(StreamOutChannel);
    FIFO#(PacketInstance) pkt_ff <- printTimedTraceM("pkt_ff", mkFIFO);
@@ -66,14 +53,17 @@ module mkStreamOutChannel#(Clock txClock, Reset txReset)(StreamOutChannel);
    // RingBuffer Read Client
    FIFO#(ByteStream#(16)) readDataFifo <- mkFIFO;
    FIFO#(Bit#(EtherLen)) readLenFifo <- mkFIFO;
-   FIFO#(EtherReq) readReqFifo <- mkFIFO;
+   FIFO#(Bit#(EtherLen)) readReqFifo <- mkFIFO;
    FIFO#(ByteStream#(16)) writeDataFifo <- mkFIFO;
    Reg#(Bool) readStarted <- mkReg(False);
 
+   // pipeline width 512-bit wide @ 250Mhz
+   // gearbox 512->128
    PacketBuffer pktBuff <- mkPacketBuffer();
    Deparser deparser <- mkDeparser();
    HeaderSerializer serializer <- mkHeaderSerializer();
    StoreAndFwdFromRingToMac ringToMac <- mkStoreAndFwdFromRingToMac(txClock, txReset);
+   // channel width 128-bit @ 250Mhz
    PacketBuffer pktBuffOut <- mkPacketBuffer();
 
    PktReadClient readClient = (interface PktReadClient;
@@ -98,7 +88,7 @@ module mkStreamOutChannel#(Clock txClock, Reset txReset)(StreamOutChannel);
       pkt_ff.deq;
       let pktLen <- toGet(readLenFifo).get;
       readStarted <= True;
-      readReqFifo.enq(EtherReq{len: truncate(pktLen)});
+      readReqFifo.enq(pktLen);
       dbprint(3, $format("stream out read packet start len=%d ", pktLen));
    endrule
 
@@ -151,7 +141,7 @@ module mkStreamInChannel#(Integer id)(StreamInChannel);
    // RingBuffer Read Client
    FIFO#(ByteStream#(16)) readDataFifo <- mkFIFO;
    FIFO#(Bit#(EtherLen)) readLenFifo <- mkFIFO;
-   FIFO#(EtherReq) readReqFifo <- mkFIFO;
+   FIFO#(Bit#(EtherLen)) readReqFifo <- mkFIFO;
    FIFO#(ByteStream#(16)) writeDataFifo <- mkFIFO;
    Reg#(Bool) readStarted <- mkReg(False);
    FIFO#(Bit#(EtherLen)) pktLenFifo <- mkFIFO;
@@ -178,7 +168,7 @@ module mkStreamInChannel#(Integer id)(StreamInChannel);
    rule packetReadStart if (!readStarted);
       let pktLen <- toGet(readLenFifo).get;
       pktLenFifo.enq(pktLen);
-      readReqFifo.enq(EtherReq{len: truncate(pktLen)});
+      readReqFifo.enq(pktLen);
       readStarted <= True;
       dbprint(3, $format("read packet start %d", pktLen));
    endrule
@@ -213,3 +203,6 @@ module mkStreamInChannel#(Integer id)(StreamInChannel);
       $display("set verbosity ", verbosity);
    endmethod
 endmodule
+
+// Streaming version of RxChannel
+

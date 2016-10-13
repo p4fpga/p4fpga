@@ -44,7 +44,7 @@ module mkTapPktRead(TapPktRead);
    FIFO#(ByteStream#(16)) readDataFifoOut <- mkBypassFIFO;
    FIFO#(ByteStream#(16)) readDataFifoTap <- mkBypassFIFO;
    FIFO#(Bit#(EtherLen)) readLenFifo <- mkBypassFIFO;
-   FIFO#(EtherReq) readReqFifo <- mkBypassFIFO;
+   FIFO#(Bit#(EtherLen)) readReqFifo <- mkBypassFIFO;
 
    rule tapIntoReadData;
       let v <- toGet(readDataFifoIn).get;

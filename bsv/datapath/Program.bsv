@@ -24,6 +24,7 @@ import Library::*;
 import ConnectalTypes::*;
 import Control::*;
 
+`include "Debug.defines"
 `include "TieOff.defines"
 `TIEOFF_PIPEOUT("program ", MetadataRequest)
 
@@ -43,6 +44,8 @@ module mkProgram(Program#(nrx, ntx, nhs))
            ,NumAlias#(TAdd#(nrx, nhs), npi)
            ,NumAlias#(TLog#(ntx), wpo)
            ,NumAlias#(ntx, npo));
+
+   `PRINT_DEBUG_MSG
 
    // N-to-1 arbitration
    Vector#(npi, FIFOF#(MetadataRequest)) funnel_ff <- replicateM(mkFIFOF);
@@ -72,11 +75,15 @@ module mkProgram(Program#(nrx, ntx, nhs))
          let tpl = tuple2(truncate(prt), v);
          writeData.enq(tpl);
       end
+      else begin
+         dbprint(3, $format("invalid egress_port"));
+      end
    endrule
 
    interface prev = genWith(metaPipeIn);
    interface next = demux;
    method Action set_verbosity (int verbosity);
+      cf_verbosity <= verbosity;
       ingress.set_verbosity(verbosity);
       egress.set_verbosity(verbosity);
    endmethod

@@ -20,28 +20,11 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-import BUtils::*;
-import ClientServer::*;
-import Connectable::*;
-import CBus::*;
-import ConfigReg::*;
-import DbgDefs::*;
-import DefaultValue::*;
-import Ethernet::*;
-import EthMac::*;
-import GetPut::*;
-import FIFOF::*;
+import Library::*;
+import Channel::*;
 import MemMgmt::*;
 import MemTypes::*;
-import MIMO::*;
-import Pipe::*;
-import TxRx::*;
-import Utils::*;
-import PacketBuffer::*;
-import PrintTrace::*;
 import StoreAndForward::*;
-import SpecialFIFOs::*;
-import Stream::*;
 import SharedBuff::*;
 import HeaderSerializer::*;
 `include "ConnectalProjectConfig.bsv"
@@ -58,6 +41,12 @@ interface TxChannel;
    method DeparserPerfRec read_deparser_perf_info;
    method Action set_verbosity (int verbosity);
 endinterface
+
+instance GetMacTx#(TxChannel);
+   function Get#(ByteStream#(8)) getMacTx(TxChannel chan);
+      return chan.macTx;
+   endfunction
+endinstance
 
 module mkTxChannel#(Clock txClock, Reset txReset)(TxChannel);
    RX #(MetadataRequest)  rx_prev_req <- mkRX;

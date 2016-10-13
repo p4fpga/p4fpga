@@ -41,6 +41,7 @@ import Board::*;
 import Runtime::*;
 import Program::*;
 import Pipe::*;
+import Channel::*;
 import StructDefines::*;
 import ConnectalTypes::*;
 `include "ConnectalProjectConfig.bsv"
@@ -79,7 +80,7 @@ module mkMain #(HostInterface host, MainIndication indication, ConnectalMemory::
   PktCapChannel pktcap <- mkPktCapChannel(rxClock, rxReset);
 
 `ifdef SIMULATION
-  mkTieOff(runtime.txchan[0].macTx);
+  mapM_(mkTieOff, map(getMacTx, runtime.txchan));
   mapM_(mkTieOff, prog.next);
   //mkConnection(pktgen.macTx, runtime.rxchan[0].macRx);
 `endif
