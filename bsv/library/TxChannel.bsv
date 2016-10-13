@@ -51,7 +51,7 @@ endinstance
 module mkTxChannel#(Clock txClock, Reset txReset)(TxChannel);
    RX #(MetadataRequest)  rx_prev_req <- mkRX;
    let rx_prev_req_info = rx_prev_req.u;
-   PacketBuffer pktBuff <- mkPacketBuffer();
+   PacketBuffer#(16) pktBuff <- mkPacketBuffer();
    Deparser deparser <- mkDeparser();
    HeaderSerializer serializer <- mkHeaderSerializer();
    StoreAndFwdFromMemToRing egress <- mkStoreAndFwdFromMemToRing();

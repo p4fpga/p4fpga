@@ -39,8 +39,8 @@ import PacketBuffer::*;
 typedef 1 MinimumIPG; // 1 beat == 16 bytes.
 
 interface PktGen;
-    interface PktWriteServer writeServer;
-    interface PktWriteClient writeClient;
+    interface PktWriteServer#(16) writeServer;
+    interface PktWriteClient#(16) writeClient;
     method Action start(Bit#(32) iter, Bit#(32) ipg);
     method Action stop();
 endinterface
@@ -60,7 +60,7 @@ module mkPktGen(PktGen)
    Reg#(Bool) infiniteLoop <- mkReg(False);
 
    FIFO#(ByteStream#(16)) outgoing_fifo <- mkFIFO();
-   PacketBuffer buff <- mkPacketBuffer();
+   PacketBuffer#(16) buff <- mkPacketBuffer();
 
    rule prepare_packet if (pktCount>0 && !idle);
       let pktLen <- buff.readServer.readLen.get;

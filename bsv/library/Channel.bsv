@@ -27,5 +27,9 @@ typeclass GetMacTx#(type a);
    function Get#(ByteStream#(8)) getMacTx(a t);
 endtypeclass
 
+typeclass GetWriteData#(type a);
+   function Get#(ByteStream#(16)) getWriteData(a t);
+endtypeclass
+
 typedef 128 ChannelWidth;
 

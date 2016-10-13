@@ -43,47 +43,62 @@ import DbgDefs::*;
 import Ethernet::*;
 import TieOff::*;
 
-interface PktWriteClient;
-   interface Get#(ByteStream#(16)) writeData;
+typedef struct {
+   Bit#(PktAddrWidth) addr;
+   ByteStream#(n)     data;
+} ReqT#(numeric type n) deriving (Eq, Bits);
+instance FShow#(ReqT#(n));
+   function Fmt fshow (ReqT#(n) req);
+      return ($format(" addr=0x%x ", req.addr)
+              + $format(" data=0x%x ", req.data.data)
+              + $format(" sop= %d ", req.data.sop)
+              + $format(" eop= %d ", req.data.eop));
+   endfunction
+endinstance
+
+interface PktWriteClient#(numeric type n);
+   interface Get#(ByteStream#(n)) writeData;
 endinterface
 
-interface PktReadClient;
-   interface Put#(ByteStream#(16)) readData;
+interface PktReadClient#(numeric type n);
+   interface Put#(ByteStream#(n)) readData;
    interface Put#(Bit#(EtherLen)) readLen;
    interface Get#(Bit#(EtherLen)) readReq;
 endinterface
 
-interface PktWriteServer;
-   interface Put#(ByteStream#(16)) writeData;
+interface PktWriteServer#(numeric type n);
+   interface Put#(ByteStream#(n)) writeData;
 endinterface
 
-interface PktReadServer;
-   interface Get#(ByteStream#(16)) readData;
+interface PktReadServer#(numeric type n);
+   interface Get#(ByteStream#(n)) readData;
    interface Get#(Bit#(EtherLen)) readLen;
    interface Put#(Bit#(EtherLen)) readReq;
 endinterface
 
-interface PacketBuffer;
-   interface PktWriteServer writeServer;
-   interface PktReadServer readServer;
+interface PacketBuffer#(numeric type n);
+   interface PktWriteServer#(n) writeServer;
+   interface PktReadServer#(n) readServer;
    method PktBuffDbgRec dbg;
 endinterface
 
-instance Connectable#(PktWriteClient, PktWriteServer);
-   module mkConnection#(PktWriteClient client, PktWriteServer server)(Empty);
+instance Connectable#(PktWriteClient#(n), PktWriteServer#(n));
+   module mkConnection#(PktWriteClient#(n) client, PktWriteServer#(n) server)(Empty);
       mkConnection(client.writeData, server.writeData);
    endmodule
 endinstance
 
-instance Connectable#(PktReadClient, PktReadServer);
-   module mkConnection#(PktReadClient client, PktReadServer server)(Empty);
+instance Connectable#(PktReadClient#(n), PktReadServer#(n));
+   module mkConnection#(PktReadClient#(n) client, PktReadServer#(n) server)(Empty);
       mkConnection(client.readReq, server.readReq);
       mkConnection(server.readData, client.readData);
       mkConnection(server.readLen, client.readLen);
    endmodule
 endinstance
 
-module mkPacketBuffer(PacketBuffer);
+module mkPacketBuffer(PacketBuffer#(n))
+   provisos (Add#(1, a__, TLog#(TAdd#(1, n)))
+            ,Add#(b__, TLog#(TAdd#(1, n)), 16));
    Clock current_clock <- exposeCurrentClock;
    Reset current_reset <- exposeCurrentReset;
 
@@ -111,11 +126,11 @@ module mkPacketBuffer(PacketBuffer);
    // Memory
    BRAM_Configure bramConfig = defaultValue;
    bramConfig.latency = 1;
-   BRAM2Port#(Bit#(PktAddrWidth), ByteStream#(16)) memBuffer <- mkBRAM2Server(bramConfig);
+   BRAM2Port#(Bit#(PktAddrWidth), ByteStream#(n)) memBuffer <- mkBRAM2Server(bramConfig);
 
-   FIFO#(ByteStream#(16)) fifoWriteData <- mkFIFO;
+   FIFO#(ByteStream#(n)) fifoWriteData <- mkFIFO;
    FIFOF#(Bit#(EtherLen)) fifoEop <- mkFIFOF;
-   FIFO#(AddrTransRequest) incomingReqs     <- mkFIFO;
+   FIFO#(ReqT#(n)) incomingReqs     <- mkFIFO;
 
    // Client
    Reg#(Bit#(PktAddrWidth))     rdCurrPtr   <- mkReg(0);
@@ -123,15 +138,15 @@ module mkPacketBuffer(PacketBuffer);
 
    FIFOF#(Bit#(EtherLen))    fifoLen     <- mkSizedFIFOF(16);
    FIFOF#(Bit#(EtherLen))    fifoReadReq <- mkSizedFIFOF(4);
-   FIFOF#(ByteStream#(16))         fifoReadData <- mkBypassFIFOF();
+   FIFOF#(ByteStream#(n))         fifoReadData <- mkBypassFIFOF();
 
    rule every1 if (verbose);
       cycle <= cycle + 1;
    endrule
 
    rule enq_stage1;
-      ByteStream#(16) d <- toGet(fifoWriteData).get;
-      incomingReqs.enq(AddrTransRequest{addr: wrCurrPtr, data:d});
+      ByteStream#(n) d <- toGet(fifoWriteData).get;
+      incomingReqs.enq(ReqT{addr: wrCurrPtr, data:d});
       wrCurrPtr <= wrCurrPtr + 1;
       let newPacketLen = packetLen + zeroExtend(pack(countOnes(d.mask)));
       if (d.eop) begin
@@ -144,7 +159,7 @@ module mkPacketBuffer(PacketBuffer);
    endrule
 
    rule enqueue_first_beat(!inPacket);
-      AddrTransRequest req <- toGet(incomingReqs).get;
+      ReqT#(n) req <- toGet(incomingReqs).get;
       if (verbose) $display("PacketBuffer::enqueue_first_beat %d", cycle, fshow(req));
       memBuffer.portA.request.put(BRAMRequest{write:True, responseOnWrite:False,
          address:req.addr, datain:req.data});
@@ -153,14 +168,14 @@ module mkPacketBuffer(PacketBuffer);
    endrule
 
    rule enqueue_next_beat(!fifoEop.notEmpty && inPacket);
-      AddrTransRequest req <- toGet(incomingReqs).get;
+      ReqT#(n) req <- toGet(incomingReqs).get;
       if (verbose) $display("PacketBuffer::enqueue_next_beat %d", cycle, fshow(req));
       memBuffer.portA.request.put(BRAMRequest{write:True, responseOnWrite:False,
          address:req.addr, datain:req.data});
    endrule
 
    rule commit_packet(fifoEop.notEmpty && inPacket);
-      AddrTransRequest req <- toGet(incomingReqs).get;
+      ReqT#(n) req <- toGet(incomingReqs).get;
       if (verbose) $display("PacketBuffer::commit_packet %d", cycle, fshow(req));
       memBuffer.portA.request.put(BRAMRequest{write:True, responseOnWrite:False,
          address:req.addr, datain:req.data});
@@ -198,7 +213,7 @@ module mkPacketBuffer(PacketBuffer);
    // Big-endianess
    interface PktWriteServer writeServer;
       interface Put writeData;
-         method Action put(ByteStream#(16) d);
+         method Action put(ByteStream#(n) d);
             if (verbose) $display("PacketBuffer::writeData %d: Packet data %x", cycle, d.data);
             fifoWriteData.enq(d);
          endmethod
@@ -206,7 +221,7 @@ module mkPacketBuffer(PacketBuffer);
    endinterface
    interface PktReadServer readServer;
       interface Get readData;
-         method ActionValue#(ByteStream#(16)) get if (fifoReadData.notEmpty);
+         method ActionValue#(ByteStream#(n)) get if (fifoReadData.notEmpty);
             let v = fifoReadData.first;
             fifoReadData.deq;
             return v;

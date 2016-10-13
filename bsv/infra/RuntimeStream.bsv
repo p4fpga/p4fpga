@@ -32,14 +32,16 @@ import Gearbox::*;
 import SharedBuff::*;
 import PacketBuffer::*;
 import Stream::*;
+import StreamGearbox::*;
 import XBar::*;
 `include "ConnectalProjectConfig.bsv"
+`include "Debug.defines"
 
 typedef 512 DatapathWidth;
 typedef TDiv#(DatapathWidth, ChannelWidth) BusRatio;
 
 // FIXME: make this right
-function Bit#(32) destOf (ByteStream#(8) x);
+function Bit#(32) destOf (ByteStream#(64) x);
    // return egress_port in metadata
    return truncate(pack (x.data)) & 'hF;
 endfunction
@@ -57,6 +59,8 @@ interface Runtime#(numeric type nrx, numeric type ntx, numeric type nhs);
 endinterface
 module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Runtime#(nrx, ntx, nhs));
 
+   `PRINT_DEBUG_MSG
+
    let clock <- exposeCurrentClock();
    let reset <- exposeCurrentReset();
 
@@ -64,24 +68,29 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    // FIXME: StreamRxChannel
    Vector#(nrx, StreamInChannel) _rxchan <- genWithM(mkStreamInChannel);//FIXME, clocked_by rxClock, reset_by rxReset);
    Vector#(ntx, StreamOutChannel) _txchan <- replicateM(mkStreamOutChannel(txClock, txReset));
+
    // drop streamed bytes on the floor
-   mkTieOff(_hostchan[0].writeClient.writeData);
-   // write streamed byte to input queue
-   // gearbox 128 -> 512
-   // input queue 512-bit fifo
-   Gearbox#(1, BusRatio, Bit#(ChannelWidth)) chanWriteGearbox <- mk1toNGearbox(clock, reset, clock, reset);
+   //mkTieOff(_hostchan[0].writeClient.writeData);
+   Vector#(nhs, StreamGearbox#(16)) gearbox_up_16 <- replicateM(mkStreamGearbox());
+   Vector#(nhs, StreamGearbox#(32)) gearbox_up_32 <- replicateM(mkStreamGearbox());
+   // inputQ must be 512-bit wide, ByteStream#(64)
+   // Vector#(nhs, PacketBuffer) inputQ <- replicateM(mkPacketBuffer());
 
-   // each rxchan exposes a writeClient ..
-   // write stream byte to input queue
-   // gearbox 128 -> 512
-   // input queue 512-bit fifo
+   mapM(uncurry(mkConnection), zip(map(getWriteData, _hostchan), map(getDataIn, gearbox_up_16)));
+   mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_up_16), map(getDataIn, gearbox_up_32)));
+   mkTieOff(gearbox_up_32[0].dataout);
 
-   // xbar 512 bit
-   XBar#(8) xbar <- mkXBar(2, 0, destOf, mkMerge2x1_lru);
+   // input queues
 
-   // 512-bit output queue
-   // gearbox down to 128 bit
-   // write to txchan
+   XBar#(64) xbar <- mkXBar(3, 0, destOf, mkMerge2x1_lru);
+   // mkConnection(input_queues, xbar.input_port);
+   // mkConnection(xbar.output_port, output_queues);
+
+   Vector#(ntx, Gearbox#(BusRatio, 1, ByteStream#(16))) txGearbox <- replicateM(mkNto1Gearbox(clock, reset, clock, reset));
+   // 512-bit output queues
+
+   // gearbox down
+   // gearbox down
 
    interface rxchan = _rxchan;
    interface txchan = _txchan;
@@ -90,6 +99,7 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
       //_rxchan.set_verbosity(verbosity);
       _txchan[0].set_verbosity(verbosity);
       _hostchan[0].set_verbosity(verbosity);
+      cf_verbosity <= verbosity;
    endmethod
 endmodule
 

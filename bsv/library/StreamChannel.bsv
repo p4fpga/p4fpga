@@ -32,7 +32,7 @@ import `DEPARSER::*;
 import `TYPEDEF::*;
 
 interface StreamOutChannel;
-   interface PktWriteServer writeServer;
+   interface PktWriteServer#(16) writeServer;
    // Put#
    interface Server#(MetadataRequest, MetadataResponse) prev;
    interface Get#(ByteStream#(8)) macTx;
@@ -42,6 +42,12 @@ endinterface
 instance GetMacTx#(StreamOutChannel);
    function Get#(ByteStream#(8)) getMacTx(StreamOutChannel chan);
       return chan.macTx;
+   endfunction
+endinstance
+
+instance GetWriteData#(StreamInChannel);
+   function Get#(ByteStream#(16)) getWriteData(StreamInChannel chan);
+      return chan.writeClient.writeData;
    endfunction
 endinstance
 
@@ -57,22 +63,19 @@ module mkStreamOutChannel#(Clock txClock, Reset txReset)(StreamOutChannel);
    FIFO#(ByteStream#(16)) writeDataFifo <- mkFIFO;
    Reg#(Bool) readStarted <- mkReg(False);
 
-   // pipeline width 512-bit wide @ 250Mhz
-   // gearbox 512->128
-   PacketBuffer pktBuff <- mkPacketBuffer();
+   PacketBuffer#(16) pktBuff <- mkPacketBuffer();
    Deparser deparser <- mkDeparser();
    HeaderSerializer serializer <- mkHeaderSerializer();
    StoreAndFwdFromRingToMac ringToMac <- mkStoreAndFwdFromRingToMac(txClock, txReset);
-   // channel width 128-bit @ 250Mhz
-   PacketBuffer pktBuffOut <- mkPacketBuffer();
+   PacketBuffer#(16) pktBuffOut <- mkPacketBuffer();
 
-   PktReadClient readClient = (interface PktReadClient;
+   PktReadClient#(16) readClient = (interface PktReadClient;
       interface readData = toPut(readDataFifo);
       interface readLen = toPut(readLenFifo);
       interface readReq = toGet(readReqFifo);
    endinterface);
 
-   PktWriteClient writeClient = (interface PktWriteClient;
+   PktWriteClient#(16) writeClient = (interface PktWriteClient;
       interface writeData = toGet(writeDataFifo);
    endinterface);
 
@@ -128,8 +131,8 @@ endmodule
 
 // Streaming version of HostChannel
 interface StreamInChannel;
-   interface PktWriteServer writeServer;
-   interface PktWriteClient writeClient;
+   interface PktWriteServer#(16) writeServer;
+   interface PktWriteClient#(16) writeClient;
    interface PipeOut#(MetadataRequest) next;
    method Action set_verbosity (int verbosity);
 endinterface
@@ -146,10 +149,10 @@ module mkStreamInChannel#(Integer id)(StreamInChannel);
    Reg#(Bool) readStarted <- mkReg(False);
    FIFO#(Bit#(EtherLen)) pktLenFifo <- mkFIFO;
 
-   PacketBuffer pktBuff <- mkPacketBuffer();
+   PacketBuffer#(16) pktBuff <- mkPacketBuffer();
    Parser parser <- mkParser(id);
 
-   PktReadClient readClient = (interface PktReadClient;
+   PktReadClient#(16) readClient = (interface PktReadClient;
       interface readData = toPut(readDataFifo);
       interface readLen = toPut(readLenFifo);
       interface readReq = toGet(readReqFifo);

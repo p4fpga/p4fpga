@@ -70,8 +70,8 @@ typedef TAdd#(MaskSize, 1) NumBytes;
 
 interface Deparser;
    interface PipeIn#(MetadataT) metadata;
-   interface PktWriteServer writeServer;
-   interface PktWriteClient writeClient;
+   interface PktWriteServer#(16) writeServer;
+   interface PktWriteClient#(16) writeClient;
    method Action set_verbosity (int verbosity);
    method DeparserPerfRec read_perf_info ();
 endinterface

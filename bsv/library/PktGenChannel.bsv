@@ -52,7 +52,7 @@ module mkPktGenChannel#(Clock txClock, Reset txReset)(PktGenChannel);
    Reset defaultReset <- exposeCurrentReset();
 
    PktGen pktgen <- mkPktGen(clocked_by txClock, reset_by txReset);
-   PacketBuffer pkt_buff <- mkPacketBuffer(clocked_by txClock, reset_by txReset);
+   PacketBuffer#(16) pkt_buff <- mkPacketBuffer(clocked_by txClock, reset_by txReset);
    StoreAndFwdFromRingToMac ringToMac <- mkStoreAndFwdFromRingToMac(txClock, txReset, clocked_by txClock, reset_by txReset);
 
    mkConnection(pktgen.writeClient, pkt_buff.writeServer);

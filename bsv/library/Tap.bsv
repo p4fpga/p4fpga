@@ -34,8 +34,8 @@ import PacketBuffer::*;
 import Ethernet::*;
 
 interface TapPktRead;
-   interface PktReadClient readClient;
-   interface PktReadServer readServer;
+   interface PktReadClient#(16) readClient;
+   interface PktReadServer#(16) readServer;
    interface Get#(ByteStream#(16)) tap_out;
 endinterface
 

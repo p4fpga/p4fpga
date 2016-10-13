@@ -32,13 +32,25 @@ interface StreamGearbox#(numeric type n);
    interface Get#(ByteStream#(TMul#(2, n))) dataout;
 endinterface
 
+
 typeclass MkStreamGearbox#(numeric type n);
    module mkStreamGearbox(StreamGearbox#(n));
+   function Put#(ByteStream#(n)) getDataIn(StreamGearbox#(n) gb);
+   function Get#(ByteStream#(TMul#(2, n))) getDataOut(StreamGearbox#(n) gb);
 endtypeclass
 
 // toHost
 // toNetwork
 instance MkStreamGearbox#(n);
+
+   function Put#(ByteStream#(n)) getDataIn(StreamGearbox#(n) gb);
+      return gb.datain;
+   endfunction
+
+   function Get#(ByteStream#(TMul#(2, n))) getDataOut(StreamGearbox#(n) gb);
+      return gb.dataout;
+   endfunction
+
    module mkStreamGearbox(StreamGearbox#(n));
       let verbose = True;
       FIFO#(ByteStream#(n)) in_ff <- mkFIFO;

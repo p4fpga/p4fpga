@@ -41,7 +41,7 @@ import `PARSER::*;
 import `TYPEDEF::*;
 
 interface HostChannel;
-   interface PktWriteServer writeServer;
+   interface PktWriteServer#(16) writeServer;
    interface MemWriteClient#(`DataBusWidth) writeClient;
    interface MemAllocClient mallocClient;
    interface PipeOut#(MetadataRequest) next;
@@ -58,7 +58,7 @@ module mkHostChannel(HostChannel);
    Reg#(LUInt) ipv6Count <- mkReg(0);
    Reg#(LUInt) udpCount <- mkReg(0);
 
-   PacketBuffer pktBuff <- mkPacketBuffer();
+   PacketBuffer#(16) pktBuff <- mkPacketBuffer();
    TapPktRead tap <- mkTapPktRead();
    Parser parser <- mkParser(0);
    StoreAndFwdFromRingToMem ringToMem <- mkStoreAndFwdFromRingToMem();

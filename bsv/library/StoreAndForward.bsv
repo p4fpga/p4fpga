@@ -56,7 +56,7 @@ import ConnectalConfig::*;
  `include "ConnectalProjectConfig.bsv"
 
 interface StoreAndFwdFromRingToMem;
-   interface PktReadClient readClient;
+   interface PktReadClient#(16) readClient;
    interface MemAllocClient malloc;
    interface MemWriteClient#(DataBusWidth) writeClient;
    interface PipeOut#(PacketInstance) eventPktCommitted;
@@ -160,7 +160,7 @@ module mkStoreAndFwdFromRingToMem(StoreAndFwdFromRingToMem)
 endmodule
 
 interface StoreAndFwdFromMemToRing;
-   interface PktWriteClient writeClient;
+   interface PktWriteClient#(16) writeClient;
    interface MemReadClient#(DataBusWidth) readClient;
    interface PipeIn#(PacketInstance) eventPktSend;
    interface MemFreeClient free;
@@ -270,7 +270,7 @@ module mkStoreAndFwdFromMemToRing(StoreAndFwdFromMemToRing)
 endmodule
 
 interface StoreAndFwdFromRingToMac;
-   interface PktReadClient readClient;
+   interface PktReadClient#(16) readClient;
    interface Get#(ByteStream#(8)) macTx;
    method TxThruDbgRec dbg; 
    method ThruDbgRec sdbg; 
@@ -398,7 +398,7 @@ module mkStoreAndFwdFromRingToMac#(Clock txClock, Reset txReset)(StoreAndFwdFrom
 endmodule
 
 interface StoreAndFwdFromMacToRing;
-   interface PktWriteClient writeClient;
+   interface PktWriteClient#(16) writeClient;
    interface Put#(ByteStream#(8)) macRx;
    method ThruDbgRec sdbg;
 endinterface

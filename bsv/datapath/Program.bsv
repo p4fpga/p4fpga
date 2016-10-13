@@ -44,7 +44,6 @@ module mkProgram(Program#(nrx, ntx, nhs))
            ,NumAlias#(TAdd#(nrx, nhs), npi)
            ,NumAlias#(TLog#(ntx), wpo)
            ,NumAlias#(ntx, npo));
-
    `PRINT_DEBUG_MSG
 
    // N-to-1 arbitration

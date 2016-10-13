@@ -43,8 +43,8 @@ import SpecialFIFOs::*;
 import SharedBuff::*;
 
 interface HeaderSerializer;
-   interface PktWriteServer writeServer;
-   interface PktWriteClient writeClient;
+   interface PktWriteServer#(16) writeServer;
+   interface PktWriteClient#(16) writeClient;
    method Action set_verbosity(int verbosity);
 endinterface
 
