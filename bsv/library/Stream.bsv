@@ -22,6 +22,7 @@
 import DefaultValue::*;
 import TieOff::*;
 import GetPut::*;
+import Connectable::*;
 `include "TieOff.defines"
 
 typedef struct {
@@ -47,6 +48,12 @@ instance DefaultValue#(StreamData#(td, tm));
 endinstance
 
 typedef StreamData#(TMul#(bw, 8), bw) ByteStream#(numeric type bw);
+
+// instance Connectable#(Get#(StreamData#(a__, b__)), Put#(StreamData#(a__, b__)));
+//    module mkConnection#(Get#(StreamData#(a__, b__)) a, Put#(StreamData#(a__, b__)) b)(Empty);
+//       mkConnection(a, b);
+//    endmodule
+// endinstance
 
 `TIEOFF_GET(ByteStream#(64))
 `TIEOFF_GET(ByteStream#(32))

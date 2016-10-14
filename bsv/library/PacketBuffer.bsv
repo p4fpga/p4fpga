@@ -43,6 +43,7 @@ import DbgDefs::*;
 import Ethernet::*;
 import TieOff::*;
 import PrintTrace::*;
+import Channel::*;
 
 typedef struct {
    Bit#(PktAddrWidth) addr;
@@ -97,13 +98,31 @@ instance Connectable#(PktReadClient#(n), PktReadServer#(n));
    endmodule
 endinstance
 
+typeclass GetPktClient#(numeric type n);
+   function Get#(Bit#(EtherLen)) getReadLen(PacketBuffer#(n) buff);
+   function Put#(Bit#(EtherLen)) getReadReq(PacketBuffer#(n) buff);
+   function Get#(ByteStream#(n)) getReadData(PacketBuffer#(n) buff);
+endtypeclass
+
+instance GetPktClient#(n);
+   function Get#(Bit#(EtherLen)) getReadLen(PacketBuffer#(n) buff);
+      return buff.readServer.readLen;
+   endfunction
+   function Put#(Bit#(EtherLen)) getReadReq(PacketBuffer#(n) buff);
+      return buff.readServer.readReq;
+   endfunction
+   function Get#(ByteStream#(n)) getReadData(PacketBuffer#(n) buff);
+      return buff.readServer.readData;
+   endfunction
+endinstance
+
 module mkPacketBuffer(PacketBuffer#(n))
    provisos (Add#(1, a__, TLog#(TAdd#(1, n)))
             ,Add#(b__, TLog#(TAdd#(1, n)), 16));
    Clock current_clock <- exposeCurrentClock;
    Reset current_reset <- exposeCurrentReset;
 
-   let verbose = False;
+   let verbose = True;
 
    Reg#(Bit#(32))  cycle <- mkReg(0);
    // Mac

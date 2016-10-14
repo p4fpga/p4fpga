@@ -26,6 +26,7 @@ import StoreAndForward::*;
 import StreamGearbox::*;
 import SharedBuff::*;
 import HeaderSerializer::*;
+import PrintTrace::*;
 `include "ConnectalProjectConfig.bsv"
 import `PARSER::*;
 import `DEPARSER::*;
@@ -44,12 +45,6 @@ instance GetMacTx#(StreamOutChannel);
    endfunction
 endinstance
 
-instance GetWriteClient#(StreamInChannel);
-   function Get#(ByteStream#(16)) getWriteClient(StreamInChannel chan);
-      return chan.writeClient.writeData;
-   endfunction
-endinstance
-
 instance GetWriteServer#(StreamOutChannel);
    function Put#(ByteStream#(16)) getWriteServer(StreamOutChannel chan);
       return chan.writeServer.writeData;
@@ -65,7 +60,7 @@ module mkStreamOutChannel#(Clock txClock, Reset txReset)(StreamOutChannel);
    FIFO#(ByteStream#(16)) readDataFifo <- mkFIFO;
    FIFO#(Bit#(EtherLen)) readLenFifo <- mkFIFO;
    FIFO#(Bit#(EtherLen)) readReqFifo <- mkFIFO;
-   FIFO#(ByteStream#(16)) writeDataFifo <- mkFIFO;
+   FIFO#(ByteStream#(16)) writeDataFifo <- printTraceM("OutChan", mkFIFO);
    Reg#(Bool) readStarted <- mkReg(False);
 
    PacketBuffer#(16) pktBuff <- mkPacketBuffer();
@@ -141,6 +136,12 @@ interface StreamInChannel;
    interface PipeOut#(MetadataRequest) next;
    method Action set_verbosity (int verbosity);
 endinterface
+
+instance GetWriteClient#(StreamInChannel);
+   function Get#(ByteStream#(16)) getWriteClient(StreamInChannel chan);
+      return chan.writeClient.writeData;
+   endfunction
+endinstance
 
 module mkStreamInChannel#(Integer id)(StreamInChannel);
    Reg#(int) cf_verbosity <- mkConfigRegU;

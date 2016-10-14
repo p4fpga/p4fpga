@@ -10,6 +10,8 @@ import FIFOF :: *;
 import List :: *;
 import GetPut :: *;
 import Stream::*;
+import PrintTrace::*;
+import Printf::*;
 
 // ================================================================
 // Basic building block: a 2-to-1 merge
@@ -129,7 +131,8 @@ module mkXBar #(Integer logn, Integer idx,
 
    // ---- BASE CASE (n = 1 = 2^0)
    if (logn == 0) begin
-      FIFO#(ByteStream#(t)) f <- mkFIFO;
+      String name = sprintf("%d", idx);
+      FIFO#(ByteStream#(t)) f <- printTraceM(name, mkFIFO);
       iports = cons (fifoToPut (f), nil);
       oports = cons (fifoToGet (f), nil);
    end
