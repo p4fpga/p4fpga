@@ -421,7 +421,7 @@ module mkStoreAndFwdFromMacToRing#(Clock rxClock, Reset rxReset)(StoreAndFwdFrom
       total_cycles <= total_cycles + 1;
    endrule
 
-   StreamGearbox#(8) gearbox <- mkStreamGearbox(clocked_by rxClock, reset_by rxReset);
+   StreamGearbox#(8, 16) gearbox <- mkStreamGearboxUp(clocked_by rxClock, reset_by rxReset);
    SyncFIFOIfc#(ByteStream#(16)) writeDataFifo <- mkSyncFIFO(5, rxClock, rxReset, defaultClock);
 
    rule writeData;

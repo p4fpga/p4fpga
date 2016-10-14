@@ -71,10 +71,11 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
 
    // drop streamed bytes on the floor
    //mkTieOff(_hostchan[0].writeClient.writeData);
-   Vector#(nhs, StreamGearbox#(16)) gearbox_up_16 <- replicateM(mkStreamGearbox());
-   Vector#(nhs, StreamGearbox#(32)) gearbox_up_32 <- replicateM(mkStreamGearbox());
-   mapM(uncurry(mkConnection), zip(map(getWriteData, _hostchan), map(getDataIn, gearbox_up_16)));
+   Vector#(nhs, StreamGearbox#(16, 32)) gearbox_up_16 <- replicateM(mkStreamGearboxUp());
+   Vector#(nhs, StreamGearbox#(32, 64)) gearbox_up_32 <- replicateM(mkStreamGearboxUp());
+   mapM(uncurry(mkConnection), zip(map(getWriteClient, _hostchan), map(getDataIn, gearbox_up_16)));
    mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_up_16), map(getDataIn, gearbox_up_32)));
+
    PacketBuffer#(64) input_queues <- mkPacketBuffer(); // input queue
    mkConnection(gearbox_up_32[0].dataout, input_queues.writeServer.writeData); // gearbox -> input queue
    mkConnection(input_queues.readServer.readLen, input_queues.readServer.readReq); // immediate transmit
@@ -82,10 +83,15 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    XBar#(64) xbar <- mkXBar(3, 0, destOf, mkMerge2x1_lru);
    mkConnection(input_queues.readServer.readData, xbar.input_ports[0]); // input queue -> xbar
 
-   // mkConnection(xbar.output_port, output_queues);
    PacketBuffer#(64) output_queues <- mkPacketBuffer(); // output queue
-   // gearbox down
-   // gearbox down
+
+   Vector#(8, Get#(ByteStream#(64))) outvec = toVector(xbar.output_ports);
+   mapM_(mkTieOff, outvec); // want to see which idx is going out of
+   //mkConnection(xbar.output_ports[0], output_queues.writeServer.writeData); // xbar -> output queue
+   Vector#(ntx, StreamGearbox#(64, 32)) gearbox_dn_32 <- replicateM(mkStreamGearboxDn());
+   Vector#(ntx, StreamGearbox#(32, 16)) gearbox_dn_16 <- replicateM(mkStreamGearboxDn());
+   mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_dn_32), map(getDataIn, gearbox_dn_16)));
+   mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_dn_16), map(getWriteServer, _txchan)));
 
    interface rxchan = _rxchan;
    interface txchan = _txchan;

@@ -25,6 +25,7 @@ import GetPut::*;
 `include "TieOff.defines"
 
 typedef struct {
+   // user : output port?
    Bit#(td)    data;
    Bit#(tm)    mask;
    Bool        sop;

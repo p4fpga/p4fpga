@@ -44,9 +44,15 @@ instance GetMacTx#(StreamOutChannel);
    endfunction
 endinstance
 
-instance GetWriteData#(StreamInChannel);
-   function Get#(ByteStream#(16)) getWriteData(StreamInChannel chan);
+instance GetWriteClient#(StreamInChannel);
+   function Get#(ByteStream#(16)) getWriteClient(StreamInChannel chan);
       return chan.writeClient.writeData;
+   endfunction
+endinstance
+
+instance GetWriteServer#(StreamOutChannel);
+   function Put#(ByteStream#(16)) getWriteServer(StreamOutChannel chan);
+      return chan.writeServer.writeData;
    endfunction
 endinstance
 
