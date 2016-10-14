@@ -1,0 +1,8 @@
+method forward_add_entry=ingress.forward_add_entry;
+method ipv4_lpm_add_entry=ingress.ipv4_lpm_add_entry;
+method t_opti_update_add_entry=ingress.t_opti_update_add_entry;
+method t_reply_client_add_entry=ingress.t_reply_client_add_entry;
+method t_req_fix_add_entry=ingress.t_req_fix_add_entry;
+method t_req_pass1_add_entry=ingress.t_req_pass1_add_entry;
+method t_store_update_add_entry=ingress.t_store_update_add_entry;
+method send_frame_add_entry=egress.send_frame_add_entry;
