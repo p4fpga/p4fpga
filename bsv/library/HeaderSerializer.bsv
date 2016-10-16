@@ -41,6 +41,7 @@ import StoreAndForward::*;
 import Stream::*;
 import SpecialFIFOs::*;
 import SharedBuff::*;
+`include "Debug.defines"
 
 interface HeaderSerializer;
    interface PktWriteServer#(16) writeServer;
@@ -55,14 +56,8 @@ typedef TAdd#(DataSize, 1) NumBits;
 typedef TAdd#(MaskSize, 1) NumBytes;
 
 module mkHeaderSerializer(HeaderSerializer);
-   Reg#(int) cf_verbosity <- mkConfigRegU;
-   function Action dbprint(Integer level, Fmt msg);
-      action
-         if (cf_verbosity > fromInteger(level)) begin
-            $display("(%0d) ", $time, msg);
-         end
-      endaction
-   endfunction
+   `PRINT_DEBUG_MSG
+
    FIFOF#(ByteStream#(16)) data_in_ff <- mkFIFOF;
    FIFOF#(ByteStream#(16)) data_out_ff <- mkFIFOF;
 

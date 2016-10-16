@@ -37,7 +37,6 @@ module mkMerge2x1_lru (Merge2x1#(t));
 
    rule fi0_is_empty (! fi0.notEmpty);
       let x = fi1.first;
-      //$display("(%0d) f1 ", $time, fshow(x));
       fi1.deq;
       fo.enq (x);
       fi0HasPrio <= True;
@@ -45,7 +44,6 @@ module mkMerge2x1_lru (Merge2x1#(t));
 
    rule fi1_is_empty (! fi1.notEmpty);
       let x = fi0.first;
-      //$display("(%0d) f0 ", $time, fshow(x));
       fi0.deq;
       fo.enq (x);
       fi0HasPrio <= False;
