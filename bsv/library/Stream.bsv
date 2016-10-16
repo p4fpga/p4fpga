@@ -27,12 +27,12 @@ import Connectable::*;
 
 typedef struct {
    // user : output port?
+   Bit#(32)    user;
    Bit#(td)    data;
    Bit#(tm)    mask;
    Bool        sop;
    Bool        eop;
 } StreamData#(numeric type td, numeric type tm) deriving (Eq, Bits);
-StreamData#(td, tm) streamDefault = StreamData{data:0, mask:0, sop:False, eop:False};
 
 instance FShow#(StreamData#(td, tm));
    function Fmt fshow (StreamData#(td, tm) d);
@@ -44,16 +44,10 @@ instance FShow#(StreamData#(td, tm));
 endinstance
 
 instance DefaultValue#(StreamData#(td, tm));
-   function defaultValue = streamDefault;
+   function defaultValue = unpack(0);
 endinstance
 
 typedef StreamData#(TMul#(bw, 8), bw) ByteStream#(numeric type bw);
-
-// instance Connectable#(Get#(StreamData#(a__, b__)), Put#(StreamData#(a__, b__)));
-//    module mkConnection#(Get#(StreamData#(a__, b__)) a, Put#(StreamData#(a__, b__)) b)(Empty);
-//       mkConnection(a, b);
-//    endmodule
-// endinstance
 
 `TIEOFF_GET(ByteStream#(64))
 `TIEOFF_GET(ByteStream#(32))

@@ -75,13 +75,18 @@ module mkMain #(HostInterface host, MainIndication indication, ConnectalMemory::
     mkConnection(runtime.rxchan[i].next, prog.prev[i+`NUM_HOSTCHAN]);
   end
 
+  // Processed metadata to runtime
+  for (Integer i=0; i<`NUM_HOSTCHAN+`NUM_RXCHAN; i=i+1) begin
+    mkConnection(prog.next[i], runtime.prev[i]);
+  end
+
   // Port 5 is PktGen
   PktGenChannel pktgen <- mkPktGenChannel(txClock, txReset);
   PktCapChannel pktcap <- mkPktCapChannel(rxClock, rxReset);
 
 `ifdef SIMULATION
   mapM_(mkTieOff, map(getMacTx, runtime.txchan));
-  mapM_(mkTieOff, prog.next);
+  //mapM_(mkTieOff, prog.next);
   //mkConnection(pktgen.macTx, runtime.rxchan[0].macRx);
 `endif
 

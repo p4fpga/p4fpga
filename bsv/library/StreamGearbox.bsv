@@ -57,7 +57,7 @@ endtypeclass
 // Gearbox Box 1-to-2
 instance MkStreamGearboxUp#(n, m) provisos(Mul#(n, 2, m));
    module mkStreamGearboxUp(StreamGearbox#(n, m));
-      let verbose = True;
+      let verbose = False;
       FIFO#(ByteStream#(n)) in_ff <- mkFIFO;
       FIFO#(ByteStream#(m)) out_ff <- mkFIFO;
       Reg#(Bool) inProgress <- mkReg(False);
@@ -119,8 +119,8 @@ instance MkStreamGearboxDn#(n, m) provisos(Mul#(m, 2, n));
       let clock <- exposeCurrentClock();
       let reset <- exposeCurrentReset();
 
-      FIFO#(ByteStream#(n)) in_ff <- printTraceM("gbi", mkFIFO());
-      FIFO#(ByteStream#(m)) out_ff <- printTraceM("gbo", mkFIFO());
+      FIFO#(ByteStream#(n)) in_ff <- mkFIFO;//printTraceM("gbi", mkFIFO());
+      FIFO#(ByteStream#(m)) out_ff <- mkFIFO;//printTraceM("gbo", mkFIFO());
       Gearbox#(2, 1, ByteStream#(m)) fifoTxData <- mkNto1Gearbox(clock, reset, clock, reset);
 
       function Vector#(2, ByteStream#(m)) split(ByteStream#(n) in);

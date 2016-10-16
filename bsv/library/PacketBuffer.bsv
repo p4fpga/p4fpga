@@ -116,7 +116,7 @@ instance GetPktClient#(n);
    endfunction
 endinstance
 
-module mkPacketBuffer(PacketBuffer#(n))
+module mkPacketBuffer#(String msg)(PacketBuffer#(n))
    provisos (Add#(1, a__, TLog#(TAdd#(1, n)))
             ,Add#(b__, TLog#(TAdd#(1, n)), 16));
    Clock current_clock <- exposeCurrentClock;
@@ -158,7 +158,7 @@ module mkPacketBuffer(PacketBuffer#(n))
 
    FIFOF#(Bit#(EtherLen))    fifoLen     <- mkSizedFIFOF(16);
    FIFOF#(Bit#(EtherLen))    fifoReadReq <- mkSizedFIFOF(4);
-   FIFOF#(ByteStream#(n))    fifoReadData <- printTraceM("buffer read", mkBypassFIFOF());
+   FIFOF#(ByteStream#(n))    fifoReadData <- mkBypassFIFOF();
 
    rule every1 if (verbose);
       cycle <= cycle + 1;
@@ -180,7 +180,7 @@ module mkPacketBuffer(PacketBuffer#(n))
 
    rule enqueue_first_beat(!inPacket);
       ReqT#(n) req <- toGet(incomingReqs).get;
-      if (verbose) $display("PacketBuffer::enqueue_first_beat %d", cycle, fshow(req));
+      if (verbose) $display("(%0d) %s enqueue_first_beat ", $time, msg, fshow(req));
       memBuffer.portA.request.put(BRAMRequest{write:True, responseOnWrite:False,
          address:req.addr, datain:req.data});
       inPacket <= True;
@@ -189,14 +189,14 @@ module mkPacketBuffer(PacketBuffer#(n))
 
    rule enqueue_next_beat(!fifoEop.notEmpty && inPacket);
       ReqT#(n) req <- toGet(incomingReqs).get;
-      if (verbose) $display("PacketBuffer::enqueue_next_beat %d", cycle, fshow(req));
+      if (verbose) $display("(%0d) %s enqueue_next_beat ", $time, msg, fshow(req));
       memBuffer.portA.request.put(BRAMRequest{write:True, responseOnWrite:False,
          address:req.addr, datain:req.data});
    endrule
 
    rule commit_packet(fifoEop.notEmpty && inPacket);
       ReqT#(n) req <- toGet(incomingReqs).get;
-      if (verbose) $display("PacketBuffer::commit_packet %d", cycle, fshow(req));
+      if (verbose) $display("(%0d) %s commit_packet ", $time, msg, fshow(req));
       memBuffer.portA.request.put(BRAMRequest{write:True, responseOnWrite:False,
          address:req.addr, datain:req.data});
       let v <- toGet(fifoEop).get;
@@ -207,7 +207,7 @@ module mkPacketBuffer(PacketBuffer#(n))
 
    rule dequeue_first_beat(!outPacket);
       let v <- toGet(fifoReadReq).get;
-      if (verbose) $display("PacketBuffer::dequeue_first_beat %d: %x %x", cycle, rdCurrPtr, v);
+      if (verbose) $display("(%0d) %s dequeue_first_beat : %x %x", $time, msg, rdCurrPtr, v);
       memBuffer.portB.request.put(BRAMRequest{write:False, responseOnWrite:False,
          address:truncate(rdCurrPtr), datain:?});
       outPacket <= True;
@@ -227,14 +227,14 @@ module mkPacketBuffer(PacketBuffer#(n))
             address:truncate(rdCurrPtr), datain:?});
          rdCurrPtr <= rdCurrPtr + 1;
       end
-      if (verbose) $display("PacketBuffer::dequeue_next_beat %d: %x %x", cycle, rdCurrPtr, d);
+      if (verbose) $display("(%0d) %s dequeue_next_beat : %x %x", $time, msg, rdCurrPtr, d);
    endrule
 
    // Big-endianess
    interface PktWriteServer writeServer;
       interface Put writeData;
          method Action put(ByteStream#(n) d);
-            if (verbose) $display("PacketBuffer::writeData %d: Packet data %x", cycle, d.data);
+            if (verbose) $display("(%0d) %s writeData : Packet data %x", $time, msg, d.data);
             fifoWriteData.enq(d);
          endmethod
       endinterface

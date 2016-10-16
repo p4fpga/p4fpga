@@ -25,12 +25,12 @@ import ConnectalTypes::*;
 import Control::*;
 
 `include "Debug.defines"
-`include "TieOff.defines"
-`TIEOFF_PIPEOUT("program ", MetadataRequest)
+//`include "TieOff.defines"
+//`TIEOFF_PIPEOUT("program ", MetadataRequest)
 
 interface Program#(numeric type nrx, numeric type ntx, numeric type nhs);
    interface Vector#(TAdd#(nrx, nhs), PipeIn#(MetadataRequest)) prev;
-   interface Vector#(ntx, PipeOut#(MetadataRequest)) next;
+   interface Vector#(TAdd#(nrx, nhs), PipeOut#(MetadataRequest)) next;
    method Action set_verbosity (int verbosity);
 `include "APIDefGenerated.bsv" // for table api
 endinterface
@@ -38,12 +38,13 @@ endinterface
 module mkProgram(Program#(nrx, ntx, nhs))
    provisos(Add#(b__, TLog#(TAdd#(nrx, nhs)), 9) // introduced by truncate
            ,Pipe::FunnelPipesPipelined#(1, TAdd#(nrx, nhs), StructDefines::MetadataRequest, 2)
-           ,Add#(a__, TLog#(npo), 9) // provisos introduced by truncate
-           ,Pipe::FunnelPipesPipelined#(1, npo, StructDefines::MetadataRequest, 2)
+           //,Add#(a__, TLog#(npo), 9) // provisos introduced by truncate
+           //,Pipe::FunnelPipesPipelined#(1, npo, StructDefines::MetadataRequest, 2)
            ,NumAlias#(TLog#(TAdd#(nrx, nhs)), wpi)
            ,NumAlias#(TAdd#(nrx, nhs), npi)
-           ,NumAlias#(TLog#(ntx), wpo)
-           ,NumAlias#(ntx, npo));
+           //,NumAlias#(TLog#(ntx), wpo)
+           //,NumAlias#(ntx, npo)
+           );
    `PRINT_DEBUG_MSG
 
    // N-to-1 arbitration
@@ -62,20 +63,20 @@ module mkProgram(Program#(nrx, ntx, nhs))
    Egress egress <- mkEgress();
    mkConnection(ingress.next, egress.prev);
 
-   FIFOF#(Tuple2#(Bit#(wpo), MetadataRequest)) writeData <- mkFIFOF;
-   UnFunnelPipe#(1, npo, MetadataRequest, 2) demux <- mkUnFunnelPipesPipelined(vec(toPipeOut(writeData)));
+   FIFOF#(Tuple2#(Bit#(wpi), MetadataRequest)) writeData <- mkFIFOF;
+   UnFunnelPipe#(1, npi, MetadataRequest, 2) demux <- mkUnFunnelPipesPipelined(vec(toPipeOut(writeData)));
 
    // use egress_port value to pick outgoing port
    // truncate egress_port to fit number of ports on board
    rule egress_demux;
       let v = egress.next.first;
       egress.next.deq;
-      if (v.meta.standard_metadata.egress_port matches tagged Valid .prt) begin
+      if (v.meta.standard_metadata.ingress_port matches tagged Valid .prt) begin
          let tpl = tuple2(truncate(prt), v);
          writeData.enq(tpl);
       end
       else begin
-         dbprint(3, $format("invalid egress_port"));
+         dbprint(3, $format("invalid ingress_port"));
       end
    endrule
 

@@ -60,7 +60,7 @@ module mkPktGen(PktGen)
    Reg#(Bool) infiniteLoop <- mkReg(False);
 
    FIFO#(ByteStream#(16)) outgoing_fifo <- mkFIFO();
-   PacketBuffer#(16) buff <- mkPacketBuffer();
+   PacketBuffer#(16) buff <- mkPacketBuffer("pktgen");
 
    rule prepare_packet if (pktCount>0 && !idle);
       let pktLen <- buff.readServer.readLen.get;

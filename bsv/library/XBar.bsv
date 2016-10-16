@@ -37,7 +37,7 @@ module mkMerge2x1_lru (Merge2x1#(t));
 
    rule fi0_is_empty (! fi0.notEmpty);
       let x = fi1.first;
-      $display("(%0d) f1 ", $time, fshow(x));
+      //$display("(%0d) f1 ", $time, fshow(x));
       fi1.deq;
       fo.enq (x);
       fi0HasPrio <= True;
@@ -45,7 +45,7 @@ module mkMerge2x1_lru (Merge2x1#(t));
 
    rule fi1_is_empty (! fi1.notEmpty);
       let x = fi0.first;
-      $display("(%0d) f0 ", $time, fshow(x));
+      //$display("(%0d) f0 ", $time, fshow(x));
       fi0.deq;
       fo.enq (x);
       fi0HasPrio <= False;
@@ -115,15 +115,17 @@ endinterface
 // through, or gets "flipped" to the opposite side
 
 function Bool flipCheck (Bit #(32) dst, Bit #(32) src, Integer logn);
-    return (dst[fromInteger(logn-1)] != src [fromInteger(logn-1)]);
+   return (dst[fromInteger(logn-1)] != src [fromInteger(logn-1)]);
 endfunction: flipCheck
 
 // ----------------
 // The XBar module constructor
 
-module mkXBar #(Integer logn, Integer idx,
+module mkXBar #(Integer logn,
                 function Bit #(32) destinationOf (ByteStream#(t) x),
-                module #(Merge2x1 #(t)) mkMerge2x1)
+                module #(Merge2x1 #(t)) mkMerge2x1,
+                Integer logsize,
+                Integer idx)
               (XBar #(t));
 
    List#(Put#(ByteStream#(t))) iports;
@@ -131,8 +133,7 @@ module mkXBar #(Integer logn, Integer idx,
 
    // ---- BASE CASE (n = 1 = 2^0)
    if (logn == 0) begin
-      String name = sprintf("%d", idx);
-      FIFO#(ByteStream#(t)) f <- printTraceM(name, mkFIFO);
+      FIFO#(ByteStream#(t)) f <- mkFIFO;
       iports = cons (fifoToPut (f), nil);
       oports = cons (fifoToGet (f), nil);
    end
@@ -143,8 +144,8 @@ module mkXBar #(Integer logn, Integer idx,
       Integer nHalf = div (n, 2);
 
       // Recursively create two switches of half size
-      XBar#(t) upper <- mkXBar (logn-1, nHalf+idx, destinationOf, mkMerge2x1);
-      XBar#(t) lower <- mkXBar (logn-1, idx, destinationOf, mkMerge2x1);
+      XBar#(t) upper <- mkXBar (logn-1, destinationOf, mkMerge2x1, logn, nHalf+idx);
+      XBar#(t) lower <- mkXBar (logn-1, destinationOf, mkMerge2x1, logn, idx);
 
       // input ports are just the input ports of upper and lower halves
       iports = append (upper.input_ports, lower.input_ports);
@@ -167,6 +168,9 @@ module mkXBar #(Integer logn, Integer idx,
             let x <- oports_mid [j].get;
             Bool flip = flipCheck (destinationOf (x), fromInteger (j), logn);
             let jFlipped = ((j < nHalf) ? j + nHalf : j - nHalf);
+            if (logn == logsize) begin
+               $display("(%0d) XBar out =%0d %h", $time, jFlipped, x);
+            end
             if (! flip)
                merges [j]       .iport0.put (x);
             else

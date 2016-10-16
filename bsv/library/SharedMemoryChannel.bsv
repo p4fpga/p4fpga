@@ -20,26 +20,11 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-import Stream::*;
-import GetPut::*;
-import Pipe::*;
-import StructDefines::*;
+module mkSharedMemoryBuffer();
 
-typeclass GetMacTx#(type a);
-   function Get#(ByteStream#(8)) getMacTx(a t);
-endtypeclass
+endmodule
 
-typeclass GetWriteClient#(type a);
-   function Get#(ByteStream#(16)) getWriteClient(a t);
-endtypeclass
+module mkSharedMemoryChannel();
 
-typeclass GetWriteServer#(type a);
-   function Put#(ByteStream#(16)) getWriteServer(a t);
-endtypeclass
-
-typeclass GetMetaIn#(type a);
-   function PipeIn#(MetadataRequest) getMetaIn(a t);
-endtypeclass
-
-typedef 128 ChannelWidth;
+endmodule
 

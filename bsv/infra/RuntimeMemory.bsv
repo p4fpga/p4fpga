@@ -35,6 +35,15 @@ import MemTypes::*;
 `include "TieOff.defines"
 `TIEOFF_GET(MemTypes::MemData#(128))
 
+/*
+   Shared memory based datapath pipeline
+   -> hostchan + rxchan
+   -> per channel memory
+   -> per channel deparser
+   -> gearbox 128 -> 256 -> 512
+   -> crossbar
+   -> txchan: gearbox 512 -> 256 -> 128 -> ring-to-mac
+ */
 interface Runtime#(numeric type nrx, numeric type ntx, numeric type nhs);
    interface Vector#(nrx, RxChannel) rxchan;
    interface Vector#(ntx, TxChannel) txchan;

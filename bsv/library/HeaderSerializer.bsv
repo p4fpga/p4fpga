@@ -135,7 +135,7 @@ module mkHeaderSerializer(HeaderSerializer);
       n_bits_buffered <= n_bits[1] - n_bits_used;
       data_buffered <= data_buff[1] >> n_bits_used;
       mask_buffered <= mask_buff[1] >> n_bytes_used;
-      ByteStream#(16) eth;
+      ByteStream#(16) eth = defaultValue;
       eth.sop = sop_buff[1];
       eth.eop = False;
       eth.mask = 'hffff;
