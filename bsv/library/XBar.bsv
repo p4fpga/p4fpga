@@ -114,8 +114,11 @@ endinterface
 // The routing function: decides whether the packet goes straight
 // through, or gets "flipped" to the opposite side
 
-function Bool flipCheck (Bit #(32) dst, Bit #(32) src, Integer logn);
+function ActionValue#(Bool) flipCheck (Bit #(32) dst, Bit #(32) src, Integer logn);
+   actionvalue
+   $display("%x %x %d", dst, src, logn);
    return (dst[fromInteger(logn-1)] != src [fromInteger(logn-1)]);
+   endactionvalue
 endfunction: flipCheck
 
 // ----------------
@@ -166,15 +169,16 @@ module mkXBar #(Integer logn,
       for (Integer j = 0; j < n; j = j + 1) begin
          rule route;
             let x <- oports_mid [j].get;
-            Bool flip = flipCheck (destinationOf (x), fromInteger (j), logn);
+            Bool flip <- flipCheck (destinationOf (x), fromInteger (j), logn);
             let jFlipped = ((j < nHalf) ? j + nHalf : j - nHalf);
-            if (logn == logsize) begin
-               $display("(%0d) XBar out =%0d %h", $time, jFlipped, x);
-            end
-            if (! flip)
+            if (! flip) begin
+               $display("(%0d) XBar out =%0d flip=%d %h", $time, j, flip, x);
                merges [j]       .iport0.put (x);
-            else
+            end
+            else begin
+               $display("(%0d) XBar out =%0d flip=%d %h", $time, jFlipped, flip, x);
                merges [jFlipped].iport1.put (x);
+            end
          endrule
       end
    end

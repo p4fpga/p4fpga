@@ -45,7 +45,7 @@ typedef TDiv#(DatapathWidth, ChannelWidth) BusRatio;
 // FIXME: make this right
 function Bit#(32) destOf (ByteStream#(64) x);
    // return egress_port in metadata
-   return 0; //truncate(pack (x.data)) & 'hF;
+   return 2; //truncate(pack (x.data)) & 'hF;
 endfunction
 
 /*
@@ -139,11 +139,11 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    interface txchan = _txchan;
    interface hostchan = _hostchan;
    method Action set_verbosity (int verbosity);
-      //_rxchan.set_verbosity(verbosity);
-      _streamchan[0].set_verbosity(verbosity);
-      _txchan[0].set_verbosity(verbosity);
-      _hostchan[0].set_verbosity(verbosity);
       cf_verbosity <= verbosity;
+      //_rxchan.set_verbosity(verbosity);
+      mapM_(uncurry(set_verbosity), zip(_streamchan, replicate(verbosity)));
+      mapM_(uncurry(set_verbosity), zip(_txchan, replicate(verbosity)));
+      mapM_(uncurry(set_verbosity), zip(_hostchan, replicate(verbosity)));
    endmethod
 endmodule
 

@@ -27,6 +27,7 @@ import MemTypes::*;
 import StoreAndForward::*;
 import SharedBuff::*;
 import HeaderSerializer::*;
+import Channel::*;
 `include "ConnectalProjectConfig.bsv"
 import `DEPARSER::*;
 import `TYPEDEF::*;
@@ -108,6 +109,14 @@ endinstance
 instance GetWriteServer#(TxChannel);
    function Put#(ByteStream#(16)) getWriteServer(TxChannel chan);
       return chan.writeServer.writeData;
+   endfunction
+endinstance
+
+instance SetVerbosity#(TxChannel);
+   function Action set_verbosity(TxChannel t, int verbosity);
+      action
+         t.set_verbosity(verbosity);
+      endaction
    endfunction
 endinstance
 

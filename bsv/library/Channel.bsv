@@ -41,5 +41,9 @@ typeclass GetMetaIn#(type a);
    function PipeIn#(MetadataRequest) getMetaIn(a t);
 endtypeclass
 
+typeclass SetVerbosity#(type a);
+   function Action set_verbosity(a t, int verbosity);
+endtypeclass
+
 typedef 128 ChannelWidth;
 

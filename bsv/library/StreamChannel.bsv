@@ -122,6 +122,14 @@ instance GetMetaIn#(StreamOutChannel);
    endfunction
 endinstance
 
+instance SetVerbosity#(StreamOutChannel);
+   function Action set_verbosity(StreamOutChannel t, int verbosity);
+      action
+         t.set_verbosity(verbosity);
+      endaction
+   endfunction
+endinstance
+
 module mkStreamOutChannel#(Integer id)(StreamOutChannel);
    `PRINT_DEBUG_MSG
    FIFOF#(MetadataRequest) meta_ff <- mkFIFOF;
@@ -158,6 +166,14 @@ endinterface
 instance GetWriteClient#(StreamInChannel);
    function Get#(ByteStream#(16)) getWriteClient(StreamInChannel chan);
       return chan.writeClient.writeData;
+   endfunction
+endinstance
+
+instance SetVerbosity#(StreamInChannel);
+   function Action set_verbosity(StreamInChannel t, int verbosity);
+      action
+         t.set_verbosity(verbosity);
+      endaction
    endfunction
 endinstance
 
