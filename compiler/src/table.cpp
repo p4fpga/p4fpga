@@ -55,11 +55,12 @@ void TableCodeGen::emitActionEnum(const IR::P4Table* table) {
   builder->incr_indent();
   // find out name of default action
   auto defaultAction = table->getDefaultAction();
-  if (defaultAction->is<IR::MethodCallExpression>()){
-    auto e = defaultAction->to<IR::MethodCallExpression>();
-    defaultActionName = control->toP4Action(e->method->toString());
-    CHECK_NULL(defaultActionName);
-  }
+  //if (defaultAction->is<IR::MethodCallExpression>()){
+  //  auto e = defaultAction->to<IR::MethodCallExpression>();
+  //  defaultActionName = control->toP4Action(e->method->toString());
+  //  LOG1("table name " << name << e->method->toString());
+  //  CHECK_NULL(defaultActionName);
+  //}
   // put default action in first position
   auto actionList = table->getActionList()->actionList;
   for (auto action : *actionList) {
@@ -70,14 +71,15 @@ void TableCodeGen::emitActionEnum(const IR::P4Table* table) {
     } else if (elem->expression->is<IR::MethodCallExpression>()) {
       auto expr = elem->expression->to<IR::MethodCallExpression>();
       //auto t = control->program->typeMap->getType(e->method, true);
-      cstring n = control->toP4Action(expr->method->toString());
-      CHECK_NULL(n);
-      // put default action at position 0
-      if (n == defaultActionName) {
-        action_vec.insert(action_vec.begin(), UpperCase(n));
-      } else {
-        action_vec.push_back(UpperCase(n));
-      }
+      //cstring n = control->toP4Action(expr->method->toString());
+      //CHECK_NULL(n);
+      //// put default action at position 0
+      //if (n == defaultActionName) {
+      //  action_vec.insert(action_vec.begin(), UpperCase(n));
+      //} else {
+      //  action_vec.push_back(UpperCase(n));
+      //}
+      action_vec.push_back(UpperCase(expr->method->toString()));
     }
   }
   // generate enum typedef

@@ -25,8 +25,8 @@ bool UnionCodeGen::preorder(const IR::MethodCallExpression* expr) {
   cstring union_type = CamelCase(union_name);
   builder->append_line("struct {");
   builder->incr_indent();
-  auto k = control->basicBlock.find(expr->method->toString());
-  if (k != control->basicBlock.end()) {
+  auto k = control->actions.find(expr->method->toString());
+  if (k != control->actions.end()) {
     const IR::ParameterList* params = k->second->parameters;
     if (params->parameters->size() != 0) {
       for (auto p : *params->parameters) {

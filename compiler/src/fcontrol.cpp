@@ -83,8 +83,10 @@ bool FPGAControl::build() {
     if (s->is<IR::P4Action>()) {
       auto action = s->to<IR::P4Action>();
       // Do not use annotated name, as P4Table will use original name
-      auto name = action->name;
-      basicBlock.emplace(name, action);
+      cstring name = nameFromAnnotation(action->annotations, action->name);
+      // auto name = action->name;
+      actions.emplace(name, action);
+      LOG1("add to action map " << name);
     }
   }
 
@@ -101,17 +103,14 @@ bool FPGAControl::build() {
       LOG1("add table " << name);
       tables.emplace(name.c_str(), table);
 
-      // populate map <Action, Table>
-      for (auto act : *table->getActionList()->actionList) {
-        auto element = act->to<IR::ActionListElement>();
-        if (element->expression->is<IR::PathExpression>()) {
-          //LOG1("Path " << element->expression->to<IR::PathExpression>());
-        } else if (element->expression->is<IR::MethodCallExpression>()) {
-          auto expression = element->expression->to<IR::MethodCallExpression>();
-          auto type = program->typeMap->getType(expression->method, true);
-          auto action = expression->method->toString();
-          action_to_table[action] = table;
-          LOG1("action yyy " << action);
+      // populate map <Action, Table> with annotated name
+      for (auto a : *table->getActionList()->actionList) {
+        auto path = a->getPath();
+        auto decl = refMap->getDeclaration(path, true);
+        if (decl->is<IR::P4Action>()) {
+          auto action = decl->to<IR::P4Action>();
+          cstring name = nameFromAnnotation(action->annotations, action->name);
+          action_to_table[name] = table;
         }
       }
 
@@ -265,7 +264,7 @@ void FPGAControl::emitCondRule(BSVProgram & bsv, const CFG::IfNode* node) {
 
 void FPGAControl::emitDeclaration(BSVProgram & bsv) {
   // basic block instances
-  for (auto b : basicBlock) {
+  for (auto b : actions) {
     auto name = nameFromAnnotation(b.second->annotations, b.second->name);
     auto type = CamelCase(name);
     // ensure NoAction is translated to noAction
@@ -316,17 +315,14 @@ void FPGAControl::emitConnection(BSVProgram & bsv) {
     auto type = CamelCase(name);
     builder->append_line("mkConnection(toClient(%s_req_ff, %s_rsp_ff), %s.prev_control_state);", name, name, name);
 
-    auto actionList = table->getActionList()->actionList;
     int idx = 0;
-    for (auto action : *actionList) {
-      auto elem = action->to<IR::ActionListElement>();
-      if (elem->expression->is<IR::MethodCallExpression>()) {
-        auto e = elem->expression->to<IR::MethodCallExpression>();
-        auto t = program->typeMap->getType(e->method, true);
-        auto n = e->method->toString();
-        auto action = basicBlock[n];
-        auto annotatedName = nameFromAnnotation(action->annotations, action->name);
-        builder->append_format("mkConnection(%s.next_control_state[%d], %s_action.prev_control_state);", name, idx, camelCase(annotatedName));
+    for (auto a: *table->getActionList()->actionList) {
+      auto path = a->getPath();
+      auto decl = refMap->getDeclaration(path, true);
+      if (decl->is<IR::P4Action>()) {
+        auto action = decl->to<IR::P4Action>();
+        auto action_name = nameFromAnnotation(action->annotations, action->name);
+        builder->append_format("mkConnection(%s.next_control_state[%d], %s_action.prev_control_state);", name, idx, camelCase(action_name));
         idx ++ ;
       }
     }
@@ -354,7 +350,7 @@ void FPGAControl::emitTables() {
 }
 
 void FPGAControl::emitActions(BSVProgram & bsv) {
-  for (auto b : basicBlock) {
+  for (auto b : actions) {
     ActionCodeGen visitor(this, bsv, builder);
     b.second->apply(visitor);
  //   auto stmt = b.second->body->to<IR::BlockStatement>();
@@ -480,8 +476,8 @@ void FPGAControl::emit(BSVProgram & bsv, CppProgram & cpp) {
 }
 
 cstring FPGAControl::toP4Action (cstring inst) {
-  auto k = basicBlock.find(inst);
-  if (k != basicBlock.end()) {
+  auto k = actions.find(inst);
+  if (k != actions.end()) {
     auto params = k->second->parameters;
     cstring action_name = nameFromAnnotation(k->second->annotations, k->second->name);
     return action_name;

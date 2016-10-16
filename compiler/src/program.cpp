@@ -46,7 +46,7 @@ bool FPGAProgram::build() {
                 ->to<IR::ControlBlock>();
   BUG_CHECK(cb != nullptr, "No control block found");
   // control block
-  ingress = new FPGAControl(this, cb);
+  ingress = new FPGAControl(this, cb, typeMap, refMap);
   success = ingress->build();
   if (!success)
       return success;
@@ -55,7 +55,7 @@ bool FPGAProgram::build() {
   auto eb = pack->getParameterValue(v1model.sw.egress.name)
                 ->to<IR::ControlBlock>();
   BUG_CHECK(eb != nullptr, "No egress block found");
-  egress = new FPGAControl(this, eb);
+  egress = new FPGAControl(this, eb, typeMap, refMap);
   success = egress->build();
   if (!success)
     return success;
@@ -172,8 +172,8 @@ void FPGAProgram::emit(BSVProgram & bsv, CppProgram & cpp) {
 
   parser->emit(bsv);
   ingress->emit(bsv, cpp);
-  egress->emit(bsv, cpp);
-  deparser->emit(bsv);
+  // egress->emit(bsv, cpp);
+  // deparser->emit(bsv);
 
   // must generate metadata after processing pipelines
   CodeBuilder* builder = &bsv.getStructBuilder();

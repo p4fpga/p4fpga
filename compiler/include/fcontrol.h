@@ -29,6 +29,8 @@ class FPGAParser;
 
 class FPGAControl { // : public FPGAObject {
  public:
+    const P4::ReferenceMap*       refMap;
+    const P4::TypeMap*            typeMap;
     const IR::ControlBlock*       controlBlock;
     FPGAProgram*                  program;
     FPGA::CFG*                    cfg;
@@ -40,7 +42,7 @@ class FPGAControl { // : public FPGAObject {
     CodeBuilder*                  prog_decl;
 
     // map from action name to P4Action
-    std::map<cstring, const IR::P4Action*>    basicBlock;
+    std::map<cstring, const IR::P4Action*>    actions;
     // map from table name to TableBlock
     std::map<cstring, const IR::P4Table*>     tables;
     // map from extern name to ExternBlock
@@ -50,8 +52,11 @@ class FPGAControl { // : public FPGAObject {
     std::map<const IR::StructField*, cstring> metadata_to_action;
     std::map<cstring, const IR::P4Table*> action_to_table;
 
-    explicit FPGAControl(FPGAProgram* program, const IR::ControlBlock* block)
-      : program(program), controlBlock(block) {}
+    explicit FPGAControl(FPGAProgram* program,
+                         const IR::ControlBlock* block,
+                         const P4::TypeMap* typeMap,
+                         const P4::ReferenceMap* refMap)
+      : program(program), controlBlock(block), typeMap(typeMap), refMap(refMap) {}
 
     virtual ~FPGAControl() {}
     cstring toP4Action (cstring inst);

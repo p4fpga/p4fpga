@@ -61,8 +61,8 @@ class TableParamExtractor : public Inspector {
   explicit TableParamExtractor (FPGAControl* control) :
     control(control) {}
   bool preorder(const IR::MethodCallExpression* methodcall) {
-    auto k = control->basicBlock.find(methodcall->method->toString());
-    if (k != control->basicBlock.end()) {
+    auto k = control->actions.find(methodcall->method->toString());
+    if (k != control->actions.end()) {
       auto params = k->second->parameters;
       for (auto p : *params->parameters) {
         auto type = p->type->to<IR::Type_Bits>();
@@ -82,8 +82,8 @@ class ActionParamPrinter : public Inspector {
     control(control), builder(builder), table_name(name) {}
   bool preorder(const IR::MethodCallExpression* expr) {
     // from action name to actual action declaration
-    auto k = control->basicBlock.find(expr->method->toString());
-    if (k != control->basicBlock.end()) {
+    auto k = control->actions.find(expr->method->toString());
+    if (k != control->actions.end()) {
       auto params = k->second->parameters;
       param_vec.clear();
       for (auto param : *params->parameters) {
