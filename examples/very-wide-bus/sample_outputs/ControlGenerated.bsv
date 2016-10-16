@@ -21,7 +21,7 @@ typedef MatchTable#(31, 256, SizeOf#(ConnectalTypes::ForwardReqT), SizeOf#(Conne
 `SynthBuildModule1(mkMatchTable, String, ForwardMatchTable, mkMatchTable_Forward)
 instance Table_request #(ConnectalTypes::ForwardReqT);
     function ConnectalTypes::ForwardReqT table_request(MetadataRequest data);
-        let nhop_ipv4 = fromMaybe(?, data.meta.nhop_ipv4);
+        let nhop_ipv4 = fromMaybe(?, data.meta.meta.nhop_ipv4);
         let v = ConnectalTypes::ForwardReqT {nhop_ipv4: nhop_ipv4, padding: 0};
         return v;
     endfunction
@@ -55,8 +55,11 @@ typedef MatchTable#(4, 256, SizeOf#(ConnectalTypes::Ipv4LpmReqT), SizeOf#(Connec
 `SynthBuildModule1(mkMatchTable, String, Ipv4LpmMatchTable, mkMatchTable_Ipv4Lpm)
 instance Table_request #(ConnectalTypes::Ipv4LpmReqT);
     function ConnectalTypes::Ipv4LpmReqT table_request(MetadataRequest data);
-        let dstAddr = fromMaybe(?, data.meta.dstAddr);
-        let v = ConnectalTypes::Ipv4LpmReqT {dstAddr: dstAddr, padding: 0};
+        ConnectalTypes::Ipv4LpmReqT v = defaultValue;
+        if (data.meta.hdr.ipv4 matches tagged Valid .ipv4) begin
+           let dstAddr = ipv4.hdr.dstAddr;
+           v = ConnectalTypes::Ipv4LpmReqT {dstAddr: dstAddr, padding: 0};
+        end
         return v;
     endfunction
 endinstance
@@ -99,10 +102,18 @@ endinstance
 // INST (8) <Path>(10638):hdr.ipv4.ttl; = <Path>(10638):hdr.ipv4.ttl + 255;
 typedef Engine#(1, MetadataRequest, Ipv4LpmParam) SetNhopAction;
 instance Action_execute #(Ipv4LpmParam);
-    function ActionValue#(MetadataRequest) step_1 (MetadataRequest meta, Ipv4LpmParam param);
+    function ActionValue#(MetadataRequest) step_1 (MetadataRequest req, Ipv4LpmParam param);
         actionvalue
-            $display("(%0d) step 1: ", $time, fshow(meta));
-            return meta;
+            $display("(%0d) step 1: ", $time, fshow(param));
+            case (param) matches
+               tagged SetNhopReqT {nhop_ipv4: .nhop_ipv4, _port: ._port}: begin
+                  req.meta.meta.nhop_ipv4 = tagged Valid nhop_ipv4;
+                  req.meta.standard_metadata.egress_port = tagged Valid _port;
+                  $display("(%0d) execute action");
+               end
+            endcase
+            $display("(%0d) step 1 updated req: ", $time, fshow(req));
+            return req;
         endactionvalue
     endfunction
 endinstance
@@ -160,8 +171,7 @@ module mkIngress (Ingress);
         node_2_req_ff.deq;
         let _req = node_2_req_ff.first;
         let meta = _req.meta;
-        let hdr$ipv4 = fromMaybe(?, meta.hdr.ipv4);
-        if ((isValid(meta.hdr.ipv4) && (hdr$ipv4.ttl > 0))) begin
+        if (meta.hdr.ipv4 matches tagged Valid .h &&& h.hdr.ttl > 0) begin
             ipv4_lpm_req_ff.enq(_req);
             dbprint(3, $format("node_2 true", fshow(meta)));
         end
@@ -216,8 +226,8 @@ typedef Table#(3, MetadataRequest, SendFrameParam, ConnectalTypes::SendFrameReqT
 typedef MatchTable#(16, 256, SizeOf#(ConnectalTypes::SendFrameReqT), SizeOf#(ConnectalTypes::SendFrameRspT)) SendFrameMatchTable;
 `SynthBuildModule1(mkMatchTable, String, SendFrameMatchTable, mkMatchTable_SendFrame)
 instance Table_request #(ConnectalTypes::SendFrameReqT);
-    function ConnectalTypes::SendFrameReqT table_request(MetadataRequest data);
-        let egress_port = fromMaybe(?, data.meta.egress_port);
+    function ConnectalTypes::SendFrameReqT table_request(MetadataRequest req);
+        let egress_port = fromMaybe(?, req.meta.standard_metadata.egress_port);
         let v = ConnectalTypes::SendFrameReqT {egress_port: egress_port};
         return v;
     endfunction
@@ -297,7 +307,7 @@ module mkEgress (Egress);
             default: begin
                 MetadataRequest req = MetadataRequest { pkt : pkt, meta : meta};
                 exit_req_ff.enq(req);
-                dbprint(3, $format("default ", fshow(meta)));
+                dbprint(3, $format("send frame ", fshow(meta)));
             end
         endcase
     endrule

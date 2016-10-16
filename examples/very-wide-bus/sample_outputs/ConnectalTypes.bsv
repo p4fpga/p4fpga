@@ -1,3 +1,4 @@
+import DefaultValue::*;
 typedef struct{
     Bit#(4) padding;
     Bit#(32) nhop_ipv4;
@@ -10,6 +11,9 @@ typedef struct{
     Bit#(4) padding;
     Bit#(32) dstAddr;
 } Ipv4LpmReqT deriving (Bits, FShow);
+instance DefaultValue#(Ipv4LpmReqT);
+    defaultValue = unpack(0);
+endinstance
 typedef struct {
     Bit#(2) _action;
     Bit#(9) _port;
