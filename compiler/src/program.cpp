@@ -172,8 +172,8 @@ void FPGAProgram::emit(BSVProgram & bsv, CppProgram & cpp) {
 
   parser->emit(bsv);
   ingress->emit(bsv, cpp);
-  // egress->emit(bsv, cpp);
-  // deparser->emit(bsv);
+  egress->emit(bsv, cpp);
+  deparser->emit(bsv);
 
   // must generate metadata after processing pipelines
   CodeBuilder* builder = &bsv.getStructBuilder();
