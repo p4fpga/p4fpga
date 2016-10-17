@@ -23,11 +23,3 @@
 | switch             | too complex to compile                    |
 | tcp_options_parser | candidate for experiment 4.2, variable length header parsing |
 | wide_action        |                      |
-
-Experiment 1: Pipeline versus. buffer
-
-Experiment 2: FPGA vs. HW vs. SW
-
-Experiment 3: Compilation time?
-
-Experiment 4: Optimal vs. non-optimal
