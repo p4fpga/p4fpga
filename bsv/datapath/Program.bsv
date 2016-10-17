@@ -28,22 +28,18 @@ import Control::*;
 //`include "TieOff.defines"
 //`TIEOFF_PIPEOUT("program ", MetadataRequest)
 
-interface Program#(numeric type nrx, numeric type ntx, numeric type nhs);
-   interface Vector#(TAdd#(nrx, nhs), PipeIn#(MetadataRequest)) prev;
-   interface Vector#(TAdd#(nrx, nhs), PipeOut#(MetadataRequest)) next;
+interface Program#(numeric type nrx, numeric type ntx, numeric type nhs, numeric type nextra);
+   interface Vector#(TAdd#(TAdd#(nrx, nhs), nextra), PipeIn#(MetadataRequest)) prev;
+   interface Vector#(TAdd#(TAdd#(nrx, nhs), nextra), PipeOut#(MetadataRequest)) next;
    method Action set_verbosity (int verbosity);
 `include "APIDefGenerated.bsv" // for table api
 endinterface
 
-module mkProgram(Program#(nrx, ntx, nhs))
-   provisos(Add#(b__, TLog#(TAdd#(nrx, nhs)), 9) // introduced by truncate
-           ,Pipe::FunnelPipesPipelined#(1, TAdd#(nrx, nhs), StructDefines::MetadataRequest, 2)
-           //,Add#(a__, TLog#(npo), 9) // provisos introduced by truncate
-           //,Pipe::FunnelPipesPipelined#(1, npo, StructDefines::MetadataRequest, 2)
-           ,NumAlias#(TLog#(TAdd#(nrx, nhs)), wpi)
-           ,NumAlias#(TAdd#(nrx, nhs), npi)
-           //,NumAlias#(TLog#(ntx), wpo)
-           //,NumAlias#(ntx, npo)
+module mkProgram(Program#(nrx, ntx, nhs, nextra))
+   provisos(Add#(b__, TLog#(TAdd#(TAdd#(nrx, nhs), nextra)), 9) // introduced by truncate
+           ,Pipe::FunnelPipesPipelined#(1, TAdd#(TAdd#(nrx, nhs), nextra), StructDefines::MetadataRequest, 2)
+           ,NumAlias#(TLog#(TAdd#(TAdd#(nrx, nhs), nextra)), wpi)
+           ,NumAlias#(TAdd#(TAdd#(nrx, nhs), nextra), npi)
            );
    `PRINT_DEBUG_MSG
 
@@ -65,6 +61,7 @@ module mkProgram(Program#(nrx, ntx, nhs))
 
    FIFOF#(Tuple2#(Bit#(wpi), MetadataRequest)) writeData <- mkFIFOF;
    UnFunnelPipe#(1, npi, MetadataRequest, 2) demux <- mkUnFunnelPipesPipelined(vec(toPipeOut(writeData)));
+   messageM("unFunnel " + printType(typeOf(demux)));
 
    // use egress_port value to pick outgoing port
    // truncate egress_port to fit number of ports on board

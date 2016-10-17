@@ -178,7 +178,7 @@ instance SetVerbosity#(StreamInChannel);
 endinstance
 
 module mkStreamInChannel#(Integer id)(StreamInChannel);
-   Reg#(int) cf_verbosity <- mkConfigRegU;
+   `PRINT_DEBUG_MSG
    FIFOF#(MetadataRequest) outReqFifo <- mkFIFOF;
 
    // RingBuffer Read Client
@@ -199,14 +199,6 @@ module mkStreamInChannel#(Integer id)(StreamInChannel);
    endinterface);
 
    mkConnection(readClient, pktBuff.readServer);
-
-   function Action dbprint(Integer level, Fmt msg);
-      action
-      if (cf_verbosity > fromInteger(level)) begin
-         $display("(%0d) ", $time, msg);
-      end
-      endaction
-   endfunction
 
    rule packetReadStart if (!readStarted);
       let pktLen <- toGet(readLenFifo).get;
@@ -243,9 +235,8 @@ module mkStreamInChannel#(Integer id)(StreamInChannel);
    endinterface);
    interface next = toPipeOut(outReqFifo);
    method Action set_verbosity (int verbosity);
-      parser.set_verbosity(verbosity);
       cf_verbosity <= verbosity;
-      $display("set verbosity ", verbosity);
+      parser.set_verbosity(verbosity);
    endmethod
 endmodule
 

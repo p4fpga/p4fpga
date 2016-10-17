@@ -17,6 +17,8 @@ CONNECTALFLAGS += -m matchtable_model.cpp
 CONNECTALFLAGS += -D NUM_RXCHAN=4
 CONNECTALFLAGS += -D NUM_TXCHAN=4
 CONNECTALFLAGS += -D NUM_HOSTCHAN=1
+CONNECTALFLAGS += -D NUM_METAGEN=1
+CONNECTALFLAGS += -D NUM_PKTGEN=1
 CONNECTALFLAGS += -D STREAM
 #CONNECTALFLAGS += -D MEMORY
 
@@ -29,7 +31,10 @@ build:
 run-thru:
 	(cd bluesim; ./bin/ubuntu.exe -p ../${T} -r ${R} -n ${N})
 
-include ../Makefile.common
+run-meta:
+	(cd bluesim; ./bin/ubuntu.exe -p ../${T} -M -n ${N})
+
+include ../../Makefile.common
 BSVFILES+=generatedbsv/ConnectalTypes.bsv
 BSVFILES+=$(P4FPGADIR)/bsv/library/DbgDefs.bsv
 

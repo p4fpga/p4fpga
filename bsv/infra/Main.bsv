@@ -36,6 +36,7 @@ import TxChannel::*;
 import RxChannel::*;
 import HostChannel::*;
 import StreamChannel::*;
+import MetaGenChannel::*;
 import PktGen::*;
 import Board::*;
 import Runtime::*;
@@ -50,7 +51,10 @@ interface Main;
   interface MainRequest request;
   interface `PinType pins;
 endinterface
-module mkMain #(HostInterface host, MainIndication indication, ConnectalMemory::MemServerIndication memServerInd) (Main);
+module mkMain #(HostInterface host, MainIndication indication, ConnectalMemory::MemServerIndication memServerInd) (Main)
+  provisos(NumAlias#(pktgen_offset, TAdd#(`NUM_RXCHAN, `NUM_HOSTCHAN))
+          ,NumAlias#(metagen_offset, TAdd#(TAdd#(`NUM_RXCHAN, `NUM_HOSTCHAN), `NUM_PKTGEN))
+          ,NumAlias#(naux, TAdd#(`NUM_PKTGEN, `NUM_METAGEN)));
   let verbose = True;
   Clock defaultClock <- exposeCurrentClock();
   Reset defaultReset <- exposeCurrentReset();
@@ -62,7 +66,7 @@ module mkMain #(HostInterface host, MainIndication indication, ConnectalMemory::
   Reset rxReset = board.rxReset;
 
   Runtime#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) runtime <- mkRuntime(rxClock, rxReset, txClock, txReset);
-  Program#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) prog <- mkProgram();
+  Program#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN, naux) prog <- mkProgram();
 
   // Port 0 is HostChan
   for (Integer i=0; i<`NUM_HOSTCHAN; i=i+1) begin
@@ -71,26 +75,32 @@ module mkMain #(HostInterface host, MainIndication indication, ConnectalMemory::
 
   // Port 1-4 is RxChan
   for (Integer i=0; i<`NUM_RXCHAN; i=i+1) begin
-    messageM(printType(typeOf(prog.prev)) + printType(typeOf(runtime.rxchan)));
+    messageM("program " + printType(typeOf(prog.prev)) + " " + "runtime " + printType(typeOf(runtime.rxchan)));
     mkConnection(runtime.rxchan[i].next, prog.prev[i+`NUM_HOSTCHAN]);
-  end
-
-  // Processed metadata to runtime
-  for (Integer i=0; i<`NUM_HOSTCHAN+`NUM_RXCHAN; i=i+1) begin
-    mkConnection(prog.next[i], runtime.prev[i]);
   end
 
   // Port 5 is PktGen
   PktGenChannel pktgen <- mkPktGenChannel(txClock, txReset);
   PktCapChannel pktcap <- mkPktCapChannel(rxClock, rxReset);
 
+  // Port 6 is MetaGen
+  // Generate parsed packet metadata to test p4 pipeline throughput
+  MetaGenChannel metagen <- mkMetaGenChannel(valueOf(metagen_offset));
+  mkConnection(metagen.next, prog.prev[valueOf(metagen_offset)]);
+
+  // return processed metadata to runtime
+  for (Integer i=0; i<`NUM_HOSTCHAN+`NUM_RXCHAN; i=i+1) begin
+    mkConnection(prog.next[i], runtime.prev[i]);
+  end
+
 `ifdef SIMULATION
   mapM_(mkTieOff, map(getMacTx, runtime.txchan));
   //mapM_(mkTieOff, prog.next);
+  mkTieOff(prog.next[valueOf(metagen_offset)]);
   //mkConnection(pktgen.macTx, runtime.rxchan[0].macRx);
 `endif
 
-  MainAPI api <- mkMainAPI(indication, runtime, prog, pktgen, pktcap);
+  MainAPI api <- mkMainAPI(indication, runtime, prog, pktgen, pktcap, metagen);
   interface request = api.request;
 `ifdef BOARD_nfsume
   interface pins = board.pins;

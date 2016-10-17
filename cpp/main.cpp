@@ -40,12 +40,15 @@ int size = 0;
 static bool tosend = false;
 
 bool hwpktgen = false;
+bool metagen = false;
 
 extern void app_init(MainRequestProxy* device);
 
 void device_writePacketData(uint64_t* data, uint8_t* mask, int sop, int eop) {
     if (hwpktgen) {
       device->writePktGenData(data, mask, sop, eop);
+    } else if (metagen) {
+      device->writeMetaGenData(data, mask, sop, eop);
     } else {
       device->writePacketData(data, mask, sop, eop);
     }
@@ -109,6 +112,7 @@ void usage (const char *program_name) {
 struct arg_info {
     double rate;
     uint64_t tracelen;
+    bool metagen;
 };
 
 static void 
@@ -122,6 +126,7 @@ parse_options(int argc, char *argv[], char **pcap_file, char **intf, char **outf
         {"outf",                required_argument, 0, 'O'},
         {"pktgen-rate",         required_argument, 0, 'r'},
         {"pktgen-count",        required_argument, 0, 'n'},
+        {"metagen",             no_argument, 0, 'M'},
         {0, 0, 0, 0}
     };
 
@@ -154,6 +159,9 @@ parse_options(int argc, char *argv[], char **pcap_file, char **intf, char **outf
                 break;
             case 'n':
                 info->tracelen = strtol(optarg, NULL, 0);
+                break;
+            case 'M':
+                info->metagen = true;
                 break;
             default:
                 break;
@@ -197,14 +205,43 @@ void *sendThread(void *pcapt) {
     return NULL;
 }
 
+void run_demo(char *intf, char *outf) {
+  pthread_t t_cap, t_snd;
+  pcap_t *handle = NULL, *handle2=NULL; 
+  char errbuf[PCAP_ERRBUF_SIZE];
+  memset(errbuf,0,PCAP_ERRBUF_SIZE); 
+
+  printf("Opening device %s\n", intf); 
+  /* Open device in promiscuous mode */ 
+  if ((handle = pcap_open_live(intf, MAXBYTES2CAPTURE, 0,  512, errbuf)) == NULL){
+    fprintf(stderr, "ERROR: %s\n", errbuf);
+    exit(1);
+  }
+  pthread_create(&t_cap, NULL, captureThread, (void*)handle);
+
+  if (outf) {
+    printf("Opening device %s\n", outf); 
+    if ((handle2 = pcap_open_live(outf, MAXBYTES2CAPTURE, 0, 512, errbuf)) == NULL) {
+      fprintf(stderr, "ERROR: %s\n", errbuf);
+      exit(1);
+    }
+    pthread_create(&t_snd, NULL, sendThread, (void*)handle2);
+  }
+
+  pthread_join(t_cap, NULL);
+  pthread_join(t_snd, NULL);
+  /* Loop forever & call processPacket() for every received packet */
+  //if (pcap_loop(pt, -1, processPacket, (u_char *)&count) == -1){
+  //   fprintf(stderr, "ERROR: %s\n", pcap_geterr(pt) );
+  //   exit(1);
+  //}
+}
+
 int main(int argc, char **argv)
 {
     char *pcap_file=NULL;
-    pcap_t *handle = NULL, *handle2=NULL; 
-    struct arg_info arguments = {0.0, 0};
-    pthread_t t_cap, t_snd;
-    char errbuf[PCAP_ERRBUF_SIZE], *intf=NULL, *outf=NULL; 
-    memset(errbuf,0,PCAP_ERRBUF_SIZE); 
+    struct arg_info arguments = {0.0, 0, 0};
+    char *intf=NULL, *outf=NULL; 
 
     struct pcap_trace_info pcap_info = {0, 0};
     MainIndication echoindication(IfcNames_MainIndicationH2S);
@@ -218,51 +255,36 @@ int main(int argc, char **argv)
     // e.g. insert table entries here.
     app_init(device);
 
-    if (intf) {
-        printf("Opening device %s\n", intf); 
-        /* Open device in promiscuous mode */ 
-        if ((handle = pcap_open_live(intf, MAXBYTES2CAPTURE, 0,  512, errbuf)) == NULL){
-           fprintf(stderr, "ERROR: %s\n", errbuf);
-           exit(1);
-        }
-        pthread_create(&t_cap, NULL, captureThread, (void*)handle);
-
-        if (outf) {
-            printf("Opening device %s\n", outf); 
-            if ((handle2 = pcap_open_live(outf, MAXBYTES2CAPTURE, 0, 512, errbuf)) == NULL) {
-                fprintf(stderr, "ERROR: %s\n", errbuf);
-                exit(1);
-            }
-            pthread_create(&t_snd, NULL, sendThread, (void*)handle2);
-        }
-
-        pthread_join(t_cap, NULL);
-        pthread_join(t_snd, NULL);
-        /* Loop forever & call processPacket() for every received packet */
-        //if (pcap_loop(pt, -1, processPacket, (u_char *)&count) == -1){
-        //   fprintf(stderr, "ERROR: %s\n", pcap_geterr(pt) );
-        //   exit(1);
-        //}
+    // if specified intf on command line
+    if (intf && outf) {
+      run_demo(intf, outf);
     }
 
-    if (arguments.rate && arguments.tracelen) {
-        hwpktgen = true;
-    }
+    // load pcap to pktgen
+    hwpktgen = (arguments.rate && arguments.tracelen) ? true : false;
+
+    // load pcap to metagen
+    metagen = (arguments.metagen) ? true : false;
 
     if (pcap_file) {
-        fprintf(stderr, "Attempts to read pcap file %s\n", pcap_file);
-        load_pcap_file(pcap_file, &pcap_info);
+      fprintf(stderr, "Attempts to read pcap file %s\n", pcap_file);
+      load_pcap_file(pcap_file, &pcap_info);
     }
 
-    if (arguments.rate && arguments.tracelen) {
-        fprintf(stderr, "%lx %llx\n", pcap_info.packet_count, pcap_info.byte_count);
-        int idle = compute_idle(&pcap_info, arguments.rate, LINK_SPEED);
-        fprintf(stderr, "IDLE=%d\n", idle);
-        device->pktcap_start(arguments.tracelen);
-        device->pktgen_start(arguments.tracelen, idle);
+    if (hwpktgen) {
+      fprintf(stderr, "%lx %llx\n", pcap_info.packet_count, pcap_info.byte_count);
+      int idle = compute_idle(&pcap_info, arguments.rate, LINK_SPEED);
+      fprintf(stderr, "IDLE=%d\n", idle);
+      device->pktcap_start(arguments.tracelen);
+      device->pktgen_start(arguments.tracelen, idle);
     }
 
-    sleep(3);
+    if (metagen) {
+      fprintf(stderr, "start metagen %ld\n", arguments.tracelen);
+      device->metagen_start(arguments.tracelen, 1);
+    }
+
+    sleep(300);
 
     device->read_pktcap_perf_info();
     return 0;

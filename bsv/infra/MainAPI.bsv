@@ -15,9 +15,11 @@ import Control::*;
 import ConnectalTypes::*;
 import PktGenChannel::*;
 import PktCapChannel::*;
+import MetaGenChannel::*;
 import DbgDefs::*;
 import Runtime::*;
 import Program::*;
+import StructDefines::*;
 
 interface MainRequest;
   method Action read_version();
@@ -28,6 +30,9 @@ interface MainRequest;
   method Action pktgen_stop();
   method Action pktcap_start(Bit#(32) iteration);
   method Action pktcap_stop();
+  method Action writeMetaGenData(Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
+  method Action metagen_start(Bit#(32) iteration, Bit#(32) freq);
+  method Action metagen_stop();
   method Action read_pktcap_perf_info();
 `include "APIDefGenerated.bsv"
 endinterface
@@ -38,38 +43,47 @@ endinterface
 interface MainAPI;
   interface MainRequest request;
 endinterface
+
 module mkMainAPI #(MainIndication indication,
                    Runtime#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) runtime,
-                   Program#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) prog,
+                   Program#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN, TAdd#(`NUM_PKTGEN, `NUM_METAGEN)) prog,
                    PktGenChannel pktgen,
-                   PktCapChannel pktcap)(MainAPI);
+                   PktCapChannel pktcap,
+                   MetaGenChannel metagen)(MainAPI);
+  function ByteStream#(16) buildByteStream(Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
+       ByteStream#(16) beat = defaultValue;
+       beat.data = pack(reverse(data));
+       beat.mask = pack(reverse(mask));
+       beat.sop = unpack(sop);
+       beat.eop = unpack(eop);
+       return beat;
+  endfunction
   interface MainRequest request;
     method Action read_version ();
        let v = `NicVersion;
        indication.read_version_rsp(v);
     endmethod
     method Action writePacketData (Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
-       ByteStream#(16) beat = defaultValue;
-       beat.data = pack(reverse(data));
-       beat.mask = pack(reverse(mask));
-       beat.sop = unpack(sop);
-       beat.eop = unpack(eop);
+       ByteStream#(16) beat = buildByteStream(data, mask, sop, eop);
        runtime.hostchan[0].writeServer.writeData.put(beat);
        $display("write data ", fshow(beat));
     endmethod
     // packet gen/cap interfaces
     method Action writePktGenData(Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
-       ByteStream#(16) beat = defaultValue;
-       beat.data = pack(reverse(data));
-       beat.mask = pack(reverse(mask));
-       beat.sop = unpack(sop);
-       beat.eop = unpack(eop);
+       ByteStream#(16) beat = buildByteStream(data, mask, sop, eop);
        pktgen.writeData.put(beat);
+    endmethod
+    // metadata gen interface
+    method Action writeMetaGenData(Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
+       ByteStream#(16) beat = buildByteStream(data, mask, sop, eop);
+       metagen.writeData.put(beat);
     endmethod
     method pktgen_start = pktgen.start;
     method pktgen_stop = pktgen.stop;
     method pktcap_start = pktcap.start;
     method pktcap_stop = pktgen.stop;
+    method metagen_start = metagen.start;
+    method metagen_stop = metagen.stop;
     method Action read_pktcap_perf_info();
        let v = pktcap.read_perf_info;
        indication.read_pktcap_perf_info_resp(v);
