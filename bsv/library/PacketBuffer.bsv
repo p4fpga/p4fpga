@@ -98,13 +98,13 @@ instance Connectable#(PktReadClient#(n), PktReadServer#(n));
    endmodule
 endinstance
 
-typeclass GetPktClient#(numeric type n);
+typeclass ReadServer#(numeric type n);
    function Get#(Bit#(EtherLen)) getReadLen(PacketBuffer#(n) buff);
    function Put#(Bit#(EtherLen)) getReadReq(PacketBuffer#(n) buff);
    function Get#(ByteStream#(n)) getReadData(PacketBuffer#(n) buff);
 endtypeclass
 
-instance GetPktClient#(n);
+instance ReadServer#(n);
    function Get#(Bit#(EtherLen)) getReadLen(PacketBuffer#(n) buff);
       return buff.readServer.readLen;
    endfunction
@@ -113,6 +113,16 @@ instance GetPktClient#(n);
    endfunction
    function Get#(ByteStream#(n)) getReadData(PacketBuffer#(n) buff);
       return buff.readServer.readData;
+   endfunction
+endinstance
+
+typeclass WriteServer#(numeric type n);
+   function Put#(ByteStream#(n)) getWriteData(PacketBuffer#(n) buff);
+endtypeclass
+
+instance WriteServer#(n);
+   function Put#(ByteStream#(n)) getWriteData(PacketBuffer#(n) buff);
+      return buff.writeServer.writeData;
    endfunction
 endinstance
 

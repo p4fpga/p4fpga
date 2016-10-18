@@ -59,7 +59,7 @@ endfunction
    -> txchan : gearbox 512 -> 256 -> 128 -> ring to mac
  */
 interface Runtime#(numeric type nrx, numeric type ntx, numeric type nhs);
-   interface Vector#(nrx, StreamInChannel) rxchan;
+   interface Vector#(nrx, StreamRxChannel) rxchan;
    interface Vector#(nhs, StreamInChannel) hostchan;
    interface Vector#(ntx, TxChannel) txchan;
    // TODO: reentryChannel and dropChannel
@@ -68,6 +68,7 @@ interface Runtime#(numeric type nrx, numeric type ntx, numeric type nhs);
 endinterface
 module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Runtime#(nrx, ntx, nhs))
    provisos(Add#(ntx, a__, 8) // FIXME: make ntx == 8, caused by take()
+           ,Add#(TAdd#(nrx, nhs), b__, 8) // introduced by take()
            ,NumAlias#(TAdd#(nrx, nhs), npi)
            ); 
 
@@ -89,8 +90,8 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    let reset <- exposeCurrentReset();
 
    Vector#(nhs, StreamInChannel) _hostchan <- genWithM(mkStreamInChannel);
-   Vector#(nrx, StreamInChannel) _rxchan <- genWithM(mkStreamInChannel);//FIXME, clocked_by rxClock, reset_by rxReset);
-   Vector#(nhs, StreamOutChannel) _streamchan <- genWithM(mkStreamOutChannel());
+   Vector#(nrx, StreamRxChannel) _rxchan <- genWithM(mkStreamRxChannel(rxClock, rxReset));
+   Vector#(npi, StreamOutChannel) _streamchan <- genWithM(mkStreamOutChannel());
    Vector#(ntx, TxChannel) _txchan <- replicateM(mkTxChannel(txClock, txReset));
 
    // processed metadata to stream pipeline
@@ -101,25 +102,27 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
       mkConnection(metaPipeOut(i), _streamchan[i].prev);
    end
 
-  // for (Integer i=0; i<`NUM_RXCHAN; i=i+1) begin
-  //    mkConnection(metaPipeOut(i+`NUM_HOSTCHAN), _streamchan[i+`NUM_HOSTCHAN].prev);
-  // end
+   for (Integer i=0; i<`NUM_RXCHAN; i=i+1) begin
+      mkConnection(metaPipeOut(i+`NUM_HOSTCHAN), _streamchan[i+`NUM_HOSTCHAN].prev);
+   end
 
    // drop streamed bytes on the floor
    // mkTieOff(_hostchan[0].writeClient.writeData);
 
-   Vector#(nhs, StreamGearbox#(16, 32)) gearbox_up_16 <- replicateM(mkStreamGearboxUp());
-   Vector#(nhs, StreamGearbox#(32, 64)) gearbox_up_32 <- replicateM(mkStreamGearboxUp());
-   mapM(uncurry(mkConnection), zip(map(getWriteClient, _hostchan), map(getWriteServer, _streamchan)));
+   Vector#(npi, StreamGearbox#(16, 32)) gearbox_up_16 <- replicateM(mkStreamGearboxUp());
+   Vector#(npi, StreamGearbox#(32, 64)) gearbox_up_32 <- replicateM(mkStreamGearboxUp());
+   let write_clients = append(map(getWriteClient, _hostchan), map(getWriteClient, _rxchan));
+   mapM(uncurry(mkConnection), zip(write_clients, map(getWriteServer, _streamchan)));
    mapM(uncurry(mkConnection), zip(map(getWriteClient, _streamchan), map(getDataIn, gearbox_up_16)));
    mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_up_16), map(getDataIn, gearbox_up_32)));
 
-   PacketBuffer#(64) input_queues <- mkPacketBuffer("inputQ"); // input queue
-   mkConnection(gearbox_up_32[0].dataout, input_queues.writeServer.writeData); // gearbox -> input queue
-   mkConnection(input_queues.readServer.readLen, input_queues.readServer.readReq); // immediate transmit
+   Vector#(npi, PacketBuffer#(64)) input_queues <- replicateM(mkPacketBuffer("inputQ")); // input queue
+   mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_up_32), map(getWriteData, input_queues))); // gearbox -> input queue
+   mapM(uncurry(mkConnection), zip(map(getReadLen, input_queues), map(getReadReq, input_queues))); // immediate transmit
 
    XBar#(64) xbar <- mkXBar(3, destOf, mkMerge2x1_lru, 3, 0); // last two parameters are log(size) and idx
-   mkConnection(input_queues.readServer.readData, xbar.input_ports[0]); // input queue -> xbar
+   Vector#(8, Put#(ByteStream#(64))) input_ports = toVector(xbar.input_ports);
+   mapM(uncurry(mkConnection), zip(map(getReadData, input_queues), take(input_ports))); // input queue -> xbar
 
    Vector#(8, PacketBuffer#(64)) output_queues <- replicateM(mkPacketBuffer("outputQ")); // output queue
    mapM(uncurry(mkConnection), zip(map(getReadLen, output_queues), map(getReadReq, output_queues))); // immediate transmit
@@ -140,7 +143,7 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    interface hostchan = _hostchan;
    method Action set_verbosity (int verbosity);
       cf_verbosity <= verbosity;
-      //_rxchan.set_verbosity(verbosity);
+      mapM_(uncurry(set_verbosity), zip(_rxchan, replicate(verbosity)));
       mapM_(uncurry(set_verbosity), zip(_streamchan, replicate(verbosity)));
       mapM_(uncurry(set_verbosity), zip(_txchan, replicate(verbosity)));
       mapM_(uncurry(set_verbosity), zip(_hostchan, replicate(verbosity)));

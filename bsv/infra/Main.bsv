@@ -43,6 +43,7 @@ import Runtime::*;
 import Program::*;
 import Pipe::*;
 import Channel::*;
+import Stream::*;
 import StructDefines::*;
 import ConnectalTypes::*;
 `include "ConnectalProjectConfig.bsv"
@@ -80,8 +81,14 @@ module mkMain #(HostInterface host, MainIndication indication, ConnectalMemory::
   end
 
   // Port 5 is PktGen
+  messageM("Generating pktgen/pktcap channels.");
   PktGenChannel pktgen <- mkPktGenChannel(txClock, txReset);
   PktCapChannel pktcap <- mkPktCapChannel(rxClock, rxReset);
+
+  // LOOPBACK
+  SyncFIFOIfc#(ByteStream#(8)) lpbk_ff <- mkSyncFIFO(4, txClock, txReset, rxClock);
+  mkConnection(pktgen.macTx, toPut(lpbk_ff));
+  mkConnection(toGet(lpbk_ff), runtime.rxchan[0].macRx);
 
   // Port 6 is MetaGen
   // Generate parsed packet metadata to test p4 pipeline throughput

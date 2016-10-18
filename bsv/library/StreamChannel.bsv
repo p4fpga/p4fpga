@@ -240,5 +240,38 @@ module mkStreamInChannel#(Integer id)(StreamInChannel);
    endmethod
 endmodule
 
-// Streaming version of RxChannel
+interface StreamRxChannel;
+   interface Put#(ByteStream#(8)) macRx;
+   interface PktWriteClient#(16) writeClient;
+   interface PipeOut#(MetadataRequest) next;
+   method Action set_verbosity (int verbosity);
+endinterface
 
+instance GetWriteClient#(StreamRxChannel);
+   function Get#(ByteStream#(16)) getWriteClient(StreamRxChannel chan);
+      return chan.writeClient.writeData;
+   endfunction
+endinstance
+
+instance SetVerbosity#(StreamRxChannel);
+   function Action set_verbosity(StreamRxChannel t, int verbosity);
+      action
+         t.set_verbosity(verbosity);
+      endaction
+   endfunction
+endinstance
+
+// Streaming version of RxChannel
+module mkStreamRxChannel#(Clock rxClock, Reset rxReset, Integer id)(StreamRxChannel);
+   `PRINT_DEBUG_MSG
+   StreamInChannel hostchan <- mkStreamInChannel(id);
+   StoreAndFwdFromMacToRing macToRing <- mkStoreAndFwdFromMacToRing(rxClock, rxReset);
+   mkConnection(macToRing.writeClient, hostchan.writeServer);
+   interface macRx = macToRing.macRx;
+   interface writeClient = hostchan.writeClient;
+   interface next = hostchan.next;
+   method Action set_verbosity (int verbosity);
+      cf_verbosity <= verbosity;
+      hostchan.set_verbosity(verbosity);
+   endmethod
+endmodule
