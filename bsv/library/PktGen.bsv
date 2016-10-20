@@ -1,4 +1,3 @@
-
 // Copyright (c) 2014 Cornell University.
 
 // Permission is hereby granted, free of charge, to any person
@@ -23,6 +22,7 @@
 
 import FIFO::*;
 import FIFOF::*;
+import ConfigReg::*;
 import DefaultValue::*;
 import Vector::*;
 import BuildVector::*;
@@ -35,27 +35,29 @@ import Pipe::*;
 import Ethernet::*;
 import Stream::*;
 import PacketBuffer::*;
+`include "Debug.defines"
 
 typedef 1 MinimumIPG; // 1 beat == 16 bytes.
 
 interface PktGen;
-    interface PktWriteServer#(16) writeServer;
-    interface PktWriteClient#(16) writeClient;
-    method Action start(Bit#(32) iter, Bit#(32) ipg);
-    method Action stop();
+   interface PktWriteServer#(16) writeServer;
+   interface PktWriteClient#(16) writeClient;
+   method Action start(Bit#(32) iter, Bit#(32) ipg);
+   method Action stop();
+   method Action set_verbosity (int verbosity);
 endinterface
 
 module mkPktGen(PktGen)
    provisos (Div#(64, 8, bytesPerBeat)
             ,Log#(bytesPerBeat, beatShift));
-
-   let verbose = False;
-
+   `PRINT_DEBUG_MSG
+   Reg#(Bit#(64)) byteSent <- mkReg(0);
+   Reg#(Bit#(64)) idleSent <- mkReg(0);
    Reg#(Bit#(32)) traceLen <- mkReg(0);
    Reg#(Bit#(32)) pktCount <- mkReg(0);
    Reg#(Bit#(32)) ipgCount <- mkReg(0);
-   Reg#(Bool) idle <- mkReg(False);
    Reg#(Bit#(32)) currIPG <- mkReg(0);
+   Reg#(Bool) idle <- mkReg(False);
    Reg#(Bool) started <- mkReg(False);
    Reg#(Bool) infiniteLoop <- mkReg(False);
 
@@ -65,7 +67,7 @@ module mkPktGen(PktGen)
    rule prepare_packet if (pktCount>0 && !idle);
       let pktLen <- buff.readServer.readLen.get;
       buff.readServer.readReq.put(pktLen);
-      if (verbose) $display("Pktgen:: fetch_packet pktlen=%h", pktLen);
+      dbprint(3, $format("pktgen:: fetch_packet pktlen=%h", pktLen));
    endrule
 
    rule enqueue_packet if (pktCount>0 && !idle);
@@ -78,14 +80,14 @@ module mkPktGen(PktGen)
             pktCount <= pktCount - 1;
          idle <= True;
          currIPG <= 0;
-         if (verbose) $display("Pktgen:: eop %h %h %h %h", idle, started, currIPG, ipgCount);
+         dbprint(3, $format("pktgen:: eop %h %h %h %h", idle, started, currIPG, ipgCount));
       end
    endrule
 
    rule compute_idle if (pktCount>0 && idle);
+      dbprint(3, $format("pktgen:: curr_ipg = %d, ipg_count = %d", currIPG, ipgCount));
       if (currIPG < ipgCount + fromInteger(valueOf(MinimumIPG))) begin
          currIPG <= currIPG + fromInteger(valueOf(bytesPerBeat));
-         if (verbose) $display("Pktgen:: ipg = %d", currIPG);
       end
       else begin
          currIPG <= 0;
@@ -97,13 +99,13 @@ module mkPktGen(PktGen)
    rule cleanup if (pktCount==0 && traceLen>0 && started);
       let pktLen <- buff.readServer.readLen.get;
       buff.readServer.readReq.put(pktLen);
-      if (verbose) $display("Pktgen:: drain buffer");
+      dbprint(3, $format("pktgen:: drain buffer"));
    endrule
 
    rule drainBufferPayload if (pktCount==0 && traceLen>0 && started);
       let data <- buff.readServer.readData.get;
       // do nothing
-      if (verbose) $display("Pktgen:: drain buffer payload");
+      dbprint(3, $format("pktgen:: drain buffer payload"));
       if (data.eop) begin
          traceLen <= traceLen - 1;
       end
@@ -117,7 +119,6 @@ module mkPktGen(PktGen)
       interface Put writeData;
          method Action put (ByteStream#(16) d);
             buff.writeServer.writeData.put(d);
-            if (verbose) $display("Pktgen:: write data", fshow(d));
             if (d.eop) begin
                traceLen <= traceLen + 1;
             end
@@ -137,10 +138,13 @@ module mkPktGen(PktGen)
          pktCount <= 1;
          infiniteLoop <= True;
       end
-      if (verbose) $display("Pktgen:: start %h %h", pc, ipg);
    endmethod
    method Action stop();
       infiniteLoop <= False;
+   endmethod
+   method Action set_verbosity (int verbosity);
+      cf_verbosity <= verbosity;
+      buff.set_verbosity(verbosity);
    endmethod
 endmodule
 

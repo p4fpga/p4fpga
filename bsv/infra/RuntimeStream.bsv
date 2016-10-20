@@ -70,6 +70,7 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    provisos(Add#(ntx, a__, 8) // FIXME: make ntx == 8, caused by take()
            ,Add#(TAdd#(nrx, nhs), b__, 8) // introduced by take()
            ,NumAlias#(TAdd#(nrx, nhs), npi)
+           ,NumAlias#(nhs, rx_offset)
            ); 
 
    Vector#(npi, FIFOF#(MetadataRequest)) meta_ff <- replicateM(mkFIFOF);
@@ -89,22 +90,15 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    let clock <- exposeCurrentClock();
    let reset <- exposeCurrentReset();
 
+   function Integer add_base (Integer j) = (valueOf(nhs) + j);
    Vector#(nhs, StreamInChannel) _hostchan <- genWithM(mkStreamInChannel);
-   Vector#(nrx, StreamRxChannel) _rxchan <- genWithM(mkStreamRxChannel(rxClock, rxReset));
+   Vector#(nrx, StreamRxChannel) _rxchan <- genWithM(compose(mkStreamRxChannel(rxClock, rxReset), add_base));
    Vector#(npi, StreamOutChannel) _streamchan <- genWithM(mkStreamOutChannel());
    Vector#(ntx, TxChannel) _txchan <- replicateM(mkTxChannel(txClock, txReset));
 
    // processed metadata to stream pipeline
    // mapM_(mkTieOff, map(toPipeOut, meta_ff));
-   //mapM_(uncurry(mkConnection), zip(genWith(metaPipeOut), map(getMetaIn, _streamchan)));
-
-   for (Integer i=0; i<`NUM_HOSTCHAN; i=i+1) begin
-      mkConnection(metaPipeOut(i), _streamchan[i].prev);
-   end
-
-   for (Integer i=0; i<`NUM_RXCHAN; i=i+1) begin
-      mkConnection(metaPipeOut(i+`NUM_HOSTCHAN), _streamchan[i+`NUM_HOSTCHAN].prev);
-   end
+   mapM_(uncurry(mkConnection), zip(genWith(metaPipeOut), map(getMetaIn, _streamchan)));
 
    // drop streamed bytes on the floor
    // mkTieOff(_hostchan[0].writeClient.writeData);

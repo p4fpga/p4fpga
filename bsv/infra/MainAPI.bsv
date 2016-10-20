@@ -92,6 +92,7 @@ module mkMainAPI #(MainIndication indication,
     method Action set_verbosity (Bit#(32) verbosity);
        runtime.set_verbosity(unpack(verbosity));
        prog.set_verbosity(unpack(verbosity));
+       pktgen.set_verbosity(unpack(verbosity));
     endmethod
 `include "APIDeclGenerated.bsv"
   endinterface

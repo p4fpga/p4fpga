@@ -37,6 +37,7 @@ import StoreAndForward::*;
 import SharedBuff::*;
 import SpecialFIFOs ::*;
 import Stream::*;
+import StreamGearbox::*;
 import Deparser::*;
 
 // Encapsulate a packet generator inside a channel
@@ -45,6 +46,7 @@ interface PktGenChannel;
    method Action start (Bit#(32) iter, Bit#(32) ipg);
    method Action stop ();
    interface Get#(ByteStream#(8)) macTx;
+   method Action set_verbosity (int verbosity);
 endinterface
 
 module mkPktGenChannel#(Clock txClock, Reset txReset)(PktGenChannel);
@@ -52,38 +54,44 @@ module mkPktGenChannel#(Clock txClock, Reset txReset)(PktGenChannel);
    Reset defaultReset <- exposeCurrentReset();
 
    PktGen pktgen <- mkPktGen(clocked_by txClock, reset_by txReset);
-   PacketBuffer#(16) pkt_buff <- mkPacketBuffer("pktgen chan", clocked_by txClock, reset_by txReset);
-   StoreAndFwdFromRingToMac ringToMac <- mkStoreAndFwdFromRingToMac(txClock, txReset, clocked_by txClock, reset_by txReset);
+   StreamGearbox#(16, 8) gearbox <- mkStreamGearboxDn(clocked_by txClock, reset_by txReset);
+   mkConnection(pktgen.writeClient.writeData, gearbox.datain);
 
-   mkConnection(pktgen.writeClient, pkt_buff.writeServer);
-   mkConnection(ringToMac.readClient, pkt_buff.readServer);
-
-   SyncFIFOIfc#(Tuple2#(Bit#(32),Bit#(32))) pktGenStartSyncFifo <- mkSyncFIFO(4, defaultClock, defaultReset, txClock);
-   SyncFIFOIfc#(void) pktGenStopSyncFifo <- mkSyncFIFO(4, defaultClock, defaultReset, txClock);
-   SyncFIFOIfc#(ByteStream#(16)) pktGenWriteSyncFifo <- mkSyncFIFO(4, defaultClock, defaultReset, txClock);
+   SyncFIFOIfc#(Tuple2#(Bit#(32),Bit#(32))) start_sync_ff <- mkSyncFIFO(4, defaultClock, defaultReset, txClock);
+   SyncFIFOIfc#(void) stop_sync_ff <- mkSyncFIFO(4, defaultClock, defaultReset, txClock);
+   SyncFIFOIfc#(ByteStream#(16)) write_sync_ff <- mkSyncFIFO(4, defaultClock, defaultReset, txClock);
+   SyncFIFOIfc#(int) verbose_sync_ff <- mkSyncFIFO(4, defaultClock, defaultReset, txClock);
 
    rule r_write_data;
-      let v <- toGet(pktGenWriteSyncFifo).get;
+      let v <- toGet(write_sync_ff).get;
       pktgen.writeServer.writeData.put(v);
    endrule
 
    rule r_start;
-      let v <- toGet(pktGenStartSyncFifo).get;
+      let v <- toGet(start_sync_ff).get;
       pktgen.start(tpl_1(v), tpl_2(v));
    endrule
 
    rule r_stop;
-      let v <- toGet(pktGenStopSyncFifo).get;
+      let v <- toGet(stop_sync_ff).get;
       pktgen.stop();
    endrule
 
+   rule r_verbose;
+      let v <- toGet(verbose_sync_ff).get;
+      pktgen.set_verbosity(v);
+   endrule
+
    method Action start(Bit#(32) iter, Bit#(32) ipg);
-      pktGenStartSyncFifo.enq(tuple2(iter, ipg));
+      start_sync_ff.enq(tuple2(iter, ipg));
    endmethod
    method Action stop ();
-      pktGenStopSyncFifo.enq(?);
+      stop_sync_ff.enq(?);
    endmethod
-   interface writeData = toPut(pktGenWriteSyncFifo);
-   interface macTx = ringToMac.macTx;
+   interface writeData = toPut(write_sync_ff);
+   interface macTx = gearbox.dataout;
+   method Action set_verbosity (int verbosity);
+      verbose_sync_ff.enq(verbosity);
+   endmethod
 endmodule
 

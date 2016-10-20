@@ -31,19 +31,21 @@ package PacketBuffer;
 import BRAM::*;
 import Clocks::*;
 import Connectable::*;
+import ConfigReg::*;
+import Channel::*;
+import DbgDefs::*;
+import Ethernet::*;
 import FShow::*;
 import FIFO::*;
 import FIFOF::*;
 import GetPut::*;
 import Pipe::*;
+import PrintTrace::*;
 import SpecialFIFOs::*;
 import Stream::*;
-import Vector::*;
-import DbgDefs::*;
-import Ethernet::*;
 import TieOff::*;
-import PrintTrace::*;
-import Channel::*;
+import Vector::*;
+`include "Debug.defines"
 
 typedef struct {
    Bit#(PktAddrWidth) addr;
@@ -82,6 +84,7 @@ interface PacketBuffer#(numeric type n);
    interface PktWriteServer#(n) writeServer;
    interface PktReadServer#(n) readServer;
    method PktBuffDbgRec dbg;
+   method Action set_verbosity (int verbosity);
 endinterface
 
 instance Connectable#(PktWriteClient#(n), PktWriteServer#(n));
@@ -129,12 +132,9 @@ endinstance
 module mkPacketBuffer#(String msg)(PacketBuffer#(n))
    provisos (Add#(1, a__, TLog#(TAdd#(1, n)))
             ,Add#(b__, TLog#(TAdd#(1, n)), 16));
+   `PRINT_DEBUG_MSG
    Clock current_clock <- exposeCurrentClock;
    Reset current_reset <- exposeCurrentReset;
-
-   let verbose = True;
-
-   Reg#(Bit#(32))  cycle <- mkReg(0);
    // Mac
    Wire#(Bit#(64))              data        <- mkWire;
    Wire#(Bool)                  valid       <- mkWire;
@@ -170,10 +170,6 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
    FIFOF#(Bit#(EtherLen))    fifoReadReq <- mkSizedFIFOF(4);
    FIFOF#(ByteStream#(n))    fifoReadData <- mkBypassFIFOF();
 
-   rule every1 if (verbose);
-      cycle <= cycle + 1;
-   endrule
-
    rule enq_stage1;
       ByteStream#(n) d <- toGet(fifoWriteData).get;
       incomingReqs.enq(ReqT{addr: wrCurrPtr, data:d});
@@ -190,7 +186,7 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
 
    rule enqueue_first_beat(!inPacket);
       ReqT#(n) req <- toGet(incomingReqs).get;
-      if (verbose) $display("(%0d) %s enqueue_first_beat ", $time, msg, fshow(req));
+      dbprint(3, $format("%s enqueue_first_beat ", msg, fshow(req)));
       memBuffer.portA.request.put(BRAMRequest{write:True, responseOnWrite:False,
          address:req.addr, datain:req.data});
       inPacket <= True;
@@ -199,14 +195,14 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
 
    rule enqueue_next_beat(!fifoEop.notEmpty && inPacket);
       ReqT#(n) req <- toGet(incomingReqs).get;
-      if (verbose) $display("(%0d) %s enqueue_next_beat ", $time, msg, fshow(req));
+      dbprint(3, $format("%s enqueue_next_beat ", msg, fshow(req)));
       memBuffer.portA.request.put(BRAMRequest{write:True, responseOnWrite:False,
          address:req.addr, datain:req.data});
    endrule
 
    rule commit_packet(fifoEop.notEmpty && inPacket);
       ReqT#(n) req <- toGet(incomingReqs).get;
-      if (verbose) $display("(%0d) %s commit_packet ", $time, msg, fshow(req));
+      dbprint(3, $format("%s commit_packet ", msg, fshow(req)));
       memBuffer.portA.request.put(BRAMRequest{write:True, responseOnWrite:False,
          address:req.addr, datain:req.data});
       let v <- toGet(fifoEop).get;
@@ -217,7 +213,7 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
 
    rule dequeue_first_beat(!outPacket);
       let v <- toGet(fifoReadReq).get;
-      if (verbose) $display("(%0d) %s dequeue_first_beat : %x %x", $time, msg, rdCurrPtr, v);
+      dbprint(3, $format("%s dequeue_first_beat : %x %x", msg, rdCurrPtr, v));
       memBuffer.portB.request.put(BRAMRequest{write:False, responseOnWrite:False,
          address:truncate(rdCurrPtr), datain:?});
       outPacket <= True;
@@ -237,14 +233,14 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
             address:truncate(rdCurrPtr), datain:?});
          rdCurrPtr <= rdCurrPtr + 1;
       end
-      if (verbose) $display("(%0d) %s dequeue_next_beat : %x %x", $time, msg, rdCurrPtr, d);
+      dbprint(3, $format("%s dequeue_next_beat : %x %x", msg, rdCurrPtr, d));
    endrule
 
    // Big-endianess
    interface PktWriteServer writeServer;
       interface Put writeData;
          method Action put(ByteStream#(n) d);
-            if (verbose) $display("(%0d) %s writeData : Packet data %x", $time, msg, d.data);
+            dbprint(3, $format("%s writeData : Packet data %x", msg, d.data));
             fifoWriteData.enq(d);
          endmethod
       endinterface
@@ -272,6 +268,8 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
                             ,sopDeq: sopDeq
                             ,eopDeq: eopDeq };
    endmethod
+   method Action set_verbosity (int verbosity);
+      cf_verbosity <= verbosity;
+   endmethod
 endmodule
-
 endpackage: PacketBuffer
