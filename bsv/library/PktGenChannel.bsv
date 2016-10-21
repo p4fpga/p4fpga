@@ -43,9 +43,9 @@ import Deparser::*;
 // Encapsulate a packet generator inside a channel
 interface PktGenChannel;
    interface Put#(ByteStream#(16)) writeData;
+   interface Get#(ByteStream#(8)) macTx;
    method Action start (Bit#(32) iter, Bit#(32) ipg);
    method Action stop ();
-   interface Get#(ByteStream#(8)) macTx;
    method Action set_verbosity (int verbosity);
 endinterface
 

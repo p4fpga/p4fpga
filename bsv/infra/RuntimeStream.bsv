@@ -31,6 +31,7 @@ import Channel::*;
 import Gearbox::*;
 import SharedBuff::*;
 import PacketBuffer::*;
+import Printf::*;
 import Stream::*;
 import StreamGearbox::*;
 import XBar::*;
@@ -66,6 +67,7 @@ interface Runtime#(numeric type nrx, numeric type ntx, numeric type nhs);
    interface Vector#(TAdd#(nrx, nhs), PipeIn#(MetadataRequest)) prev;
    method Action set_verbosity (int verbosity);
 endinterface
+
 module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Runtime#(nrx, ntx, nhs))
    provisos(Add#(ntx, a__, 8) // FIXME: make ntx == 8, caused by take()
            ,Add#(TAdd#(nrx, nhs), b__, 8) // introduced by take()
@@ -110,7 +112,7 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    mapM(uncurry(mkConnection), zip(map(getWriteClient, _streamchan), map(getDataIn, gearbox_up_16)));
    mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_up_16), map(getDataIn, gearbox_up_32)));
 
-   Vector#(npi, PacketBuffer#(64)) input_queues <- replicateM(mkPacketBuffer("inputQ")); // input queue
+   Vector#(npi, PacketBuffer#(64)) input_queues <- mapM(mkPacketBuffer, genWith(sprintf("inputQ %h"))); // input queue
    mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_up_32), map(getWriteData, input_queues))); // gearbox -> input queue
    mapM(uncurry(mkConnection), zip(map(getReadLen, input_queues), map(getReadReq, input_queues))); // immediate transmit
 
@@ -118,7 +120,7 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    Vector#(8, Put#(ByteStream#(64))) input_ports = toVector(xbar.input_ports);
    mapM(uncurry(mkConnection), zip(map(getReadData, input_queues), take(input_ports))); // input queue -> xbar
 
-   Vector#(8, PacketBuffer#(64)) output_queues <- replicateM(mkPacketBuffer("outputQ")); // output queue
+   Vector#(8, PacketBuffer#(64)) output_queues <- mapM(mkPacketBuffer, genWith(sprintf("outputQ %h"))); // output queue
    mapM(uncurry(mkConnection), zip(map(getReadLen, output_queues), map(getReadReq, output_queues))); // immediate transmit
 
    Vector#(8, Get#(ByteStream#(64))) outvec = toVector(xbar.output_ports);
@@ -141,6 +143,8 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
       mapM_(uncurry(set_verbosity), zip(_streamchan, replicate(verbosity)));
       mapM_(uncurry(set_verbosity), zip(_txchan, replicate(verbosity)));
       mapM_(uncurry(set_verbosity), zip(_hostchan, replicate(verbosity)));
+      mapM_(uncurry(set_verbosity), zip(input_queues, replicate(verbosity)));
+      mapM_(uncurry(set_verbosity), zip(output_queues, replicate(verbosity)));
    endmethod
 endmodule
 
