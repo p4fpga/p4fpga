@@ -87,6 +87,14 @@ interface PacketBuffer#(numeric type n);
    method Action set_verbosity (int verbosity);
 endinterface
 
+instance SetVerbosity#(PacketBuffer#(n));
+   function Action set_verbosity(PacketBuffer#(n) t, int verbosity);
+      action
+         t.set_verbosity(verbosity);
+      endaction
+   endfunction
+endinstance
+
 instance Connectable#(PktWriteClient#(n), PktWriteServer#(n));
    module mkConnection#(PktWriteClient#(n) client, PktWriteServer#(n) server)(Empty);
       mkConnection(client.writeData, server.writeData);
@@ -175,6 +183,8 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
       incomingReqs.enq(ReqT{addr: wrCurrPtr, data:d});
       wrCurrPtr <= wrCurrPtr + 1;
       let newPacketLen = packetLen + zeroExtend(pack(countOnes(d.mask)));
+      dbprint(3, $format("%s enq_stage1 ", msg, fshow(d)));
+      inPacket <= True;
       if (d.eop) begin
          fifoEop.enq(newPacketLen);
          packetLen <= 0;
@@ -184,12 +194,11 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
       end
    endrule
 
-   rule enqueue_first_beat(!inPacket);
+   rule enqueue_first_beat(!fifoEop.notEmpty && !inPacket);
       ReqT#(n) req <- toGet(incomingReqs).get;
       dbprint(3, $format("%s enqueue_first_beat ", msg, fshow(req)));
       memBuffer.portA.request.put(BRAMRequest{write:True, responseOnWrite:False,
          address:req.addr, datain:req.data});
-      inPacket <= True;
       sopEnq <= sopEnq + 1;
    endrule
 
