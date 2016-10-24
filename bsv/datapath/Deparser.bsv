@@ -22,6 +22,7 @@
 
 // Deparser Template
 import Library::*;
+`include "Debug.defines"
 
 // app-specific structs
 `define DEPARSER_STRUCT
@@ -76,14 +77,7 @@ interface Deparser;
    method DeparserPerfRec read_perf_info ();
 endinterface
 module mkDeparser (Deparser);
-   Reg#(int) cf_verbosity <- mkConfigRegU;
-   function Action dbprint(Integer level, Fmt msg);
-      action
-      if (cf_verbosity > fromInteger(level)) begin
-         $display("(%0d) ", $time, msg);
-      end
-      endaction
-   endfunction
+   `PRINT_DEBUG_MSG
 
    FIFOF#(ByteStream#(16)) data_in_ff <- mkFIFOF;
    FIFOF#(ByteStream#(16)) data_out_ff <- mkFIFOF;
@@ -158,7 +152,7 @@ module mkDeparser (Deparser);
     if (rg_shift_amt[1] != 0) begin
       Bit#(128) data_mask = create_mask(cExtend(rg_shift_amt[1]));
       Bit#(16) mask_out = create_mask(cExtend(rg_shift_amt[1] >> 3));
-      let data = ByteStream { sop: v.sop, eop: v.eop, data: truncate(rg_tmp[1]) & data_mask, mask: mask_out};
+      let data = ByteStream { sop: v.sop, eop: v.eop, data: truncate(rg_tmp[1]) & data_mask, mask: mask_out, user:0 };
       data_out_ff.enq(data);
       dbprint(4, $format("Deparser:rl_deparse_payload rg_shift_amt=%d", rg_shift_amt[1], fshow(data)));
       rg_shift_amt[1] <= 0;
@@ -213,7 +207,7 @@ module mkDeparser (Deparser);
     dbprint(3, $format("Deparser:rl_deparse_send ", fshow(v)));
     Bit#(128) data_out = truncate(rg_tmp[1] & create_mask(cExtend(amt)));
     Bit#(16) mask_out = create_mask(cExtend(amt >> 3));
-    let data = ByteStream { sop: sop_this_cycle, eop: False, data: data_out, mask: mask_out };
+    let data = ByteStream { sop: sop_this_cycle, eop: False, data: data_out, mask: mask_out, user:0 };
     rg_tmp[1] <= rg_tmp[1] >> amt;
     rg_processed[1] <= rg_processed[1] - amt;
     rg_shift_amt[1] <= rg_shift_amt[1] - amt;

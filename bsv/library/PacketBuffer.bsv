@@ -55,6 +55,7 @@ instance FShow#(ReqT#(n));
    function Fmt fshow (ReqT#(n) req);
       return ($format(" addr=0x%x ", req.addr)
               + $format(" data=0x%x ", req.data.data)
+              + $format(" user=0x%x ", req.data.user)
               + $format(" sop= %d ", req.data.sop)
               + $format(" eop= %d ", req.data.eop));
    endfunction
@@ -249,7 +250,7 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
    interface PktWriteServer writeServer;
       interface Put writeData;
          method Action put(ByteStream#(n) d);
-            dbprint(3, $format("%s writeData : Packet data %x", msg, d.data));
+            dbprint(3, $format("%s writeData : Packet data ", msg, fshow(d)));
             fifoWriteData.enq(d);
          endmethod
       endinterface

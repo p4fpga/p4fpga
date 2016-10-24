@@ -80,15 +80,18 @@ module mkMain #(HostInterface host, MainIndication indication, ConnectalMemory::
     mkConnection(runtime.rxchan[i].next, prog.prev[i+`NUM_HOSTCHAN]);
   end
 
-  // Port 5 is PktGen
+  // Port 5-8 is PktGen
   messageM("Generating pktgen/pktcap channels.");
-  PktGenChannel pktgen <- mkPktGenChannel(txClock, txReset);
+  Vector#(4, PktGenChannel) pktgen <- genWithM(mkPktGenChannel(txClock, txReset));
+
   PktCapChannel pktcap <- mkPktCapChannel(rxClock, rxReset);
 
+  //mkTieOff(pktgen.macTx);
+
   // LOOPBACK
-  SyncFIFOIfc#(ByteStream#(8)) lpbk_ff <- mkSyncFIFO(4, txClock, txReset, rxClock);
-  mkConnection(pktgen.macTx, toPut(lpbk_ff));
-  mkConnection(toGet(lpbk_ff), runtime.rxchan[0].macRx);
+  Vector#(4, SyncFIFOIfc#(ByteStream#(8))) lpbk_ff <- replicateM(mkSyncFIFO(4, txClock, txReset, rxClock));
+  mapM_(uncurry(mkConnection), zip(map(getMacTx, pktgen), map(toPut, lpbk_ff)));
+  mapM_(uncurry(mkConnection), zip(map(toGet, lpbk_ff), map(getMacRx, runtime.rxchan)));
 
   // Port 6 is MetaGen
   // Generate parsed packet metadata to test p4 pipeline throughput

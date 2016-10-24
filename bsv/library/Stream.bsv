@@ -38,6 +38,7 @@ instance FShow#(StreamData#(td, tm));
    function Fmt fshow (StreamData#(td, tm) d);
       return ($format(" data=0x%x", d.data)
              +$format(" mask=0x%x", d.mask)
+             +$format(" user=0x%x", d.user)
              +$format(" sop=%d", d.sop)
              +$format(" eop=%d", d.eop));
    endfunction

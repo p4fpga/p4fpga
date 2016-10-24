@@ -20,6 +20,7 @@ import DbgDefs::*;
 import Runtime::*;
 import Program::*;
 import StructDefines::*;
+import Channel::*;
 
 interface MainRequest;
   method Action read_version();
@@ -47,7 +48,7 @@ endinterface
 module mkMainAPI #(MainIndication indication,
                    Runtime#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) runtime,
                    Program#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN, TAdd#(`NUM_PKTGEN, `NUM_METAGEN)) prog,
-                   PktGenChannel pktgen,
+                   Vector#(`NUM_PKTGEN, PktGenChannel) pktgen,
                    PktCapChannel pktcap,
                    MetaGenChannel metagen)(MainAPI);
   function ByteStream#(16) buildByteStream(Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
@@ -71,17 +72,28 @@ module mkMainAPI #(MainIndication indication,
     // packet gen/cap interfaces
     method Action writePktGenData(Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
        ByteStream#(16) beat = buildByteStream(data, mask, sop, eop);
-       pktgen.writeData.put(beat);
+       // all four pktgen ports are loaded with same trace
+       for (Integer i=0; i<`NUM_PKTGEN; i=i+1) begin
+          pktgen[i].writeData.put(beat);
+       end
     endmethod
     // metadata gen interface
     method Action writeMetaGenData(Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
        ByteStream#(16) beat = buildByteStream(data, mask, sop, eop);
        metagen.writeData.put(beat);
     endmethod
-    method pktgen_start = pktgen.start;
-    method pktgen_stop = pktgen.stop;
+    method Action pktgen_start (Bit#(32) iter, Bit#(32) ipg);
+       for (Integer i=0; i<`NUM_PKTGEN; i=i+1) begin
+          pktgen[i].start(iter, ipg);
+       end
+    endmethod
+    method Action pktgen_stop ();
+       for (Integer i=0; i<`NUM_PKTGEN; i=i+1) begin
+          pktgen[i].stop();
+       end
+    endmethod
     method pktcap_start = pktcap.start;
-    method pktcap_stop = pktgen.stop;
+    method pktcap_stop = pktcap.stop;
     method metagen_start = metagen.start;
     method metagen_stop = metagen.stop;
     method Action read_pktcap_perf_info();
@@ -92,7 +104,7 @@ module mkMainAPI #(MainIndication indication,
     method Action set_verbosity (Bit#(32) verbosity);
        runtime.set_verbosity(unpack(verbosity));
        prog.set_verbosity(unpack(verbosity));
-       pktgen.set_verbosity(unpack(verbosity));
+       mapM_(uncurry(set_verbosity), zip(pktgen, replicate(unpack(verbosity))));
     endmethod
 `include "APIDeclGenerated.bsv"
   endinterface

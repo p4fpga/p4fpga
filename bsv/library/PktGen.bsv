@@ -22,6 +22,7 @@
 
 import FIFO::*;
 import FIFOF::*;
+import BRAMFIFO::*;
 import ConfigReg::*;
 import DefaultValue::*;
 import Vector::*;
@@ -42,18 +43,18 @@ typedef 1 MinimumIPG; // 1 beat == 16 bytes
 // PacketBuffer has a read latency of two cycles
 // When used in packet generator, we must consider read latency when
 // computing generated packet rate to ensure right amount of IDLE is generated
-typedef 64 ReadLatency; // readLatency * datawidth, 4 * 16
+typedef 16 ReadLatency; // readLatency * datawidth, 3 * 16
 
 interface PktGen;
-   interface PktWriteServer#(16) writeServer;
-   interface PktWriteClient#(16) writeClient;
+   interface PktWriteServer#(8) writeServer;
+   interface PktWriteClient#(8) writeClient;
    method Action start(Bit#(32) iter, Bit#(32) ipg);
    method Action stop();
    method Action set_verbosity (int verbosity);
 endinterface
 
-module mkPktGen(PktGen)
-   provisos (Div#(128, 8, bytesPerBeat)
+module mkPktGen#(Integer id)(PktGen)
+   provisos (Div#(64, 8, bytesPerBeat)
             ,Log#(bytesPerBeat, beatShift));
    `PRINT_DEBUG_MSG
    Reg#(Bit#(64)) byteSent <- mkReg(0);
@@ -66,55 +67,43 @@ module mkPktGen(PktGen)
    Reg#(Bool) started <- mkReg(False);
    Reg#(Bool) infiniteLoop <- mkReg(False);
 
-   FIFO#(ByteStream#(16)) outgoing_fifo <- mkFIFO();
-   // instead of using packet buffer, we should use FIFO that has zero read latency
-   PacketBuffer#(16) buff <- mkPacketBuffer("pktgen");
+   FIFO#(ByteStream#(8)) outgoing_fifo <- mkFIFO();
+   FIFO#(ByteStream#(8)) buff <- mkSizedBRAMFIFO(1024);
 
-   rule prepare_packet if (pktCount>0 && !idle[0]);
-      let pktLen <- buff.readServer.readLen.get;
-      buff.readServer.readReq.put(pktLen);
-      dbprint(4, $format("pktgen:: fetch_packet pktlen=%h", pktLen));
-   endrule
-
-   rule enqueue_packet if (pktCount>0 && !idle[0]);
-      let data <- buff.readServer.readData.get;
-      buff.writeServer.writeData.put(data);
+   rule enqueue_packet if (pktCount>0 && !idle[1]);
+      let data = buff.first;
+      buff.deq;
+      buff.enq(data);
       outgoing_fifo.enq(data);
       if (data.eop) begin
          if (!infiniteLoop)
             pktCount <= pktCount - 1;
-         idle[0] <= True;
+         idle[1] <= True;
          currIPG <= fromInteger(valueOf(ReadLatency));
-         dbprint(4, $format("pktgen:: eop %h %h %h %h", idle[0], started, currIPG, ipgCount));
+         dbprint(4, $format("pktgen %0d:: eop %h %h %h %h", id, idle[1], started, currIPG, ipgCount));
       end
-      dbprint(4, $format("pktgen:: sent byte"));
-      byteSent <= byteSent + 16;
+      dbprint(4, $format("pktgen %0d:: sent byte", id));
+      byteSent <= byteSent + 8;
    endrule
 
-   rule compute_idle if (pktCount>0 && idle[1]);
-      dbprint(4, $format("pktgen:: curr_ipg = %d, ipg_count = %d", currIPG, ipgCount));
+   // get rid of latency here
+   rule compute_idle if (pktCount>0 && idle[0]);
       if (currIPG < ipgCount + fromInteger(valueOf(MinimumIPG))) begin
          currIPG <= currIPG + fromInteger(valueOf(bytesPerBeat));
-         idleSent <= idleSent + fromInteger(valueOf(bytesPerBeat));
+         dbprint(4, $format("pktgen %0d:: curr_ipg = %d, ipg_count = %d", id, currIPG, ipgCount));
       end
       else begin
          currIPG <= fromInteger(valueOf(ReadLatency));
-         idle[1] <= False;
-         idleSent <= idleSent + fromInteger(valueOf(ReadLatency));
+         idle[0] <= False;
       end
-   endrule
-
-   // has to drain buffer at the end of packet generation
-   rule cleanup if (pktCount==0 && traceLen>0 && started);
-      let pktLen <- buff.readServer.readLen.get;
-      buff.readServer.readReq.put(pktLen);
-      dbprint(4, $format("pktgen:: drain buffer"));
+      idleSent <= idleSent + fromInteger(valueOf(bytesPerBeat));
    endrule
 
    rule drainBufferPayload if (pktCount==0 && traceLen>0 && started);
-      let data <- buff.readServer.readData.get;
+      let data = buff.first;
+      buff.deq;
       // do nothing
-      dbprint(4, $format("pktgen:: drain buffer payload"));
+      dbprint(4, $format("pktgen %0d:: drain buffer payload", id));
       if (data.eop) begin
          traceLen <= traceLen - 1;
       end
@@ -122,13 +111,13 @@ module mkPktGen(PktGen)
 
    rule drainFinished if (pktCount==0 && traceLen==0 && started);
       started <= False;
-      dbprint(4, $format("byteSent=%d, idleSent=%d", byteSent, idleSent));
+      dbprint(4, $format("%d: byteSent=%d, idleSent=%d", id, byteSent, idleSent));
    endrule
 
    interface PktWriteServer writeServer;
       interface Put writeData;
-         method Action put (ByteStream#(16) d);
-            buff.writeServer.writeData.put(d);
+         method Action put (ByteStream#(8) d);
+            buff.enq(d);
             if (d.eop) begin
                traceLen <= traceLen + 1;
             end
@@ -140,7 +129,7 @@ module mkPktGen(PktGen)
    endinterface
    method Action start(Bit#(32) pc, Bit#(32) ipg) if (pktCount==0 && traceLen!=0);
       started <= True;
-      ipgCount <= ipg;
+      ipgCount <= ipg; // double idle amount because output rate is 10G
       if (pc != 0) begin
          pktCount <= pc;
       end
@@ -154,7 +143,6 @@ module mkPktGen(PktGen)
    endmethod
    method Action set_verbosity (int verbosity);
       cf_verbosity <= verbosity;
-      buff.set_verbosity(verbosity);
    endmethod
 endmodule
 

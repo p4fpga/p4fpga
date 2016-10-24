@@ -68,6 +68,7 @@ instance MkStreamGearboxUp#(n, m) provisos(Mul#(n, 2, m));
          ByteStream#(m) data = defaultValue;
          data.data = {v[1].data, v[0].data};
          data.mask = {v[1].mask, v[0].mask};
+         data.user = v[0].user;
          data.sop = v[0].sop;
          data.eop = v[0].eop || v[1].eop;
          return data;
@@ -119,8 +120,8 @@ instance MkStreamGearboxDn#(n, m) provisos(Mul#(m, 2, n));
       let clock <- exposeCurrentClock();
       let reset <- exposeCurrentReset();
 
-      FIFO#(ByteStream#(n)) in_ff <- mkFIFO;//printTraceM("gbi", mkFIFO());
-      FIFO#(ByteStream#(m)) out_ff <- mkFIFO;//printTraceM("gbo", mkFIFO());
+      FIFO#(ByteStream#(n)) in_ff <- mkFIFO;//printTimedTraceM("gbi", mkFIFO);
+      FIFO#(ByteStream#(m)) out_ff <- mkFIFO;//printTimedTraceM("gbo", mkFIFO());
       Gearbox#(2, 1, ByteStream#(m)) fifoTxData <- mkNto1Gearbox(clock, reset, clock, reset);
 
       function Vector#(2, ByteStream#(m)) split(ByteStream#(n) in);
@@ -131,10 +132,12 @@ instance MkStreamGearboxDn#(n, m) provisos(Mul#(m, 2, n));
          v[0].data = data[0];
          v[0].eop = (mask[1] == 0) ? in.eop : False;
          v[0].mask = mask[0];
+         v[0].user = in.user;
          v[1].sop = False;
          v[1].data = data[1];
          v[1].eop = in.eop;
          v[1].mask = mask[1];
+         v[1].user = in.user;
          return v;
       endfunction
 

@@ -22,6 +22,7 @@
 
 import Clocks::*;
 import Connectable::*;
+import Channel::*;
 import DbgDefs::*;
 import Ethernet::*;
 import EthMac::*;
@@ -49,20 +50,47 @@ interface PktGenChannel;
    method Action set_verbosity (int verbosity);
 endinterface
 
-module mkPktGenChannel#(Clock txClock, Reset txReset)(PktGenChannel);
+instance GetMacTx#(PktGenChannel);
+   function Get#(ByteStream#(8)) getMacTx(PktGenChannel chan);
+      return chan.macTx;
+   endfunction
+endinstance
+
+instance SetVerbosity#(PktGenChannel);
+   function Action set_verbosity(PktGenChannel t, int verbosity);
+      action
+         t.set_verbosity(verbosity);
+      endaction
+   endfunction
+endinstance
+
+module mkPktGenChannel#(Clock txClock, Reset txReset, Integer id)(PktGenChannel);
    Clock defaultClock <- exposeCurrentClock();
    Reset defaultReset <- exposeCurrentReset();
 
-   PktGen pktgen <- mkPktGen(clocked_by txClock, reset_by txReset);
-   StreamGearbox#(16, 8) gearbox <- mkStreamGearboxDn(clocked_by txClock, reset_by txReset);
-   mkConnection(pktgen.writeClient.writeData, gearbox.datain);
+   PktGen pktgen <- mkPktGen(id, clocked_by txClock, reset_by txReset);
+
+   // PktGen operates at 250MHz, which should be faster than portal even after half the throughput by gearbox,
+   // so we don't need a deep write_ff here
+   FIFO#(ByteStream#(16)) write_ff <- mkFIFO; 
+   StreamGearbox#(16, 8) gearbox <- mkStreamGearboxDn();
 
    SyncFIFOIfc#(Tuple2#(Bit#(32),Bit#(32))) start_sync_ff <- mkSyncFIFO(4, defaultClock, defaultReset, txClock);
    SyncFIFOIfc#(void) stop_sync_ff <- mkSyncFIFO(4, defaultClock, defaultReset, txClock);
-   SyncFIFOIfc#(ByteStream#(16)) write_sync_ff <- mkSyncFIFO(4, defaultClock, defaultReset, txClock);
+   SyncFIFOIfc#(ByteStream#(8)) write_sync_ff <- mkSyncFIFO(4, defaultClock, defaultReset, txClock);
    SyncFIFOIfc#(int) verbose_sync_ff <- mkSyncFIFO(4, defaultClock, defaultReset, txClock);
 
-   rule r_write_data;
+   rule r_load_data;
+      let v <- toGet(write_ff).get;
+      gearbox.datain.put(v);
+   endrule
+
+   rule r_gearbox_out;
+      let v <- gearbox.dataout.get;
+      write_sync_ff.enq(v);
+   endrule
+
+   rule r_clock_cross;
       let v <- toGet(write_sync_ff).get;
       pktgen.writeServer.writeData.put(v);
    endrule
@@ -88,8 +116,8 @@ module mkPktGenChannel#(Clock txClock, Reset txReset)(PktGenChannel);
    method Action stop ();
       stop_sync_ff.enq(?);
    endmethod
-   interface writeData = toPut(write_sync_ff);
-   interface macTx = gearbox.dataout;
+   interface writeData = toPut(write_ff);
+   interface macTx = pktgen.writeClient.writeData;
    method Action set_verbosity (int verbosity);
       verbose_sync_ff.enq(verbosity);
    endmethod

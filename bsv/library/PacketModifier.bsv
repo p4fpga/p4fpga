@@ -51,6 +51,15 @@ module mkPacketModifier(PacketModifier);
       let meta = req.meta;
       let pkt = req.pkt;
       deparser.metadata.enq(meta);
+      // set user metadata in output bytestream for cross bar
+      let egress_port = meta.standard_metadata.egress_port;
+      if (egress_port matches tagged Valid .p) begin
+         serializer.metadata.enq(p);
+      end
+      else begin
+         // FIXME: if egress_port is not valid, drop port
+         serializer.metadata.enq(0);
+      end
       dbprint(3, $format("stream out metadata %d", pkt, fshow(meta)));
    endrule
 

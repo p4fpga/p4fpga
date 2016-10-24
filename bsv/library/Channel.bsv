@@ -29,6 +29,10 @@ typeclass GetMacTx#(type a);
    function Get#(ByteStream#(8)) getMacTx(a t);
 endtypeclass
 
+typeclass GetMacRx#(type a);
+   function Put#(ByteStream#(8)) getMacRx(a t);
+endtypeclass
+
 typeclass GetWriteClient#(type a);
    function Get#(ByteStream#(16)) getWriteClient(a t);
 endtypeclass

@@ -46,7 +46,8 @@ typedef TDiv#(DatapathWidth, ChannelWidth) BusRatio;
 // FIXME: make this right
 function Bit#(32) destOf (ByteStream#(64) x);
    // return egress_port in metadata
-   return 2; //truncate(pack (x.data)) & 'hF;
+   return x.user;
+   //return 2; //truncate(pack (x.data)) & 'hF;
 endfunction
 
 /*

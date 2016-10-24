@@ -43,7 +43,10 @@ import SpecialFIFOs::*;
 import SharedBuff::*;
 `include "Debug.defines"
 
+typedef Bit#(9) EgressPort;
+
 interface HeaderSerializer;
+   interface PipeIn#(EgressPort) metadata;
    interface PktWriteServer#(16) writeServer;
    interface PktWriteClient#(16) writeClient;
    method Action set_verbosity(int verbosity);
@@ -60,6 +63,7 @@ module mkHeaderSerializer(HeaderSerializer);
 
    FIFOF#(ByteStream#(16)) data_in_ff <- mkFIFOF;
    FIFOF#(ByteStream#(16)) data_out_ff <- mkFIFOF;
+   FIFOF#(EgressPort) meta_in_ff <- mkSizedFIFOF(16);
 
    Array#(Reg#(Bool)) sop_buff <- mkCReg(3, False);
    Array#(Reg#(Bool)) eop_buff <- mkCReg(3, False);
@@ -123,6 +127,7 @@ module mkHeaderSerializer(HeaderSerializer);
 
    (* mutually_exclusive = "rl_send_full_frame, rl_buffer_partial_frame, rl_eop_full_frame, rl_eop_partial_frame" *)
    rule rl_send_full_frame if (w_send_frame);
+      let egress_port = meta_in_ff.first;
       let data = data_buff[1] << n_bits_buffered | data_buffered; 
       let n_bytes_used = fromInteger(valueOf(MaskWidth)) - n_bytes_buffered;
       UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
@@ -135,6 +140,8 @@ module mkHeaderSerializer(HeaderSerializer);
       eth.eop = False;
       eth.mask = 'hffff;
       eth.data = data;
+      // set egress_port to stream
+      eth.user = zeroExtend(egress_port);
       sop_buff[1] <= False;
       data_out_ff.enq(eth);
       dbprint(3, $format("HeaderSerializer:rl_send_full_frame n_bytes_buffered=%d", n_bytes[1] - n_bytes_used, fshow(eth)));
@@ -153,6 +160,7 @@ module mkHeaderSerializer(HeaderSerializer);
    endrule
 
    rule rl_eop_full_frame if (w_send_last2);
+      let egress_port = meta_in_ff.first;
       let data = data_buff[1] << n_bits_buffered | data_buffered; 
       let n_bytes_used = fromInteger(valueOf(MaskWidth)) - n_bytes_buffered;
       UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
@@ -163,11 +171,15 @@ module mkHeaderSerializer(HeaderSerializer);
       eth.eop = True;
       eth.mask = 'hffff;
       eth.data = data;
+      eth.user = zeroExtend(egress_port);
       data_out_ff.enq(eth);
       dbprint(3, $format("HeaderSerializer:rl_eop_full_frame n_bytes_buffered=%d", n_bytes[1] - n_bytes_used));
+      // eop, dequeue metadata
+      meta_in_ff.deq;
    endrule
 
    rule rl_eop_partial_frame if (w_send_last1);
+      let egress_port = meta_in_ff.first;
       let data = (data_buff[1] << n_bits_buffered) | data_buffered; 
       let mask = (mask_buff[1] << n_bytes_buffered) | mask_buffered;
       n_bytes_buffered <= 0;
@@ -177,10 +189,14 @@ module mkHeaderSerializer(HeaderSerializer);
       eth.eop = True;
       eth.mask = mask;
       eth.data = data;
+      eth.user = zeroExtend(egress_port);
       data_out_ff.enq(eth);
       dbprint(3, $format("HeaderSerializer:rl_eop_partial_frame ", fshow(eth)));
+      // eop, dequeue metadata
+      meta_in_ff.deq;
    endrule
 
+   interface metadata = toPipeIn(meta_in_ff);
    interface PktWriteServer writeServer;
       interface writeData = toPut(data_in_ff);
    endinterface

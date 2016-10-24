@@ -253,6 +253,12 @@ instance GetWriteClient#(StreamRxChannel);
    endfunction
 endinstance
 
+instance GetMacRx#(StreamRxChannel);
+   function Put#(ByteStream#(8)) getMacRx(StreamRxChannel chan);
+      return chan.macRx;
+   endfunction
+endinstance
+
 instance SetVerbosity#(StreamRxChannel);
    function Action set_verbosity(StreamRxChannel t, int verbosity);
       action
