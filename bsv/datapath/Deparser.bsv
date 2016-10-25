@@ -76,6 +76,7 @@ interface Deparser;
    method Action set_verbosity (int verbosity);
    method DeparserPerfRec read_perf_info ();
 endinterface
+(* synthesize *)
 module mkDeparser (Deparser);
    `PRINT_DEBUG_MSG
 

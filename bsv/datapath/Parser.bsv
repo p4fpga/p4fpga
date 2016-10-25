@@ -40,6 +40,7 @@ interface Parser;
    method Action set_verbosity (int verbosity);
    method ParserPerfRec read_perf_info ();
 endinterface
+
 module mkParser#(Integer portnum)(Parser);
    Reg#(int) cf_verbosity <- mkConfigRegU;
    Reg#(Bool) parse_done[2] <- mkCReg(2, True);
@@ -180,7 +181,7 @@ module mkParser#(Integer portnum)(Parser);
    function Rules genExtractRule (ParserState state, Integer i);
       let len = fromInteger(i);
       return (rules
-         rule rl_extract if ((parse_state_ff.first == state) && (rg_buffered[0] > len));
+         rule rl_extract if ((parse_state_ff.first == state) && (rg_buffered[0] >= len));
             let data = rg_tmp[0];
             if (isValid(data_ff.first)) begin
                data_ff.deq;
