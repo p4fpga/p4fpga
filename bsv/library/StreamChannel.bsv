@@ -72,6 +72,7 @@ module mkStoreAndFwdBuffer#(Integer id)(StoreAndFwdBuffer);
 
    mkConnection(readClient, pktBuff.readServer);
 
+   // remove this delay??
    rule packetReadStart if (!readStarted);
       let req = meta_ff.first;
       meta_ff.deq;
@@ -200,6 +201,7 @@ module mkStreamInChannel#(Integer id)(StreamInChannel);
 
    mkConnection(readClient, pktBuff.readServer);
 
+   // remove this ?
    rule packetReadStart if (!readStarted);
       let pktLen <- toGet(readLenFifo).get;
       pktLenFifo.enq(pktLen);
@@ -237,6 +239,7 @@ module mkStreamInChannel#(Integer id)(StreamInChannel);
    method Action set_verbosity (int verbosity);
       cf_verbosity <= verbosity;
       parser.set_verbosity(verbosity);
+      pktBuff.set_verbosity(verbosity);
    endmethod
 endmodule
 

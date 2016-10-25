@@ -86,10 +86,8 @@ module mkMain #(HostInterface host, MainIndication indication, ConnectalMemory::
 
   PktCapChannel pktcap <- mkPktCapChannel(rxClock, rxReset);
 
-  //mkTieOff(pktgen.macTx);
-
   // LOOPBACK
-  Vector#(4, SyncFIFOIfc#(ByteStream#(8))) lpbk_ff <- replicateM(mkSyncFIFO(4, txClock, txReset, rxClock));
+  Vector#(4, SyncFIFOIfc#(ByteStream#(8))) lpbk_ff <- replicateM(mkSyncFIFO(6, txClock, txReset, rxClock));
   mapM_(uncurry(mkConnection), zip(map(getMacTx, pktgen), map(toPut, lpbk_ff)));
   mapM_(uncurry(mkConnection), zip(map(toGet, lpbk_ff), map(getMacRx, runtime.rxchan)));
 

@@ -1,4 +1,5 @@
 `include "ConnectalProjectConfig.bsv"
+import FIFO::*;
 import BuildVector::*;
 import Clocks::*;
 import Connectable::*;
@@ -27,7 +28,7 @@ interface MainRequest;
   method Action writePacketData(Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
   method Action set_verbosity(Bit#(32) verbosity);
   method Action writePktGenData(Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
-  method Action pktgen_start(Bit#(32) iteration, Bit#(32) ipg);
+  method Action pktgen_start(Bit#(32) iteration, Bit#(32) ipg, Bit#(32) inst);
   method Action pktgen_stop();
   method Action pktcap_start(Bit#(32) iteration);
   method Action pktcap_stop();
@@ -59,6 +60,28 @@ module mkMainAPI #(MainIndication indication,
        beat.eop = unpack(eop);
        return beat;
   endfunction
+
+  FIFO#(void) start <- mkFIFO;
+  Reg#(Bit#(32)) rg_iter <- mkReg(0);
+  Reg#(Bit#(32)) rg_ipg <- mkReg(0);
+  Reg#(Bit#(32)) rg_inst <- mkReg(0);
+
+  rule rl_pktgen_start;
+     let _ <- toGet(start).get;
+     if (rg_inst >= 1) begin
+        pktgen[0].start(rg_iter, rg_ipg);
+     end
+     if (rg_inst >= 2) begin
+        pktgen[1].start(rg_iter, rg_ipg);
+     end
+     if (rg_inst >= 3) begin
+        pktgen[2].start(rg_iter, rg_ipg);
+     end
+     if (rg_inst >= 4) begin
+        pktgen[3].start(rg_iter, rg_ipg);
+     end
+  endrule
+
   interface MainRequest request;
     method Action read_version ();
        let v = `NicVersion;
@@ -82,10 +105,11 @@ module mkMainAPI #(MainIndication indication,
        ByteStream#(16) beat = buildByteStream(data, mask, sop, eop);
        metagen.writeData.put(beat);
     endmethod
-    method Action pktgen_start (Bit#(32) iter, Bit#(32) ipg);
-       for (Integer i=0; i<`NUM_PKTGEN; i=i+1) begin
-          pktgen[i].start(iter, ipg);
-       end
+    method Action pktgen_start (Bit#(32) iter, Bit#(32) ipg, Bit#(32) inst);
+       rg_iter <= iter;
+       rg_ipg <= ipg;
+       rg_inst <= inst;
+       start.enq(?);
     endmethod
     method Action pktgen_stop ();
        for (Integer i=0; i<`NUM_PKTGEN; i=i+1) begin

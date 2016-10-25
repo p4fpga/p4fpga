@@ -113,13 +113,16 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    mapM(uncurry(mkConnection), zip(map(getWriteClient, _streamchan), map(getDataIn, gearbox_up_16)));
    mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_up_16), map(getDataIn, gearbox_up_32)));
 
+   // DEBUG: sink after gearbox_up_32
+   //mapM_(mkTieOff, map(getDataOut, gearbox_up_32));
+
    Vector#(npi, PacketBuffer#(64)) input_queues <- mapM(mkPacketBuffer, genWith(sprintf("inputQ %h"))); // input queue
    mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_up_32), map(getWriteData, input_queues))); // gearbox -> input queue
-   mapM(uncurry(mkConnection), zip(map(getReadLen, input_queues), map(getReadReq, input_queues))); // immediate transmit
+   mapM(uncurry(mkConnection), zip(map(getReadLen, input_queues), map(getReadReq, input_queues))); // immediate transmit, performance issue?
 
    XBar#(64) xbar <- mkXBar(3, destOf, mkMerge2x1_lru, 3, 0); // last two parameters are log(size) and idx
    Vector#(8, Put#(ByteStream#(64))) input_ports = toVector(xbar.input_ports);
-   mapM(uncurry(mkConnection), zip(map(getReadData, input_queues), take(input_ports))); // input queue -> xbar
+   mapM(uncurry(mkConnection), zip(map(getReadData, input_queues), take(input_ports))); // input queue -> xbar,
 
    Vector#(8, PacketBuffer#(64)) output_queues <- mapM(mkPacketBuffer, genWith(sprintf("outputQ %h"))); // output queue
    mapM(uncurry(mkConnection), zip(map(getReadLen, output_queues), map(getReadReq, output_queues))); // immediate transmit
@@ -129,7 +132,7 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    Vector#(ntx, StreamGearbox#(32, 16)) gearbox_dn_16 <- replicateM(mkStreamGearboxDn());
    //mapM_(mkTieOff, outvec); // want to see which idx is going out of
    mapM(uncurry(mkConnection), zip(outvec, map(get_write_data, output_queues))); // xbar -> output queue
-   mapM(uncurry(mkConnection), zip(map(getReadData, take(output_queues)), map(getDataIn, gearbox_dn_32))); // output queue -> gearbox
+   mapM(uncurry(mkConnection), zip(map(getReadData, takeAt(`NUM_HOSTCHAN, output_queues)), map(getDataIn, gearbox_dn_32))); // output queue -> gearbox
 
    mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_dn_32), map(getDataIn, gearbox_dn_16)));
    mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_dn_16), map(getWriteServer, _txchan)));
