@@ -49,11 +49,26 @@ typeclass MatchTableSim#(numeric type id, numeric type ksz, numeric type vsz);
    function Action matchtable_write(Bit#(id) v, Bit#(ksz) key, Bit#(vsz) data);
 endtypeclass
 
-// typeclass MatchTable#(numeric type id, numeric type ksz, numeric type vsz, numeric type nentry);
-//    module mkMatchTable(MatchTable#(id, nentry, ksz, vsz));
-// endtypeclass
+typeclass MkMatchTable#(numeric type id,
+                        numeric type depth,
+                        numeric type keySz,
+                        numeric type actionSz);
+   module mkMatchTable#(String name)(MatchTable#(id, depth, keySz, actionSz));
+endtypeclass
 
-module mkMatchTable#(String name)(MatchTable#(id, depth, keySz, actionSz))
+/*
+   Special case when match table uses empty key, i.e. no match table
+ */
+instance MkMatchTable#(id, depth, 0, actionSz);
+   module mkMatchTable#(String name)(MatchTable#(id, depth, 0, actionSz));
+      // This is intentionally empty
+   endmodule
+endinstance
+
+/*
+   Polymorphic case when match table has non-zero keys
+ */
+instance MkMatchTable#(id, depth, keySz, actionSz)
    provisos(Mul#(c__, 256, d__),
             Add#(c__, 7, TLog#(depth)),
             Log#(d__, TLog#(depth)),
@@ -69,14 +84,31 @@ module mkMatchTable#(String name)(MatchTable#(id, depth, keySz, actionSz))
 `endif
             Add#(TAdd#(TLog#(c__), 4), i__, TLog#(depth)));
 
-   MatchTable#(id, depth, keySz, actionSz) ret_ifc;
-`ifdef SIMULATION
-   ret_ifc <- mkMatchTableBluesim(name);
-`else  // !SIMULATION
-   ret_ifc <- mkMatchTableSynth();
-`endif // SIMULATION
-   return ret_ifc;
-endmodule
+   module mkMatchTable#(String name)(MatchTable#(id, depth, keySz, actionSz))
+      provisos(Mul#(c__, 256, d__),
+               Add#(c__, 7, TLog#(depth)),
+               Log#(d__, TLog#(depth)),
+               Mul#(e__, 9, keySz),
+               Add#(TAdd#(TLog#(c__), 4), 2, TLog#(TDiv#(depth, 4))),
+               Log#(TDiv#(depth, 16), TAdd#(TLog#(c__), 4)),
+               Add#(9, f__, keySz),
+               PriorityEncoder::PEncoder#(d__),
+               Add#(2, g__, TLog#(depth)),
+               Add#(4, h__, TLog#(depth)),
+   `ifdef SIMULATION
+               MatchTableSim#(id, keySz, actionSz),
+   `endif
+               Add#(TAdd#(TLog#(c__), 4), i__, TLog#(depth)));
+
+      MatchTable#(id, depth, keySz, actionSz) ret_ifc;
+   `ifdef SIMULATION
+      ret_ifc <- mkMatchTableBluesim(name);
+   `else  // !SIMULATION
+      ret_ifc <- mkMatchTableSynth();
+   `endif // SIMULATION
+      return ret_ifc;
+   endmodule
+endinstance
 
 `ifndef SIMULATION
 module mkMatchTableSynth(MatchTable#(id, depth, keySz, actionSz))

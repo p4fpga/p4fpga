@@ -85,68 +85,97 @@ typeclass Action_execute #(type paramT);
    function ActionValue#(MetadataRequest) step_8 (MetadataRequest data, paramT param) = error("No default for typeclass Action_execute::step_8");
 endtypeclass
 
-/*
-   alternative implementation is 
- */
-module mkTable#(function keyT match_table_request(metaI data),
-                function Action execute_action(valT data, metaI md,
+typeclass MkTable #(numeric type nact, type metaI, type actI, type keyT, type valT);
+   module mkTable#(function keyT match_table_request(metaI data),
+                   function Action execute_action(valT data, metaI md,
                    Vector#(nact, FIFOF#(Tuple2#(metaI, actI))) fifo),
-                MatchTable#(a, b, c, d) matchTable)
-                (Table#(nact, metaI, actI, keyT, valT))
-   provisos(Bits#(actI, b__)
-           ,Bits#(metaI, d__)
-           ,Bits#(keyT, c)
-           ,Bits#(valT, d)
-           ,FShow#(keyT));
-   `PRINT_DEBUG_MSG
-   RX #(metaI) meta_in <- mkRX;
-   TX #(metaI) meta_out <- mkTX;
-   Vector#(nact, FIFOF#(Tuple2#(metaI, actI))) bbReqFifo <- replicateM(mkSizedFIFOF(16));
-   Vector#(nact, FIFOF#(metaI)) bbRspFifo <- replicateM(mkSizedFIFOF(16));
+                   MatchTable#(a__, b__, SizeOf#(keyT), SizeOf#(valT)) matchTable) (Table#(nact, metaI, actI, keyT, valT));
+endtypeclass
 
-   FIFOF#(metaI) metadata_ff <- mkSizedFIFOF(16);
+/*
+   Special case when key size is 0
+ */
+instance MkTable #(nact, metaI, actI, Bit#(0), valT) provisos(Bits#(valT, c__));
+   module mkTable#(function Bit#(0) match_table_request(metaI data),
+                   function Action execute_action(valT data, metaI md, Vector#(nact, FIFOF#(Tuple2#(metaI, actI))) fifo),
+                   MatchTable#(a__, b__, 0, SizeOf#(valT)) matchTable)
+                   (Table#(nact, metaI, actI, Bit#(0), valT)) provisos(Bits#(valT, c__));
+      messageM("instantiate special case");
+      // implement stage with no table lookup
+   endmodule
+endinstance
 
-   Vector#(nact, Bool) readyBits = map(fifoNotEmpty, bbRspFifo);
-   Bool interruptStatus = False;
-   Bit#(nact) readyChannel = -1;
-   messageM("readyChannel " + integerToString(valueOf(nact)) + " " + sprintf("%0d", readyChannel));
-   for (Integer i=valueOf(TSub#(nact, 1)); i>=0; i=i-1) begin
-       if (readyBits[i]) begin
-           interruptStatus = True;
-           readyChannel = fromInteger(i);
-       end
-   end
-   rule rl_handle_request;
-       metaI data = meta_in.u.first;
-       meta_in.u.deq;
-       let req = match_table_request(data);
-       matchTable.lookupPort.request.put(pack(req));
-       dbprint(3, fshow(req));
-       metadata_ff.enq(data);
-   endrule
-   rule rl_execute;
-       let rsp <- matchTable.lookupPort.response.get;
-       let md <- toGet(metadata_ff).get;
-       dbprint(3, fshow(rsp));
-       if (rsp matches tagged Valid .r) begin
-         execute_action(unpack(r), md, bbReqFifo);
-       end
-   endrule
-   rule rl_handle_response if (readyChannel != -1);
-       let v <- toGet(bbRspFifo[readyChannel]).get;
-       meta_out.u.enq(v);
-       dbprint(3, $format("dequeue %d ", readyChannel));
-   endrule
-   interface prev_control_state = toServer(meta_in.e, meta_out.e);
-   interface next_control_state = zipWith(toClient, bbReqFifo, bbRspFifo);
-   method Action add_entry(keyT k, valT v);
-      // function that takes care of padding
-      // let key = ForwardReqT { padding: 0, nhop_ipv4: k.nhop_ipv4};
-      // let value = ForwardRspT { _action: unpack(v._action), dmac: v.dmac};
-      matchTable.add_entry.put(tuple2(pack(k), pack(v)));
-   endmethod
-   method Action set_verbosity(int verbosity);
-       cf_verbosity <= verbosity;
-   endmethod
-endmodule
+/*
+   Polymorphic case
+ */
+instance MkTable #(nact, metaI, actI, keyT, valT) 
+   provisos(Bits#(keyT, e__)
+          , Bits#(valT, f__)
+          , Bits#(metaI, c__)
+          , Bits#(actI, d__)
+          , Add#(c__, d__, m__)
+          , FShow#(keyT));
 
+   module mkTable#(function keyT match_table_request(metaI data),
+                   function Action execute_action(valT data, metaI md, Vector#(nact, FIFOF#(Tuple2#(metaI, actI))) fifo),
+                   MatchTable#(a__, b__, SizeOf#(keyT), SizeOf#(valT)) matchTable)
+                   (Table#(nact, metaI, actI, keyT, valT))
+      provisos(Bits#(keyT, e__)
+             , Bits#(valT, f__)
+             , Bits#(metaI, c__)
+             , Bits#(actI, d__)
+             , Add#(c__, d__, m__)
+             , FShow#(keyT));
+      messageM("instantiate polymorphic case");
+      `PRINT_DEBUG_MSG
+      RX #(metaI) meta_in <- mkRX;
+      TX #(metaI) meta_out <- mkTX;
+      Vector#(nact, FIFOF#(Tuple2#(metaI, actI))) bbReqFifo <- replicateM(mkSizedFIFOF(16));
+      Vector#(nact, FIFOF#(metaI)) bbRspFifo <- replicateM(mkSizedFIFOF(16));
+
+      FIFOF#(metaI) metadata_ff <- mkSizedFIFOF(16);
+
+      Vector#(nact, Bool) readyBits = map(fifoNotEmpty, bbRspFifo);
+      Bool interruptStatus = False;
+      Bit#(nact) readyChannel = -1;
+      messageM("readyChannel " + integerToString(valueOf(nact)) + " " + sprintf("%0d", readyChannel));
+      for (Integer i=valueOf(TSub#(nact, 1)); i>=0; i=i-1) begin
+          if (readyBits[i]) begin
+              interruptStatus = True;
+              readyChannel = fromInteger(i);
+          end
+      end
+      rule rl_handle_request;
+          metaI data = meta_in.u.first;
+          meta_in.u.deq;
+          let req = match_table_request(data);
+          matchTable.lookupPort.request.put(pack(req));
+          dbprint(3, fshow(req));
+          metadata_ff.enq(data);
+      endrule
+      rule rl_execute;
+          let rsp <- matchTable.lookupPort.response.get;
+          let md <- toGet(metadata_ff).get;
+          dbprint(3, fshow(rsp));
+          if (rsp matches tagged Valid .r) begin
+            execute_action(unpack(r), md, bbReqFifo);
+          end
+      endrule
+      rule rl_handle_response if (readyChannel != -1);
+          let v <- toGet(bbRspFifo[readyChannel]).get;
+          meta_out.u.enq(v);
+          dbprint(3, $format("dequeue %d ", readyChannel));
+      endrule
+      interface prev_control_state = toServer(meta_in.e, meta_out.e);
+      interface next_control_state = zipWith(toClient, bbReqFifo, bbRspFifo);
+      method Action add_entry(keyT k, valT v);
+         // function that takes care of padding
+         // let key = ForwardReqT { padding: 0, nhop_ipv4: k.nhop_ipv4};
+         // let value = ForwardRspT { _action: unpack(v._action), dmac: v.dmac};
+         matchTable.add_entry.put(tuple2(pack(k), pack(v)));
+      endmethod
+      method Action set_verbosity(int verbosity);
+          cf_verbosity <= verbosity;
+      endmethod
+   endmodule
+endinstance
