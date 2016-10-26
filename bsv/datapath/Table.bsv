@@ -93,15 +93,57 @@ typeclass MkTable #(numeric type nact, type metaI, type actI, type keyT, type va
 endtypeclass
 
 /*
-   Special case when key size is 0
+   Special case:
+   When key size is zero, no table lookup is performed
  */
-instance MkTable #(nact, metaI, actI, Bit#(0), valT) provisos(Bits#(valT, c__));
+instance MkTable #(nact, metaI, actI, Bit#(0), valT)
+   provisos(Bits#(valT, f__)
+           ,Bits#(metaI, c__)
+           ,Bits#(actI, d__)
+           ,Add#(c__, d__, m__));
    module mkTable#(function Bit#(0) match_table_request(metaI data),
                    function Action execute_action(valT data, metaI md, Vector#(nact, FIFOF#(Tuple2#(metaI, actI))) fifo),
                    MatchTable#(a__, b__, 0, SizeOf#(valT)) matchTable)
-                   (Table#(nact, metaI, actI, Bit#(0), valT)) provisos(Bits#(valT, c__));
+                   (Table#(nact, metaI, actI, Bit#(0), valT))
+   provisos(Bits#(valT, f__)
+           ,Bits#(metaI, c__)
+           ,Bits#(actI, d__)
+           ,Add#(c__, d__, m__));
       messageM("instantiate special case");
       // implement stage with no table lookup
+      `PRINT_DEBUG_MSG
+      RX #(metaI) meta_in <- mkRX;
+      TX #(metaI) meta_out <- mkTX;
+      Vector#(nact, FIFOF#(Tuple2#(metaI, actI))) bbReqFifo <- replicateM(mkSizedFIFOF(16));
+      Vector#(nact, FIFOF#(metaI)) bbRspFifo <- replicateM(mkSizedFIFOF(16));
+      Vector#(nact, Bool) readyBits = map(fifoNotEmpty, bbRspFifo);
+      Bool interruptStatus = False;
+      Bit#(nact) readyChannel = -1;
+      messageM("readyChannel " + integerToString(valueOf(nact)) + " " + sprintf("%0d", readyChannel));
+      for (Integer i=valueOf(TSub#(nact, 1)); i>=0; i=i-1) begin
+          if (readyBits[i]) begin
+              interruptStatus = True;
+              readyChannel = fromInteger(i);
+          end
+      end
+      rule rl_handle_request;
+          metaI md = meta_in.u.first;
+          meta_in.u.deq;
+          execute_action(unpack(0), md, bbReqFifo);
+      endrule
+      rule rl_handle_response if (readyChannel != -1);
+          let v <- toGet(bbRspFifo[readyChannel]).get;
+          meta_out.u.enq(v);
+          dbprint(3, $format("dequeue %d ", readyChannel));
+      endrule
+      interface prev_control_state = toServer(meta_in.e, meta_out.e);
+      interface next_control_state = zipWith(toClient, bbReqFifo, bbRspFifo);
+      method Action add_entry(Bit#(0) k, valT v);
+         matchTable.add_entry.put(tuple2(pack(k), pack(v)));
+      endmethod
+      method Action set_verbosity(int verbosity);
+          cf_verbosity <= verbosity;
+      endmethod
    endmodule
 endinstance
 

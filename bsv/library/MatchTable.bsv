@@ -62,6 +62,7 @@ endtypeclass
 instance MkMatchTable#(id, depth, 0, actionSz);
    module mkMatchTable#(String name)(MatchTable#(id, depth, 0, actionSz));
       // This is intentionally empty
+      messageM("empty match table");
    endmodule
 endinstance
 
