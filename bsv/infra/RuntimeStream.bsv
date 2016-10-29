@@ -35,9 +35,11 @@ import Printf::*;
 import Stream::*;
 import StreamGearbox::*;
 import XBar::*;
+import SynthBuilder::*;
 `include "ConnectalProjectConfig.bsv"
 `include "Debug.defines"
 `include "TieOff.defines"
+`include "SynthBuilder.defines"
 `TIEOFF_PIPEOUT("runtime stream ", MetadataRequest)
 
 typedef 512 DatapathWidth;
@@ -137,6 +139,12 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_dn_32), map(getDataIn, gearbox_dn_16)));
    mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_dn_16), map(getWriteServer, _txchan)));
 
+   // forward packet to any of these ports will be dropped
+   mkTieOff(output_queues[0].readServer.readData);
+   mkTieOff(output_queues[5].readServer.readData);
+   mkTieOff(output_queues[6].readServer.readData);
+   mkTieOff(output_queues[7].readServer.readData);
+
    interface prev = genWith(metaPipeIn); // metadata in
    interface rxchan = _rxchan;
    interface txchan = _txchan;
@@ -152,4 +160,5 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    endmethod
 endmodule
 
+`SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(4, 4, 1), mkRuntime_4_4_1)
 endpackage
