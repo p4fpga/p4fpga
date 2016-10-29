@@ -42,6 +42,8 @@ static bool tosend = false;
 bool hwpktgen = false;
 bool metagen = false;
 
+static sem_t sem_read_version;
+
 extern void app_init(MainRequestProxy* device);
 
 void device_writePacketData(uint64_t* data, uint8_t* mask, int sop, int eop) {
@@ -59,6 +61,7 @@ class MainIndication : public MainIndicationWrapper
 public:
     virtual void read_version_rsp(uint32_t a) {
         fprintf(stderr, "version %x\n", a);
+        sem_post(&sem_read_version);
     }
     virtual void read_pktcap_perf_info_resp(PktCapRec a) {
         fprintf(stderr, "perf: pktcap data_bytes=%ld idle_cycle=%ld total_cycle=%ld\n", a.data_bytes, a.idle_cycles, a.total_cycles);
@@ -112,6 +115,7 @@ void usage (const char *program_name) {
 struct arg_info {
     double rate;
     uint64_t tracelen;
+    uint64_t instance; // pktgen instances
     bool metagen;
 };
 
@@ -126,6 +130,7 @@ parse_options(int argc, char *argv[], char **pcap_file, char **intf, char **outf
         {"outf",                required_argument, 0, 'O'},
         {"pktgen-rate",         required_argument, 0, 'r'},
         {"pktgen-count",        required_argument, 0, 'n'},
+        {"pktgen-instance",     required_argument, 0, 'g'},
         {"metagen",             no_argument, 0, 'M'},
         {0, 0, 0, 0}
     };
@@ -163,6 +168,8 @@ parse_options(int argc, char *argv[], char **pcap_file, char **intf, char **outf
             case 'M':
                 info->metagen = true;
                 break;
+            case 'g':
+                info->instance = strtol(optarg, NULL, 0);
             default:
                 break;
         }
@@ -249,11 +256,16 @@ int main(int argc, char **argv)
 
     parse_options(argc, argv, &pcap_file, &intf, &outf, &arguments);
     device->set_verbosity(6);
-    device->read_version();
 
     // application specific call
     // e.g. insert table entries here.
     app_init(device);
+
+    device->read_version();
+//    sem_wait(&sem_read_version);
+//    fprintf(stderr, "receved version rsp\n");
+//
+//    sleep(3);
 
     // if specified intf on command line
     if (intf && outf) {
@@ -276,7 +288,7 @@ int main(int argc, char **argv)
       int idle = compute_idle(&pcap_info, arguments.rate, LINK_SPEED);
       fprintf(stderr, "IDLE=%d\n", idle);
       device->pktcap_start(arguments.tracelen);
-      device->pktgen_start(arguments.tracelen, idle);
+      device->pktgen_start(arguments.tracelen, idle, arguments.instance);
     }
 
     if (metagen) {

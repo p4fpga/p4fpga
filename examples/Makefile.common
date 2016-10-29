@@ -11,10 +11,15 @@ P4FPGADIR?=$(DEV_ROOT)/p4fpga
 ###########################################
 # Connectal Support
 ###########################################
+ifeq ($(S2H_INTERFACES), )
 S2H_INTERFACES=MainRequest:Main.request
+endif
+ifeq ($(H2S_INTERFACES), )
 H2S_INTERFACES=Main:MainIndication,MemServerIndication:host
+endif
+ifeq ($(BSVFILES), )
 BSVFILES=$(P4FPGADIR)/bsv/infra/Main.bsv $(P4FPGADIR)/bsv/infra/MainAPI.bsv
-
+endif
 ifeq ($(CPPFILES), )
 CPPFILES = $(P4FPGADIR)/cpp/main.cpp $(P4FPGADIR)/cpp/lpcap.c
 endif
@@ -24,9 +29,11 @@ CONNECTALFLAGS += -lpcap -lpthread
 
 CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/bsv/datapath
 CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/bsv/infra
+CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/bsv/generated
 CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/bsv/library
 CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/bsv/library/AsymmetricBRAM
 CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/bsv/library/Bcam
+CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/bsv/library/DMHC
 CONNECTALFLAGS += -D NicVersion=$(shell printf "%d" 0x`git rev-parse --short=8 HEAD`)
 CONNECTALFLAGS += -D DataBusWidth=128
 CONNECTALFLAGS += -D IMPORT_HOSTIF
@@ -49,19 +56,21 @@ PROJ_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 # NFSUME SUPPORT
 ########################################################
 ifeq ($(BOARD), nfsume)
+ifeq ($(AUTOTOP), )
 AUTOTOP = --interface pins:Main.pins
+endif
 CONNECTALFLAGS += --verilog=$(P4FPGADIR)/bsv/AsymmetricBRAM
 PIN_TYPE = NfsumePins
 PIN_TYPE_INCLUDE = NfsumePins
 PIN_BINDINGS ?= LED:LED SFP:SFP SFPA:SFPA SFPB:SFPB SFPC:SFPC SFPD:SFPD
 PINOUT_FILE = $(SONICDIR)/boards/nfsume.json
 CONNECTALFLAGS += -D XILINX_SYS_CLK
-#CONNECTALFLAGS += --xci=$(IPDIR)/$(BOARD)/ten_gig_eth_mac_0/ten_gig_eth_mac_0.xci
+CONNECTALFLAGS += --xci=$(IPDIR)/$(BOARD)/ten_gig_eth_mac_0/ten_gig_eth_mac_0.xci
 CONNECTALFLAGS += --xci=$(IPDIR)/$(BOARD)/ten_gig_eth_pcs_pma_shared/ten_gig_eth_pcs_pma_shared.xci
 CONNECTALFLAGS += --xci=$(IPDIR)/$(BOARD)/ten_gig_eth_pcs_pma_non_shared/ten_gig_eth_pcs_pma_non_shared.xci
 CONNECTALFLAGS += --constraint=timing_constraints.xdc --implconstraint=timing_constraints.xdc
 prebuild::
-#	(cd $(BOARD); BUILDCACHE_CACHEDIR=$(BUILDCACHE_CACHEDIR) $(BUILDCACHE) vivado -notrace -mode batch -source $(SONICDIR)/hw/scripts/generate-mac.tcl)
+	(cd $(BOARD); BUILDCACHE_CACHEDIR=$(BUILDCACHE_CACHEDIR) $(BUILDCACHE) vivado -notrace -mode batch -source $(SONICDIR)/hw/scripts/generate-mac.tcl)
 	(cd $(BOARD); BUILDCACHE_CACHEDIR=$(BUILDCACHE_CACHEDIR) $(BUILDCACHE) vivado -notrace -mode batch -source $(SONICDIR)/hw/scripts/connectal-synth-phy.tcl)
 endif
 

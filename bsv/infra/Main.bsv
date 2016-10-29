@@ -46,8 +46,14 @@ import Channel::*;
 import Stream::*;
 import StructDefines::*;
 import ConnectalTypes::*;
+import NfsumePins::*;
 `include "ConnectalProjectConfig.bsv"
-
+`ifdef BOARD_nfsume
+import Xilinx10GE::*;
+import XilinxMacWrap::*;
+import XilinxEthPhy::*;
+import EthMac::*;
+`endif
 interface Main;
   interface MainRequest request;
   interface `PinType pins;
@@ -66,8 +72,8 @@ module mkMain #(HostInterface host, MainIndication indication, ConnectalMemory::
   Clock rxClock = board.rxClock;
   Reset rxReset = board.rxReset;
 
-  Runtime#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) runtime <- mkRuntime(rxClock, rxReset, txClock, txReset);
-  Program#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN, naux) prog <- mkProgram();
+  Runtime#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) runtime <- mkRuntime_4_4_1(rxClock, rxReset, txClock, txReset);
+  Program#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN, naux) prog <- mkProgram_4_4_1_5();
 
   // Port 0 is HostChan
   for (Integer i=0; i<`NUM_HOSTCHAN; i=i+1) begin
@@ -87,7 +93,7 @@ module mkMain #(HostInterface host, MainIndication indication, ConnectalMemory::
   PktCapChannel pktcap <- mkPktCapChannel(rxClock, rxReset);
 
   // LOOPBACK
-  Vector#(4, SyncFIFOIfc#(ByteStream#(8))) lpbk_ff <- replicateM(mkSyncFIFO(6, txClock, txReset, rxClock));
+  Vector#(4, SyncFIFOIfc#(ByteStream#(8))) lpbk_ff <- replicateM(mkSyncFIFO(16, txClock, txReset, rxClock));
   mapM_(uncurry(mkConnection), zip(map(getMacTx, pktgen), map(toPut, lpbk_ff)));
   mapM_(uncurry(mkConnection), zip(map(toGet, lpbk_ff), map(getMacRx, runtime.rxchan)));
 

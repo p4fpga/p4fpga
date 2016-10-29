@@ -83,6 +83,23 @@ instance SynthBuilder4 #(IFCTYPE, PARAT0, PARAT1, PARAT2, PARAT3); \
    endmodule\
 endinstance\
 
+`define SynthBuildModule5(CONSTR, PARAT0, PARAT1, PARAT2, PARAT3, PARAT4, IFCTYPE, UNIQ) \
+(*synthesize*) \
+module UNIQ #(PARAT0 p0, PARAT1 p1, PARAT2 p2, PARAT3 p3, PARAT4 p4) (IFCTYPE);\
+   (*hide*) let _i <- CONSTR(p0, p1, p2, p3, p4);\
+   messageM ("Built SynthModule5 for type " + (printType (typeOf (_i))));\
+   return _i; \
+endmodule \
+instance SynthBuilder5 #(IFCTYPE, PARAT0, PARAT1, PARAT2, PARAT3, PARAT4); \
+   module mkSynth5 #(unused u, PARAT0 p0, PARAT1 p1, PARAT2 p2, PARAT3 p3, PARAT p4) (IFCTYPE); \
+      (*hide*) let _i <- UNIQ (p0, p1, p2, p3, p4);  return _i; \
+   endmodule\
+   module mkSynthStrict5 #(unused u, PARAT0 p0, PARAT1 p1, PARAT2 p2, PARAT3 p3, PARAT p4) (IFCTYPE); \
+      (*hide*) let _i <- UNIQ (p0, p1, p2, p3, p4);  return _i; \
+   endmodule\
+endinstance\
+
+
 `define SynthBuildModule6(CONSTR, PARAT0, PARAT1, PARAT2, PARAT3, PARAT4, PARAT5, IFCTYPE, UNIQ) \
 (*synthesize*) \
 module UNIQ #(PARAT0 p0, PARAT1 p1, PARAT2 p2, PARAT3 p3, PARAT4 p4, PARAT5 p5) (IFCTYPE);\

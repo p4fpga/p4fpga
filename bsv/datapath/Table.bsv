@@ -89,7 +89,7 @@ typeclass MkTable #(numeric type nact, type metaI, type actI, type keyT, type va
    module mkTable#(function keyT match_table_request(metaI data),
                    function Action execute_action(valT data, metaI md,
                    Vector#(nact, FIFOF#(Tuple2#(metaI, actI))) fifo),
-                   MatchTable#(a__, b__, SizeOf#(keyT), SizeOf#(valT)) matchTable) (Table#(nact, metaI, actI, keyT, valT));
+                   MatchTable#(a__, b__, g__, SizeOf#(keyT), SizeOf#(valT)) matchTable) (Table#(nact, metaI, actI, keyT, valT));
 endtypeclass
 
 /*
@@ -103,7 +103,7 @@ instance MkTable #(nact, metaI, actI, Bit#(0), valT)
            ,Add#(c__, d__, m__));
    module mkTable#(function Bit#(0) match_table_request(metaI data),
                    function Action execute_action(valT data, metaI md, Vector#(nact, FIFOF#(Tuple2#(metaI, actI))) fifo),
-                   MatchTable#(a__, b__, 0, SizeOf#(valT)) matchTable)
+                   MatchTable#(a__, b__, g__, 0, SizeOf#(valT)) matchTable)
                    (Table#(nact, metaI, actI, Bit#(0), valT))
    provisos(Bits#(valT, f__)
            ,Bits#(metaI, c__)
@@ -160,7 +160,7 @@ instance MkTable #(nact, metaI, actI, keyT, valT)
 
    module mkTable#(function keyT match_table_request(metaI data),
                    function Action execute_action(valT data, metaI md, Vector#(nact, FIFOF#(Tuple2#(metaI, actI))) fifo),
-                   MatchTable#(a__, b__, SizeOf#(keyT), SizeOf#(valT)) matchTable)
+                   MatchTable#(a__, b__, g__, SizeOf#(keyT), SizeOf#(valT)) matchTable)
                    (Table#(nact, metaI, actI, keyT, valT))
       provisos(Bits#(keyT, e__)
              , Bits#(valT, f__)

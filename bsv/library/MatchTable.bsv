@@ -32,44 +32,72 @@ import FShow::*;
 import Pipe::*;
 import StringUtils::*;
 import List::*;
+import PrintTrace::*;
+import DMHC::*;
+import SynthBuilder::*;
 import Bcam::*;
 import BcamTypes::*;
-import PrintTrace::*;
+
+`include "SynthBuilder.defines"
 `include "ConnectalProjectConfig.bsv"
 
-interface MatchTable#(numeric type id, numeric type depth, numeric type keySz, numeric type actionSz);
+`define HASH 1
+`define BCAM 2
+`define TCAM 3
+`define SIMU 4
+
+interface MatchTable#(numeric type tp,
+                      numeric type uniq,
+                      numeric type depth,
+                      numeric type keySz,
+                      numeric type actionSz);
    interface Server#(Bit#(keySz), Maybe#(Bit#(actionSz))) lookupPort;
    interface Put#(Tuple2#(Bit#(keySz), Bit#(actionSz))) add_entry;
    interface Put#(Bit#(TLog#(depth))) delete_entry;
    interface Put#(Tuple2#(Bit#(TLog#(depth)), Bit#(actionSz))) modify_entry;
 endinterface
 
-typeclass MatchTableSim#(numeric type id, numeric type ksz, numeric type vsz);
-   function ActionValue#(Bit#(vsz)) matchtable_read(Bit#(id) v, Bit#(ksz) key);
-   function Action matchtable_write(Bit#(id) v, Bit#(ksz) key, Bit#(vsz) data);
+typeclass MatchTableSim#(numeric type uniq, numeric type ksz, numeric type vsz);
+   function ActionValue#(Bit#(vsz)) matchtable_read(Bit#(uniq) v, Bit#(ksz) key);
+   function Action matchtable_write(Bit#(uniq) v, Bit#(ksz) key, Bit#(vsz) data);
 endtypeclass
 
-typeclass MkMatchTable#(numeric type id,
+typeclass MkMatchTable#(numeric type tp,
+                        numeric type uniq,
                         numeric type depth,
                         numeric type keySz,
                         numeric type actionSz);
-   module mkMatchTable#(String name)(MatchTable#(id, depth, keySz, actionSz));
+   module mkMatchTable#(String name)(MatchTable#(tp, uniq, depth, keySz, actionSz));
 endtypeclass
 
 /*
    Special case when match table uses empty key, i.e. no match table
  */
-instance MkMatchTable#(id, depth, 0, actionSz);
-   module mkMatchTable#(String name)(MatchTable#(id, depth, 0, actionSz));
+instance MkMatchTable#(`SIMU, uniq, depth, 0, actionSz)
+   provisos (MatchTable::MatchTableSim#(uniq, 0, actionSz));
+   module mkMatchTable#(String name)(MatchTable#(`SIMU, uniq, depth, 0, actionSz))
+   provisos (MatchTable::MatchTableSim#(uniq, 0, actionSz));
+      // This is intentionally empty
+      messageM("empty match table");
+   endmodule
+endinstance
+instance MkMatchTable#(`HASH, uniq, depth, 0, actionSz);
+   module mkMatchTable#(String name)(MatchTable#(`HASH, uniq, depth, 0, actionSz));
+      // This is intentionally empty
+      messageM("empty match table");
+   endmodule
+endinstance
+instance MkMatchTable#(`BCAM, uniq, depth, 0, actionSz);
+   module mkMatchTable#(String name)(MatchTable#(`BCAM, uniq, depth, 0, actionSz));
       // This is intentionally empty
       messageM("empty match table");
    endmodule
 endinstance
 
 /*
-   Polymorphic case when match table has non-zero keys
+   Bcam-based match table
  */
-instance MkMatchTable#(id, depth, keySz, actionSz)
+instance MkMatchTable#(`BCAM, uniq, depth, keySz, actionSz)
    provisos(Mul#(c__, 256, d__),
             Add#(c__, 7, TLog#(depth)),
             Log#(d__, TLog#(depth)),
@@ -80,12 +108,9 @@ instance MkMatchTable#(id, depth, keySz, actionSz)
             PriorityEncoder::PEncoder#(d__),
             Add#(2, g__, TLog#(depth)),
             Add#(4, h__, TLog#(depth)),
-`ifdef SIMULATION
-            MatchTableSim#(id, keySz, actionSz),
-`endif
             Add#(TAdd#(TLog#(c__), 4), i__, TLog#(depth)));
 
-   module mkMatchTable#(String name)(MatchTable#(id, depth, keySz, actionSz))
+   module mkMatchTable#(String name)(MatchTable#(`BCAM, uniq, depth, keySz, actionSz))
       provisos(Mul#(c__, 256, d__),
                Add#(c__, 7, TLog#(depth)),
                Log#(d__, TLog#(depth)),
@@ -96,23 +121,41 @@ instance MkMatchTable#(id, depth, keySz, actionSz)
                PriorityEncoder::PEncoder#(d__),
                Add#(2, g__, TLog#(depth)),
                Add#(4, h__, TLog#(depth)),
-   `ifdef SIMULATION
-               MatchTableSim#(id, keySz, actionSz),
-   `endif
                Add#(TAdd#(TLog#(c__), 4), i__, TLog#(depth)));
 
-      MatchTable#(id, depth, keySz, actionSz) ret_ifc;
-   `ifdef SIMULATION
-      ret_ifc <- mkMatchTableBluesim(name);
-   `else  // !SIMULATION
+      MatchTable#(`BCAM, uniq, depth, keySz, actionSz) ret_ifc;
       ret_ifc <- mkMatchTableSynth();
-   `endif // SIMULATION
       return ret_ifc;
    endmodule
 endinstance
 
-`ifndef SIMULATION
-module mkMatchTableSynth(MatchTable#(id, depth, keySz, actionSz))
+// SIMULATION instance
+`ifdef SIMULATION
+instance MkMatchTable#(`SIMU, uniq, depth, keySz, actionSz) 
+   provisos (MatchTableSim#(uniq, keySz, actionSz));
+   module mkMatchTable#(String name)(MatchTable#(`SIMU, uniq, depth, keySz, actionSz))
+      provisos (MatchTableSim#(uniq, keySz, actionSz));
+      MatchTable#(`SIMU, uniq, depth, keySz, actionSz) ret_ifc;
+      ret_ifc <- mkMatchTableBluesim(name);
+      return ret_ifc;
+   endmodule
+endinstance
+`endif
+
+// Hash-based match table
+instance MkMatchTable#(`HASH, uniq, depth, keySz, actionSz)
+   provisos(Add#(a__, TLog#(TMul#(2, depth)), keySz));
+   module mkMatchTable#(String name)(MatchTable#(`HASH, uniq, depth, keySz, actionSz))
+      provisos(Add#(a__, TLog#(TMul#(2, depth)), keySz));
+      MatchTable#(`HASH, uniq, depth, keySz, actionSz) ret_ifc;
+      ret_ifc <- mkMatchTableDMHC(name);
+      messageM("Generate hash-based match table: " + printType(typeOf(ret_ifc)));
+      return ret_ifc;
+   endmodule
+endinstance
+
+//`ifndef SIMULATION
+module mkMatchTableSynth(MatchTable#(`BCAM, uniq, depth, keySz, actionSz))
    provisos (NumAlias#(depthSz, TLog#(depth)),
              Mul#(a__, 256, b__),
              Add#(a__, 7, depthSz),
@@ -206,15 +249,14 @@ module mkMatchTableSynth(MatchTable#(id, depth, keySz, actionSz))
       endmethod
    endinterface
 endmodule
-`endif
+//`endif
 
 `ifdef SIMULATION
-module mkMatchTableBluesim#(String name)(MatchTable#(id, depth, keySz, actionSz))
-   provisos (MatchTable::MatchTableSim#(id, keySz, actionSz),
-             Log#(depth, depthSz));
+module mkMatchTableBluesim#(String name)(MatchTable#(`SIMU, uniq, depth, keySz, actionSz))
+   provisos (MatchTable::MatchTableSim#(uniq, keySz, actionSz));
    let verbose = True;
 
-   Integer idv = valueOf(id);
+   Integer idv = valueOf(uniq);
    Integer dpv = valueOf(depth);
    FIFO#(Tuple2#(Bit#(keySz), Bit#(actionSz))) writeReqFifo <- mkFIFO;
    FIFO#(Bit#(keySz)) readReqFifo <- mkFIFO;
@@ -222,30 +264,10 @@ module mkMatchTableBluesim#(String name)(MatchTable#(id, depth, keySz, actionSz)
 
    Reg#(Bool)      isInitialized   <- mkReg(True);
 
-//   Handle fp <- openFile(name, ReadMode);
-//   List#(Tuple2#(Bit#(keySz), Bit#(actionSz))) entryList = tagged Nil;
-//   let readable <- hIsReadable(fp);
-//   if (readable) begin
-//      Bool isEOF <- hIsEOF(fp);
-//      while (!isEOF) begin
-//         let line <- hGetLine(fp);
-//         List#(String) parsedEntries = parseCSV(line);
-//         while (parsedEntries != tagged Nil) begin
-//            Bit#(keySz) key = fromInteger(hexStringToInteger(parsedEntries[0]));
-//            Bit#(actionSz) v = fromInteger(hexStringToInteger(parsedEntries[1]));
-//            Bit#(id) tid = 0;
-//            parsedEntries = List::drop(2, parsedEntries);
-//            entryList = List::cons(tuple2(key, v), entryList);
-//         end
-//         isEOF <- hIsEOF(fp);
-//      end
-//   end
-//   hClose(fp);
-//
    rule do_read (isInitialized);
       let v <- toGet(readReqFifo).get;
       $display("(%0d) MatchTable:do_read %s key: %h", $time, name, v);
-      Bit#(id) tid = 0;
+      Bit#(uniq) tid = 0;
       let ret <- matchtable_read(tid, pack(v));
       $display("(%0d) MatchTable:do_read %s value: %h", $time, name, ret);
       if (ret != 0)
@@ -254,22 +276,6 @@ module mkMatchTableBluesim#(String name)(MatchTable#(id, depth, keySz, actionSz)
          readDataFifo.enq(tagged Invalid);
    endrule
 
-//   Reg#(Bit#(8)) fsmIndex <- mkReg(0);
-//
-//   rule do_init (fsmIndex < fromInteger(List::length(entryList)));
-//      $display("%s insert entry ", name, fromInteger(List::length(entryList)));
-//      Bit#(keySz) key = tpl_1(entryList[fsmIndex]);
-//      Bit#(actionSz) v = tpl_2(entryList[fsmIndex]);
-//      Bit#(id) tid = 0;
-//      matchtable_write(tid, key, v);
-//      fsmIndex <= fsmIndex + 1;
-//      $display("finished insert entry ", fromInteger(List::length(entryList)));
-//   endrule
-//
-//   rule finish_init(fsmIndex == fromInteger(List::length(entryList)));
-//      isInitialized <= True;
-//   endrule
-
    interface Server lookupPort;
       interface Put request = toPut(readReqFifo);
       interface Get response = toGet(readDataFifo);
@@ -277,13 +283,67 @@ module mkMatchTableBluesim#(String name)(MatchTable#(id, depth, keySz, actionSz)
    interface Put add_entry;
       method Action put (Tuple2#(Bit#(keySz), Bit#(actionSz)) v);
          $display("(%0d) MatchTable:add_entry %h %h", $time, tpl_1(v), tpl_2(v));
-         Bit#(id) tid = 0;
+         Bit#(uniq) tid = 0;
          matchtable_write(tid, tpl_1(v), tpl_2(v));
       endmethod
    endinterface
    interface Put delete_entry;
       method Action put (Bit#(depthSz) id);
-         
+      endmethod
+   endinterface
+   interface Put modify_entry;
+      method Action put (Tuple2#(Bit#(depthSz), Bit#(actionSz)) v);
+      endmethod
+   endinterface
+endmodule
+`endif
+
+module mkMatchTableDMHC#(String name)(MatchTable#(`HASH, uniq, depth, keySz, actionSz))
+   provisos(Add#(a__, TLog#(TMul#(2, depth)), keySz));
+   DMHCIfc#(depth, 4, 2, keySz, actionSz) dmhc <- mkDMHC();
+   FIFO#(Bit#(keySz)) readReqFifo <- mkFIFO;
+   FIFO#(Maybe#(Bit#(actionSz))) readDataFifo <- printTimedTraceM(name, mkFIFO);
+   FIFO#(Bit#(keySz)) delay_ff <- mkFIFO;
+   FIFO#(Bit#(keySz)) delay2_ff <- mkFIFO;
+
+   rule do_read (dmhc.is_enabled);
+      let v <- toGet(readReqFifo).get;
+      $display("(%0d) MatchTable:do_read %s key: %h", $time, name, v);
+      dmhc.lookup_key(v);
+      delay_ff.enq(v);
+   endrule
+
+   // pipeline delay for dmhc read, assume read latency of 2
+   rule do_delay;
+      let v <- toGet(delay_ff).get;
+      delay2_ff.enq(v);
+   endrule
+
+   rule do_resp;
+      let v <- toGet(delay2_ff).get;
+      $display("(%0d) MatchTable:do_resp %s key: %h", $time, name, v);
+      if (dmhc.is_hit) begin
+         let val = dmhc.get_value;
+         readDataFifo.enq(tagged Valid val);
+      end
+      else begin
+         readDataFifo.enq(tagged Invalid);
+      end
+   endrule
+
+   interface Server lookupPort;
+      interface Put request = toPut(readReqFifo);
+      interface Get response = toGet(readDataFifo);
+   endinterface
+   interface Put add_entry;
+      method Action put (Tuple2#(Bit#(keySz), Bit#(actionSz)) v);
+         $display("(%0d) add entry %h %h", $time, tpl_1(v), tpl_2(v));
+         dmhc.new_key_value(tpl_1(v), tpl_2(v));
+      endmethod
+   endinterface
+   interface Put delete_entry;
+      method Action put (Bit#(depthSz) id);
+
       endmethod
    endinterface
    interface Put modify_entry;
@@ -292,4 +352,4 @@ module mkMatchTableBluesim#(String name)(MatchTable#(id, depth, keySz, actionSz)
       endmethod
    endinterface
 endmodule
-`endif
+`SynthBuildModule(mkDMHC, DMHCIfc#(1024, 4, 2, 64, 64), mkDMHC_64)
