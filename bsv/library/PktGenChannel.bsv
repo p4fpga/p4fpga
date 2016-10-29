@@ -76,7 +76,7 @@ module mkPktGenChannel#(Clock txClock, Reset txReset, Integer id)(PktGenChannel)
    StreamGearbox#(16, 8) gearbox <- mkStreamGearboxDn();
 
    SyncFIFOIfc#(Tuple2#(Bit#(32),Bit#(32))) start_sync_ff <- mkSyncFIFO(4, defaultClock, defaultReset, txClock);
-   SyncFIFOIfc#(void) stop_sync_ff <- mkSyncFIFO(4, defaultClock, defaultReset, txClock);
+   SyncFIFOIfc#(Bit#(1)) stop_sync_ff <- mkSyncFIFO(4, defaultClock, defaultReset, txClock);
    SyncFIFOIfc#(ByteStream#(8)) write_sync_ff <- mkSyncFIFO(4, defaultClock, defaultReset, txClock);
    SyncFIFOIfc#(int) verbose_sync_ff <- mkSyncFIFO(4, defaultClock, defaultReset, txClock);
 
@@ -114,7 +114,7 @@ module mkPktGenChannel#(Clock txClock, Reset txReset, Integer id)(PktGenChannel)
       start_sync_ff.enq(tuple2(iter, ipg));
    endmethod
    method Action stop ();
-      stop_sync_ff.enq(?);
+      stop_sync_ff.enq(1'b1);
    endmethod
    interface writeData = toPut(write_ff);
    interface macTx = pktgen.writeClient.writeData;

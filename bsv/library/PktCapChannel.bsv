@@ -73,7 +73,7 @@ module mkPktCapChannel#(Clock rxClock, Reset rxReset)(PktCapChannel);
    StoreAndFwdFromMacToRing macToRing <- mkStoreAndFwdFromMacToRing(rxClock, rxReset, clocked_by rxClock, reset_by rxReset);
 
    SyncFIFOIfc#(Bit#(32)) pktCapStartSyncFifo <- mkSyncFIFO(4, defaultClock, defaultReset, rxClock);
-   SyncFIFOIfc#(void) pktCapStopSyncFifo <- mkSyncFIFO(4, defaultClock, defaultReset, rxClock);
+   SyncFIFOIfc#(Bit#(1)) pktCapStopSyncFifo <- mkSyncFIFO(4, defaultClock, defaultReset, rxClock);
 
    rule pkt_sink;
       let v <- macToRing.writeClient.writeData.get;
@@ -123,7 +123,7 @@ module mkPktCapChannel#(Clock rxClock, Reset rxReset)(PktCapChannel);
       pktCapStartSyncFifo.enq(iter);
    endmethod
    method Action stop();
-      pktCapStopSyncFifo.enq(?);
+      pktCapStopSyncFifo.enq(1'b1);
    endmethod
    method PktCapRec read_perf_info();
       return PktCapRec {data_bytes: data_bytes,
