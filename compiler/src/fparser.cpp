@@ -182,7 +182,11 @@ bool ExtractStmtCodeGen::preorder (const IR::SelectCase* cas) {
       return false;
     }
 
-    builder->append_line("`COLLECT_RULE(parse_fsm, joinRules(vec(genAcceptRule(w_%s_%s))));", this_state, next_state);
+    if (next_state == "accept") {
+      builder->append_line("`COLLECT_RULE(parse_fsm, joinRules(vec(genAcceptRule(w_%s_%s))));", this_state, next_state);
+    } else {
+      builder->append_line("`COLLECT_RULE(parse_fsm, joinRules(vec(genContRule(w_%s_%s, State%s, valueOf(%sSz)))));", this_state, next_state, CamelCase(next_state), CamelCase(next_state));
+    }
 
     visited.insert(this_state + next_state);
     num_rules++;
