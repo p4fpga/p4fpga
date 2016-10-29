@@ -35,6 +35,7 @@ import OInt::*;
 import Stream::*;
 import Ethernet::*;
 import TieOff::*;
+import Channel::*;
 `include "ConnectalProjectConfig.bsv"
 
 `ifdef ALTERA
@@ -152,6 +153,20 @@ interface EthMacIfc;
    interface Get#(ByteStream#(8)) packet_rx;
 endinterface
 
+typeclass GetEthMac#(type a);
+  function Get#(ByteStream#(8)) getEthMacRx(a t);
+  function Put#(ByteStream#(8)) getEthMacTx(a t);
+endtypeclass
+
+instance GetEthMac#(EthMacIfc);
+   function Put#(ByteStream#(8)) getEthMacTx(EthMacIfc t);
+      return t.packet_tx;
+   endfunction
+   function Get#(ByteStream#(8)) getEthMacRx(EthMacIfc t);
+      return t.packet_rx;
+   endfunction
+endinstance
+
 // Mac Wrapper
 (* synthesize *)
 module mkEthMac#(Clock clk_50, Clock clk_156_25, Reset rst_156_25_n)(EthMacIfc);
@@ -218,7 +233,7 @@ module mkEthMac#(Clock clk_50, Clock clk_156_25, Reset rst_156_25_n)(EthMacIfc);
       let d = tx_fifo.first;
       tx_data_w <= tagged Valid pack(d.data);
       tx_keep_w <= d.mask;
-      tx_last_w <= d.eop;
+      tx_last_w <= pack(d.eop);
       tx_user_w <= 1'b0;
       if (tx_ready_w != 0) begin
          tx_fifo.deq;
@@ -256,5 +271,7 @@ module mkEthMac#(Clock clk_50, Clock clk_156_25, Reset rst_156_25_n)(EthMacIfc);
    interface Get packet_rx = toGet(rx_fifo);
 endmodule
 `endif
+
+
 endpackage: EthMac
 
