@@ -23,6 +23,8 @@
 import Library::*;
 import ConnectalTypes::*;
 import Control::*;
+import SynthBuilder::*;
+`include "SynthBuilder.defines"
 
 `include "Debug.defines"
 //`include "TieOff.defines"
@@ -86,4 +88,7 @@ module mkProgram(Program#(nrx, ntx, nhs, nextra))
    endmethod
 `include "ProgDeclGenerated.bsv"
 endmodule
+
+`SynthBuildModule(mkProgram, Program#(4,4,1,2), mkProgram_4_4_1_2)
+`SynthBuildModule(mkProgram, Program#(4,4,1,5), mkProgram_4_4_1_5)
 
