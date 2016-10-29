@@ -427,7 +427,7 @@ module mkStoreAndFwdFromMacToRing#(Clock rxClock, Reset rxReset)(StoreAndFwdFrom
    rule writeData;
       let v <- gearbox.dataout.get;
       writeDataFifo.enq(v);
-      if (verbose) $display("macToRing:: writeToFifo");
+      if (verbose) $display("(%0d) macToRing:: writeToFifo", $time);
    endrule
 
 //   rule count_idle_cycles (!inProgress);
