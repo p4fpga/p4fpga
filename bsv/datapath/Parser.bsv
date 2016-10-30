@@ -51,9 +51,9 @@ module mkParser#(Integer portnum)(Parser);
    PulseWire w_parse_done <- mkPulseWire();
    PulseWire w_parse_header_done <- mkPulseWireOR();
    PulseWire w_load_header <- mkPulseWireOR();
-   Array#(Reg#(Bit#(32))) rg_next_header_len <- mkCReg(3, 0);
-   Array#(Reg#(Bit#(32))) rg_buffered <- mkCReg(3, 0);
-   Array#(Reg#(Bit#(32))) rg_shift_amt <- mkCReg(3, 0);
+   Array#(Reg#(Bit#(10))) rg_next_header_len <- mkCReg(3, 0);
+   Array#(Reg#(Bit#(10))) rg_buffered <- mkCReg(3, 0);
+   Array#(Reg#(Bit#(10))) rg_shift_amt <- mkCReg(3, 0);
    Array#(Reg#(Bit#(512))) rg_tmp <- mkCReg(2, 0);
 
    function Action dbprint(Integer level, Fmt msg);
@@ -68,37 +68,37 @@ module mkParser#(Integer portnum)(Parser);
    `include "ParserGenerated.bsv"
    `undef PARSER_STATE
 
-   function Action succeed_and_next(Bit#(32) offset);
+   function Action succeed_and_next(Bit#(10) offset);
      action
        rg_buffered[0] <= rg_buffered[0] - offset;
        rg_shift_amt[0] <= rg_buffered[0] - offset;
        dbprint(4,$format("succeed_and_next subtract offset = %d shift_amt/buffered = %d", offset, rg_buffered[0] - offset));
      endaction
    endfunction
-   function Action fetch_next_header0(Bit#(32) len);
+   function Action fetch_next_header0(Bit#(10) len);
      action
        rg_next_header_len[0] <= len;
        w_parse_header_done.send();
      endaction
    endfunction
-   function Action fetch_next_header1(Bit#(32) len);
+   function Action fetch_next_header1(Bit#(10) len);
      action
        rg_next_header_len[1] <= len;
        w_parse_header_done.send();
      endaction
    endfunction
-   function Action move_shift_amt(Bit#(32) len);
+   function Action move_shift_amt(Bit#(10) len);
      action
        rg_shift_amt[0] <= rg_shift_amt[0] + len;
        w_load_header.send();
      endaction
    endfunction
-   function Action failed_and_trap(Bit#(32) offset);
+   function Action failed_and_trap(Bit#(10) offset);
      action
        rg_buffered[0] <= 0;
      endaction
    endfunction
-   function Action report_parse_action(ParserState state, Bit#(32) offset, Bit#(128) data, Bit#(512) buff);
+   function Action report_parse_action(ParserState state, Bit#(10) offset, Bit#(128) data, Bit#(512) buff);
      action
        if (cf_verbosity > 3) begin
          $display("(%0d) Parser State %h buffered %d, %h, %h", $time, state, offset, data, buff);
