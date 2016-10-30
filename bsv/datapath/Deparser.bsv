@@ -93,6 +93,8 @@ module mkDeparser (Deparser);
    Array#(Reg#(Bool)) header_done <- mkCReg(2, True);
    Array#(Reg#(MetadataT)) meta <- mkCReg(2, defaultValue);
    PulseWire w_deparse_header_done <- mkPulseWire();
+   Array#(Reg#(Bool)) sop_tmp <- mkCReg(2, False);
+   Array#(Reg#(Bool)) eop_tmp <- mkCReg(2, False);
 
    let mask_this_cycle = data_in_ff.first.mask;
    let sop_this_cycle = data_in_ff.first.sop;
@@ -143,7 +145,6 @@ module mkDeparser (Deparser);
   (* preempts = "rl_deparse_start, rl_deparse_payload" *)
   rule rl_deparse_start if (deparse_done[1] && sop_this_cycle);
     // get new metadata
-    // next state
     deparse_done[1] <= False;
     header_done[1] <= False;
     let metadata = meta_in_ff.first;
@@ -176,7 +177,7 @@ module mkDeparser (Deparser);
 
   // reset all temporary states at last beat
   rule rl_reset if (deparse_done[1] && eop_this_cycle);
-    // just forward data in to data out
+    // forward data_in to data_out
     let v = data_in_ff.first;
     data_in_ff.deq;
     rg_tmp[1] <= 0;
@@ -203,18 +204,10 @@ module mkDeparser (Deparser);
     dbprint(3, $format("Deparser:rl_wait_till_processed_done"));
   endrule
 
-  // dequeue data_in_ff during header deparsing
-  rule rl_data_ff_load if (!deparse_done[1] && (rg_buffered[2] < rg_next_header_len[2]));
-    // dequeue data_in_ff if not enough buffered
-    dbprint(4, $format("Deparser:rl_data_ff_load %d < %d", rg_buffered[2], rg_next_header_len[2]));
-    data_in_ff.deq;
-  endrule
-
   // apply mask and send data
   // use rg_processed to keep track how much data in buffer has been processed;
   // use rg_buffered to keep track how much more data is yet to be processed;
   rule rl_deparse_send if (!deparse_done[1] && (rg_processed[1] > 0));
-    // r > 0
     // rg_tmp >> amt
     // rg_processed -= amt
     // rg_buffered -= amt
@@ -224,13 +217,13 @@ module mkDeparser (Deparser);
     end
     Bit#(128) data_out = truncate(rg_tmp[1] & create_mask(cExtend(amt)));
     Bit#(16) mask_out = create_mask(cExtend(amt >> 3));
-    let data = ByteStream { sop: sop_this_cycle, eop: False, data: data_out, mask: mask_out, user:0 };
+    let data = ByteStream { sop: sop_tmp[1], eop: eop_tmp[1], data: data_out, mask: mask_out, user:0 };
     rg_tmp[1] <= rg_tmp[1] >> amt;
     rg_processed[1] <= rg_processed[1] - amt;
     rg_buffered[1] <= rg_buffered[1] - amt;
     deparse_send_r <= data;
     flit_ff.enq(?);
-    //dbprint(4, $format("Deparser:rl_deparse_send rg_processed=%d rg_buffered=%d amt=%d", rg_processed[1], rg_buffered[1], amt, fshow(data)));
+    dbprint(4, $format("Deparser:rl_deparse_send rg_processed=%d rg_buffered=%d amt=%d", rg_processed[1], rg_buffered[1], amt, fshow(data)));
   endrule
 
   function Rules genDeparseNextRule(PulseWire wl, DeparserState state, Integer i);
@@ -249,15 +242,19 @@ module mkDeparser (Deparser);
     return (rules
       rule rl_deparse_load if ((deparse_state_ff.first == state) && (rg_buffered[0] < len));
         // take data from data_in_ff, shift and append
-        // recompute counter: rg_buffered
+        // rg_tmp = data << rg_buffered | rg_tmp;
+        // rg_buffered += len
         rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp[0];
+        sop_tmp[0] <= sop_this_cycle;
+        eop_tmp[0] <= eop_this_cycle;
+
+        dbprint(4, $format("Deparser:rl_data_ff_load "));
+        data_in_ff.deq;
+
         UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
         UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
         move_buffered_amt(cExtend(n_bits_used));
-        dbprint(4, $format("load state %d ", rg_buffered[0], fshow(state)));
-        // actions:
-        //   rg_tmp = data << rg_buffered | rg_tmp;
-        //   rg_buffered += len
+        dbprint(4, $format("load state %d %d ", rg_buffered[0], n_bits_used, fshow(state)));
       endrule
     endrules);
   endfunction
@@ -266,21 +263,18 @@ module mkDeparser (Deparser);
     let len = fromInteger(i);
     return (rules 
       rule rl_deparse_send if ((deparse_state_ff.first == state) && (rg_buffered[0] >= len));
-        // recompute counter: rg_processed
+        // rg_processed += len
+        // r <= rg_processed ?
+        // amt = rg_processed < 128 ? rg_processed : 128;
+        // rg_processed -= amt
+        // rg_buffered -= amt
+        // rg_tmp >> amt
         succeed_and_next(len);
         deparse_state_ff.deq;
         let metadata = meta[0];
         metadata = update_metadata(state);
         transit_next_state(metadata);
         meta[0] <= metadata;
-        // actions:
-        //   rg_processed += len
-        //   r <= rg_processed ?
-        //   amt = rg_processed < 128 ? rg_processed : 128;
-        //   rg_processed -= amt
-        //   rg_buffered -= amt
-        //   rg_tmp >> amt
-        //   data_out.enq
         dbprint(4, $format("RULE: deparse send %d %d", rg_buffered[0], rg_processed[0]));
       endrule
     endrules);
