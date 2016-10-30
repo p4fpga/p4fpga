@@ -93,13 +93,9 @@ module mkDeparser (Deparser);
    Array#(Reg#(Bool)) header_done <- mkCReg(2, True);
    Array#(Reg#(MetadataT)) meta <- mkCReg(2, defaultValue);
    PulseWire w_deparse_header_done <- mkPulseWire();
-   Array#(Reg#(Bool)) sop_tmp <- mkCReg(2, False);
-   Array#(Reg#(Bool)) eop_tmp <- mkCReg(2, False);
 
-   let mask_this_cycle = data_in_ff.first.mask;
-   let sop_this_cycle = data_in_ff.first.sop;
-   let eop_this_cycle = data_in_ff.first.eop;
-   let data_this_cycle = data_in_ff.first.data;
+   // pipeline register at data_in
+   Array#(Reg#(ByteStream#(16))) data_in_tmp <- mkCReg(2, defaultValue);
 
    // stage 1
    FIFO#(void) flit_ff <- mkFIFO;
@@ -143,7 +139,7 @@ module mkDeparser (Deparser);
 
   // key: we let rl_deparse_start preempts rl_deparse_payload
   (* preempts = "rl_deparse_start, rl_deparse_payload" *)
-  rule rl_deparse_start if (deparse_done[1] && sop_this_cycle);
+  rule rl_deparse_start if (deparse_done[1] && data_in_ff.first.sop);
     // get new metadata
     deparse_done[1] <= False;
     header_done[1] <= False;
@@ -156,13 +152,18 @@ module mkDeparser (Deparser);
   endrule
 
   // process payload portion of packet, until last beat
-  rule rl_deparse_payload if (deparse_done[1] && !eop_this_cycle);
+  rule rl_deparse_payload if (deparse_done[1] && !data_in_tmp[1].eop);
     let v = data_in_ff.first;
     data_in_ff.deq;
+    data_in_tmp[1] <= v;
     if (rg_buffered[1] != 0) begin
       Bit#(128) data_mask = create_mask(cExtend(rg_buffered[1]));
       Bit#(16) mask_out = create_mask(cExtend(rg_buffered[1] >> 3));
-      let data = ByteStream { sop: v.sop, eop: v.eop, data: truncate(rg_tmp[1]) & data_mask, mask: mask_out, user:0 };
+      let data = ByteStream { sop: data_in_tmp[1].sop,
+                              eop: data_in_tmp[1].eop,
+                              data: truncate(rg_tmp[1]) & data_mask,
+                              mask: mask_out,
+                              user:data_in_tmp[1].user};
       deparse_send_r <= data;
       flit_ff.enq(?);
       dbprint(4, $format("Deparser:rl_deparse_payload rg_buffered=%d", rg_buffered[1], fshow(data)));
@@ -170,21 +171,29 @@ module mkDeparser (Deparser);
     end
     else begin
       dbprint(4, $format("Deparser:rl_deparse_payload ", fshow(v)));
-      deparse_send_r <= v;
+      let data = ByteStream { sop: data_in_tmp[1].sop,
+                              eop: data_in_tmp[1].eop,
+                              data: data_in_tmp[1].data,
+                              mask: data_in_tmp[1].mask,
+                              user: data_in_tmp[1].user };
+      deparse_send_r <= data;
       flit_ff.enq(?);
     end
   endrule
 
   // reset all temporary states at last beat
-  rule rl_reset if (deparse_done[1] && eop_this_cycle);
-    // forward data_in to data_out
-    let v = data_in_ff.first;
-    data_in_ff.deq;
+  rule rl_reset if (deparse_done[1] && data_in_tmp[1].eop);
+    data_in_tmp[1] <= defaultValue;
     rg_tmp[1] <= 0;
     rg_buffered[2] <= 0;
     rg_processed[2] <= 0;
     dbprint(4, $format("Deparser:rl_reset"));
-    deparse_send_r <= v;
+    let data = ByteStream { sop: data_in_tmp[1].sop,
+                            eop: data_in_tmp[1].eop,
+                            data: data_in_tmp[1].data,
+                            mask: data_in_tmp[1].mask,
+                            user: data_in_tmp[1].user };
+    deparse_send_r <= data;
     flit_ff.enq(?);
   endrule
 
@@ -217,7 +226,11 @@ module mkDeparser (Deparser);
     end
     Bit#(128) data_out = truncate(rg_tmp[1] & create_mask(cExtend(amt)));
     Bit#(16) mask_out = create_mask(cExtend(amt >> 3));
-    let data = ByteStream { sop: sop_tmp[1], eop: eop_tmp[1], data: data_out, mask: mask_out, user:0 };
+    let data = ByteStream { sop: data_in_tmp[1].sop,
+                            eop: data_in_tmp[1].eop,
+                            data: data_out,
+                            mask: mask_out,
+                            user: data_in_tmp[1].user };
     rg_tmp[1] <= rg_tmp[1] >> amt;
     rg_processed[1] <= rg_processed[1] - amt;
     rg_buffered[1] <= rg_buffered[1] - amt;
@@ -244,14 +257,14 @@ module mkDeparser (Deparser);
         // take data from data_in_ff, shift and append
         // rg_tmp = data << rg_buffered | rg_tmp;
         // rg_buffered += len
-        rg_tmp[0] <= zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp[0];
-        sop_tmp[0] <= sop_this_cycle;
-        eop_tmp[0] <= eop_this_cycle;
+        let v = data_in_ff.first;
+        data_in_tmp[0] <= v;
+        rg_tmp[0] <= zeroExtend(v.data) << rg_buffered[0] | rg_tmp[0];
 
         dbprint(4, $format("Deparser:rl_data_ff_load "));
         data_in_ff.deq;
 
-        UInt#(NumBytes) n_bytes_used = countOnes(mask_this_cycle);
+        UInt#(NumBytes) n_bytes_used = countOnes(v.mask);
         UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
         move_buffered_amt(cExtend(n_bits_used));
         dbprint(4, $format("load state %d %d ", rg_buffered[0], n_bits_used, fshow(state)));
