@@ -684,7 +684,7 @@ void FPGAParser::emitAcceptRule(BSVProgram & bsv) {
     }
   }
   builder->append_line("rg_tmp[0] <= 0;");
-  builder->append_line("rg_shift_amt[0] <= 0;");
+  //builder->append_line("rg_shift_amt[0] <= 0;");
   builder->append_line("rg_buffered[0] <= 0;");
   builder->append_line("meta_in_ff.enq(meta);");
   builder->decr_indent();

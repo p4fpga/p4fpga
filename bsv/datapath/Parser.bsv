@@ -25,6 +25,7 @@ import Library::*;
 import List::*;
 import UnitAppendList::*;
 import HList::*;
+`include "Debug.defines"
 
 `include "ConnectalProjectConfig.bsv"
 
@@ -42,7 +43,7 @@ interface Parser;
 endinterface
 
 module mkParser#(Integer portnum)(Parser);
-   Reg#(int) cf_verbosity <- mkConfigRegU;
+   `PRINT_DEBUG_MSG
    Reg#(Bool) parse_done[2] <- mkCReg(2, True);
    FIFO#(ParserState) parse_state_ff <- mkPipelineFIFO();
    FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
@@ -53,16 +54,7 @@ module mkParser#(Integer portnum)(Parser);
    PulseWire w_load_header <- mkPulseWireOR();
    Array#(Reg#(Bit#(10))) rg_next_header_len <- mkCReg(3, 0);
    Array#(Reg#(Bit#(10))) rg_buffered <- mkCReg(3, 0);
-   Array#(Reg#(Bit#(10))) rg_shift_amt <- mkCReg(3, 0);
    Array#(Reg#(Bit#(512))) rg_tmp <- mkCReg(2, 0);
-
-   function Action dbprint(Integer level, Fmt msg);
-      action
-      if (cf_verbosity > fromInteger(level)) begin
-         $display("(%0d) ", $time, msg);
-      end
-      endaction
-   endfunction
 
    `define PARSER_STATE
    `include "ParserGenerated.bsv"
@@ -71,7 +63,6 @@ module mkParser#(Integer portnum)(Parser);
    function Action succeed_and_next(Bit#(10) offset);
      action
        rg_buffered[0] <= rg_buffered[0] - offset;
-       rg_shift_amt[0] <= rg_buffered[0] - offset;
        dbprint(4,$format("succeed_and_next subtract offset = %d shift_amt/buffered = %d", offset, rg_buffered[0] - offset));
      endaction
    endfunction
@@ -89,7 +80,7 @@ module mkParser#(Integer portnum)(Parser);
    endfunction
    function Action move_shift_amt(Bit#(10) len);
      action
-       rg_shift_amt[0] <= rg_shift_amt[0] + len;
+       rg_buffered[0] <= rg_buffered[0] + len;
        w_load_header.send();
      endaction
    endfunction
@@ -116,7 +107,6 @@ module mkParser#(Integer portnum)(Parser);
    rule rl_data_ff_load if ((!parse_done[1] && rg_buffered[2] < rg_next_header_len[2]) && (w_parse_header_done || w_load_header));
       let v = data_in_ff.first.data;
       data_in_ff.deq;
-      rg_buffered[2] <= rg_buffered[2] + 128;
       data_ff.enq(tagged Valid v);
       dbprint(4, $format("dequeue data %d %d", rg_buffered[2], rg_next_header_len[2]));
    endrule
@@ -124,8 +114,7 @@ module mkParser#(Integer portnum)(Parser);
    rule rl_start_state_deq if (parse_done[1] && sop_this_cycle && !w_parse_header_done);
       let v = data_in_ff.first.data;
       data_ff.enq(tagged Valid v);
-      rg_buffered[2] <= 128;
-      rg_shift_amt[2] <= 0;
+      rg_buffered[2] <= 0;
       parse_done[1] <= False;
       parse_state_ff.enq(initState);
       dbprint(1, $format("START parse pkt"));
@@ -147,12 +136,12 @@ module mkParser#(Integer portnum)(Parser);
       let len = fromInteger(i);
       return (rules 
          rule rl_load if ((parse_state_ff.first == state) && rg_buffered[0] < len);
-            report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
             if (isValid(data_ff.first)) begin
                data_ff.deq;
-               let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+               let data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp[0];
                rg_tmp[0] <= zeroExtend(data);
                move_shift_amt(128);
+               report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
             end
          endrule
       endrules);
@@ -185,7 +174,7 @@ module mkParser#(Integer portnum)(Parser);
             let data = rg_tmp[0];
             if (isValid(data_ff.first)) begin
                data_ff.deq;
-               data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+               data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp[0];
             end
             report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
             extract_header(state, data);
