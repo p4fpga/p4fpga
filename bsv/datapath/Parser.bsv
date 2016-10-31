@@ -46,7 +46,6 @@ module mkParser#(Integer portnum)(Parser);
    `PRINT_DEBUG_MSG
    Reg#(Bool) parse_done[2] <- mkCReg(2, True);
    FIFO#(ParserState) parse_state_ff <- mkPipelineFIFO();
-   FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
    FIFOF#(ByteStream#(16)) data_in_ff <- mkFIFOF;
    FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;
    PulseWire w_parse_done <- mkPulseWire();
@@ -56,7 +55,7 @@ module mkParser#(Integer portnum)(Parser);
    Array#(Reg#(Bit#(10))) rg_buffered <- mkCReg(3, 0);
    Array#(Reg#(Bit#(512))) rg_tmp <- mkCReg(2, 0);
 
-   Array#(Reg#(ByteStream#(16))) data_in_tmp <- mkCReg(2, defaultValue);
+   Array#(Reg#(Maybe#(void))) data_in_tmp <- mkCReg(2, tagged Invalid);
 
    `define PARSER_STATE
    `include "ParserGenerated.bsv"
@@ -65,7 +64,7 @@ module mkParser#(Integer portnum)(Parser);
    function Action succeed_and_next(Bit#(10) offset);
      action
        rg_buffered[0] <= rg_buffered[0] - offset;
-       dbprint(4,$format("succeed_and_next subtract offset = %d shift_amt/buffered = %d", offset, rg_buffered[0] - offset));
+       dbprint(4,$format("Parser succeed_and_next subtract offset = %d shift_amt/buffered = %d", offset, rg_buffered[0] - offset));
      endaction
    endfunction
    function Action fetch_next_header0(Bit#(10) len);
@@ -99,20 +98,17 @@ module mkParser#(Integer portnum)(Parser);
    `include "ParserGenerated.bsv"
    `undef PARSER_FUNCTION
 
-   rule rl_data_ff_load if ((!parse_done[1] && rg_buffered[2] < rg_next_header_len[2]) && (w_parse_header_done || w_load_header));
-      let v = data_in_ff.first.data;
-      data_in_ff.deq;
-      data_ff.enq(tagged Valid v);
-      dbprint(4, $format("dequeue data %d %d", rg_buffered[2], rg_next_header_len[2]));
+   rule rl_data_ff_load if ((!parse_done[1] && rg_buffered[1] < rg_next_header_len[2]) && (w_parse_header_done || w_load_header));
+      data_in_tmp[1] <= tagged Valid;
+      dbprint(4, $format("Parser dequeue data %d %d", rg_buffered[1], rg_next_header_len[2]));
    endrule
 
    rule rl_start_state_deq if (parse_done[1] && sop_this_cycle && !w_parse_header_done);
-      let v = data_in_ff.first.data;
-      data_ff.enq(tagged Valid v);
-      rg_buffered[2] <= 0;
+      data_in_tmp[1] <= tagged Valid;
+      rg_buffered[1] <= 0;
       parse_done[1] <= False;
       parse_state_ff.enq(initState);
-      dbprint(1, $format("START parse pkt"));
+      dbprint(1, $format("Parser start pkt"));
    endrule
 
    rule rl_start_state_idle if (parse_done[1] && (!sop_this_cycle || w_parse_header_done));
@@ -131,13 +127,15 @@ module mkParser#(Integer portnum)(Parser);
       let len = fromInteger(i);
       return (rules 
          rule rl_load if ((parse_state_ff.first == state) && rg_buffered[0] < len);
-            dbprint(4, $format("extract ", fshow(data_ff.first)));
-            if (isValid(data_ff.first)) begin
-               data_ff.deq;
-               let data = zeroExtend(data_in_tmp[0].data) << rg_buffered[0] | rg_tmp[0];
+            // if data_in_ff is Valid, meaning not processed
+            // save data_in_ff in tmp reg for pipelining
+            if (isValid(data_in_tmp[0])) begin
+               data_in_tmp[0] <= tagged Invalid;
+               data_in_ff.deq;
+               let data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp[0];
                rg_tmp[0] <= zeroExtend(data);
                move_shift_amt(128);
-               dbprint(4, $format("Parser State %h buffered %d, %h, %h", parse_state_ff.first, rg_buffered[0], data_in_tmp[0].data, data));
+               dbprint(4, $format("Parser State %h buffered %d, %h, %h", parse_state_ff.first, rg_buffered[0], data_this_cycle, data));
             end
          endrule
       endrules);
@@ -167,10 +165,12 @@ module mkParser#(Integer portnum)(Parser);
       let len = fromInteger(i);
       return (rules
          rule rl_extract if ((parse_state_ff.first == state) && (rg_buffered[0] >= len));
+            // load data_in_ff in Valid
+            // process data_in_ff in next cycle
             let data = rg_tmp[0];
-            dbprint(4, $format("extract %h", fshow(data_ff.first)));
-            if (isValid(data_ff.first)) begin
-               data_ff.deq;
+            if (isValid(data_in_tmp[0])) begin
+               data_in_tmp[0] <= tagged Invalid;
+               data_in_ff.deq;
                data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp[0];
             end
             dbprint(4, $format("Parser State %h buffered %d, %h, %h", parse_state_ff.first, rg_buffered[0], data_this_cycle, data));
