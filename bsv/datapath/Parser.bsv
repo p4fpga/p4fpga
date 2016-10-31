@@ -56,6 +56,8 @@ module mkParser#(Integer portnum)(Parser);
    Array#(Reg#(Bit#(10))) rg_buffered <- mkCReg(3, 0);
    Array#(Reg#(Bit#(512))) rg_tmp <- mkCReg(2, 0);
 
+   Array#(Reg#(ByteStream#(16))) data_in_tmp <- mkCReg(2, defaultValue);
+
    `define PARSER_STATE
    `include "ParserGenerated.bsv"
    `undef PARSER_STATE
@@ -87,13 +89,6 @@ module mkParser#(Integer portnum)(Parser);
    function Action failed_and_trap(Bit#(10) offset);
      action
        rg_buffered[0] <= 0;
-     endaction
-   endfunction
-   function Action report_parse_action(ParserState state, Bit#(10) offset, Bit#(128) data, Bit#(512) buff);
-     action
-       if (cf_verbosity > 3) begin
-         $display("(%0d) Parser State %h buffered %d, %h, %h", $time, state, offset, data, buff);
-       end
      endaction
    endfunction
    let sop_this_cycle = data_in_ff.first.sop;
@@ -136,12 +131,13 @@ module mkParser#(Integer portnum)(Parser);
       let len = fromInteger(i);
       return (rules 
          rule rl_load if ((parse_state_ff.first == state) && rg_buffered[0] < len);
+            dbprint(4, $format("extract ", fshow(data_ff.first)));
             if (isValid(data_ff.first)) begin
                data_ff.deq;
-               let data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp[0];
+               let data = zeroExtend(data_in_tmp[0].data) << rg_buffered[0] | rg_tmp[0];
                rg_tmp[0] <= zeroExtend(data);
                move_shift_amt(128);
-               report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
+               dbprint(4, $format("Parser State %h buffered %d, %h, %h", parse_state_ff.first, rg_buffered[0], data_in_tmp[0].data, data));
             end
          endrule
       endrules);
@@ -172,11 +168,12 @@ module mkParser#(Integer portnum)(Parser);
       return (rules
          rule rl_extract if ((parse_state_ff.first == state) && (rg_buffered[0] >= len));
             let data = rg_tmp[0];
+            dbprint(4, $format("extract %h", fshow(data_ff.first)));
             if (isValid(data_ff.first)) begin
                data_ff.deq;
                data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp[0];
             end
-            report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
+            dbprint(4, $format("Parser State %h buffered %d, %h, %h", parse_state_ff.first, rg_buffered[0], data_this_cycle, data));
             extract_header(state, data);
             rg_tmp[0] <= zeroExtend(data >> len);
             succeed_and_next(len);
