@@ -23,6 +23,7 @@ import BuildVector::*;
 import DefaultValue::*;
 import GetPut::*;
 import FIFO::*;
+import FIFOF::*;
 import Vector::*;
 import Stream::*;
 import Gearbox::*;
@@ -57,9 +58,9 @@ endtypeclass
 // Gearbox Box 1-to-2
 instance MkStreamGearboxUp#(n, m) provisos(Mul#(n, 2, m));
    module mkStreamGearboxUp(StreamGearbox#(n, m));
-      let verbose = False;
-      FIFO#(ByteStream#(n)) in_ff <- mkFIFO;
-      FIFO#(ByteStream#(m)) out_ff <- mkFIFO;
+      let verbose = True;
+      FIFOF#(ByteStream#(n)) in_ff <- mkSizedFIFOF(2);
+      FIFOF#(ByteStream#(m)) out_ff <- mkSizedFIFOF(2);
       Reg#(Bool) inProgress <- mkReg(False);
       Reg#(Bool) oddBeat    <- mkReg(True);
       Reg#(ByteStream#(n)) v_prev <- mkReg(defaultValue);

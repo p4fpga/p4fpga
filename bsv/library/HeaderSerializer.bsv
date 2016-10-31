@@ -47,8 +47,8 @@ typedef Bit#(9) EgressPort;
 
 interface HeaderSerializer;
    interface PipeIn#(EgressPort) metadata;
-   interface PktWriteServer#(16) writeServer;
-   interface PktWriteClient#(16) writeClient;
+   interface PipeIn#(ByteStream#(16)) writeServer;
+   interface PipeOut#(ByteStream#(16)) writeClient;
    method Action set_verbosity(int verbosity);
 endinterface
 
@@ -61,8 +61,8 @@ typedef TAdd#(MaskSize, 1) NumBytes;
 module mkHeaderSerializer(HeaderSerializer);
    `PRINT_DEBUG_MSG
 
-   FIFOF#(ByteStream#(16)) data_in_ff <- mkFIFOF;
-   FIFOF#(ByteStream#(16)) data_out_ff <- mkFIFOF;
+   FIFOF#(ByteStream#(16)) data_in_ff <- mkSizedFIFOF(4);
+   FIFOF#(ByteStream#(16)) data_out_ff <- mkSizedFIFOF(4);
    FIFOF#(EgressPort) meta_in_ff <- mkSizedFIFOF(16);
 
    Array#(Reg#(Bool)) sop_buff <- mkCReg(3, False);
@@ -197,12 +197,8 @@ module mkHeaderSerializer(HeaderSerializer);
    endrule
 
    interface metadata = toPipeIn(meta_in_ff);
-   interface PktWriteServer writeServer;
-      interface writeData = toPut(data_in_ff);
-   endinterface
-   interface PktWriteClient writeClient;
-      interface writeData = toGet(data_out_ff);
-   endinterface
+   interface writeServer = toPipeIn(data_in_ff);
+   interface writeClient = toPipeOut(data_out_ff);
    method Action set_verbosity(int verbosity);
       cf_verbosity <= verbosity;
    endmethod

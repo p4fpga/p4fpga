@@ -101,7 +101,7 @@ endmodule
 interface StreamOutChannel;
    interface PktWriteServer#(16) writeServer;
    interface PipeIn#(MetadataRequest) prev;
-   interface PktWriteClient#(16) writeClient;
+   interface PipeOut#(ByteStream#(16)) writeClient;
    method Action set_verbosity (int verbosity);
 endinterface
 
@@ -112,8 +112,9 @@ instance GetWriteServer#(StreamOutChannel);
 endinstance
 
 instance GetWriteClient#(StreamOutChannel);
+   // FIXME: use PipeOut?
    function Get#(ByteStream#(16)) getWriteClient(StreamOutChannel chan);
-      return chan.writeClient.writeData;
+      return toGet(chan.writeClient);
    endfunction
 endinstance
 
@@ -137,7 +138,10 @@ module mkStreamOutChannel#(Integer id)(StreamOutChannel);
    StoreAndFwdBuffer pktBuff <- mkStoreAndFwdBuffer(id);
    PacketModifier modifier <- mkPacketModifier();
 
-   mkConnection(pktBuff.writeClient, modifier.writeServer);
+   rule pkt_buff_to_modifier;
+      let v <- toGet(pktBuff.writeClient.writeData).get;
+      modifier.writeServer.enq(v);
+   endrule
 
    rule rl_dispatch_metadata;
       let req <- toGet(meta_ff).get;

@@ -35,8 +35,8 @@ import `TYPEDEF::*;
 
 interface PacketModifier;
    interface PipeIn#(MetadataRequest) prev;
-   interface PktWriteServer#(16) writeServer;
-   interface PktWriteClient#(16) writeClient;
+   interface PipeIn#(ByteStream#(16)) writeServer;
+   interface PipeOut#(ByteStream#(16)) writeClient;
    method Action set_verbosity (int verbosity);
 endinterface
 
@@ -63,7 +63,10 @@ module mkPacketModifier(PacketModifier);
       dbprint(3, $format("stream out metadata %d", pkt, fshow(meta)));
    endrule
 
-   mkConnection(deparser.writeClient, serializer.writeServer); 
+   rule deparse_to_serializer;
+      let v <- toGet(deparser.writeClient).get;
+      serializer.writeServer.enq(v);
+   endrule
 
    interface writeServer= deparser.writeServer;
    interface writeClient = serializer.writeClient;

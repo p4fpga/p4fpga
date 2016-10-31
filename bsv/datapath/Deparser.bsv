@@ -72,8 +72,8 @@ typedef TAdd#(MaskSize, 1) NumBytes;
 
 interface Deparser;
    interface PipeIn#(MetadataT) metadata;
-   interface PktWriteServer#(16) writeServer;
-   interface PktWriteClient#(16) writeClient;
+   interface PipeIn#(ByteStream#(16)) writeServer;
+   interface PipeOut#(ByteStream#(16)) writeClient;
    method Action set_verbosity (int verbosity);
    method DeparserPerfRec read_perf_info ();
 endinterface
@@ -95,7 +95,7 @@ module mkDeparser (Deparser);
    PulseWire w_deparse_header_done <- mkPulseWire();
 
    // pipeline register at data_in
-   Array#(Reg#(ByteStream#(16))) data_in_tmp <- mkCReg(2, defaultValue);
+   Reg#(ByteStream#(16)) data_in_tmp <- mkReg(defaultValue);
 
    // stage 1
    FIFO#(void) flit_ff <- mkFIFO;
@@ -105,13 +105,6 @@ module mkDeparser (Deparser);
       data_out_ff.enq(deparse_send_r);
    endrule
 
-   function Action report_deparse_action(String msg, Bit#(10) buffered, Bit#(10) processed, Bit#(10) shift, Bit#(512) data);
-    action
-      if (cf_verbosity > 0) begin
-        $display("(%0d) Deparser:report_deparse_action %s buffered %d %d %d data %h", $time, msg, buffered, processed, shift, data);
-      end
-    endaction
-  endfunction
   function Action fetch_next_header(Bit#(10) len);
     action
       rg_next_header_len[0] <= len;
@@ -148,51 +141,50 @@ module mkDeparser (Deparser);
     meta[1] <= metadata;
     transit_next_state(metadata);
     dbprint(4, $format("Deparser:rl_start_state start deparse %d", valueOf(SizeOf#(DeparserState))));
-    dbprint(1, $format("START deparse pkt"));
   endrule
 
   // process payload portion of packet, until last beat
-  rule rl_deparse_payload if (deparse_done[1] && !data_in_tmp[1].eop);
+  rule rl_deparse_payload if (deparse_done[0] && !data_in_tmp.eop);
     let v = data_in_ff.first;
     data_in_ff.deq;
-    data_in_tmp[1] <= v;
-    if (rg_buffered[1] != 0) begin
-      Bit#(128) data_mask = create_mask(cExtend(rg_buffered[1]));
-      Bit#(16) mask_out = create_mask(cExtend(rg_buffered[1] >> 3));
-      let data = ByteStream { sop: data_in_tmp[1].sop,
-                              eop: data_in_tmp[1].eop,
-                              data: truncate(rg_tmp[1]) & data_mask,
+    data_in_tmp <= v;
+    if (rg_buffered[0] != 0) begin
+      Bit#(128) data_mask = create_mask(cExtend(rg_buffered[0]));
+      Bit#(16) mask_out = create_mask(cExtend(rg_buffered[0] >> 3));
+      let data = ByteStream { sop: data_in_tmp.sop,
+                              eop: data_in_tmp.eop,
+                              data: truncate(rg_tmp[0]) & data_mask,
                               mask: mask_out,
-                              user:data_in_tmp[1].user};
+                              user:data_in_tmp.user};
       deparse_send_r <= data;
       flit_ff.enq(?);
-      dbprint(4, $format("Deparser:rl_deparse_payload rg_buffered=%d", rg_buffered[1], fshow(data)));
-      rg_buffered[1] <= 0;
+      dbprint(4, $format("Deparser:rl_deparse_payload rg_buffered=%d", rg_buffered[0], fshow(data)));
+      rg_buffered[0] <= 0;
     end
     else begin
       dbprint(4, $format("Deparser:rl_deparse_payload ", fshow(v)));
-      let data = ByteStream { sop: data_in_tmp[1].sop,
-                              eop: data_in_tmp[1].eop,
-                              data: data_in_tmp[1].data,
-                              mask: data_in_tmp[1].mask,
-                              user: data_in_tmp[1].user };
+      let data = ByteStream { sop: data_in_tmp.sop,
+                              eop: data_in_tmp.eop,
+                              data: data_in_tmp.data,
+                              mask: data_in_tmp.mask,
+                              user: data_in_tmp.user };
       deparse_send_r <= data;
       flit_ff.enq(?);
     end
   endrule
 
   // reset all temporary states at last beat
-  rule rl_reset if (deparse_done[1] && data_in_tmp[1].eop);
-    data_in_tmp[1] <= defaultValue;
-    rg_tmp[1] <= 0;
-    rg_buffered[2] <= 0;
-    rg_processed[2] <= 0;
+  rule rl_reset if (deparse_done[0] && data_in_tmp.eop);
+    data_in_tmp <= defaultValue;
+    rg_tmp[0] <= 0;
+    rg_buffered[0] <= 0;
+    rg_processed[0] <= 0;
     dbprint(4, $format("Deparser:rl_reset"));
-    let data = ByteStream { sop: data_in_tmp[1].sop,
-                            eop: data_in_tmp[1].eop,
-                            data: data_in_tmp[1].data,
-                            mask: data_in_tmp[1].mask,
-                            user: data_in_tmp[1].user };
+    let data = ByteStream { sop: data_in_tmp.sop,
+                            eop: data_in_tmp.eop,
+                            data: data_in_tmp.data,
+                            mask: data_in_tmp.mask,
+                            user: data_in_tmp.user };
     deparse_send_r <= data;
     flit_ff.enq(?);
   endrule
@@ -216,27 +208,27 @@ module mkDeparser (Deparser);
   // apply mask and send data
   // use rg_processed to keep track how much data in buffer has been processed;
   // use rg_buffered to keep track how much more data is yet to be processed;
-  rule rl_deparse_send if (!deparse_done[1] && (rg_processed[1] > 0));
+  rule rl_deparse_send if (!deparse_done[0] && (rg_processed[0] > 0));
     // rg_tmp >> amt
     // rg_processed -= amt
     // rg_buffered -= amt
     let amt = 128;
-    if (rg_processed[1] < 128) begin
-       amt = rg_processed[1];
+    if (rg_processed[0] < 128) begin
+       amt = rg_processed[0];
     end
-    Bit#(128) data_out = truncate(rg_tmp[1] & create_mask(cExtend(amt)));
+    Bit#(128) data_out = truncate(rg_tmp[0] & create_mask(cExtend(amt)));
     Bit#(16) mask_out = create_mask(cExtend(amt >> 3));
-    let data = ByteStream { sop: data_in_tmp[1].sop,
-                            eop: data_in_tmp[1].eop,
+    let data = ByteStream { sop: data_in_tmp.sop,
+                            eop: data_in_tmp.eop,
                             data: data_out,
                             mask: mask_out,
-                            user: data_in_tmp[1].user };
-    rg_tmp[1] <= rg_tmp[1] >> amt;
-    rg_processed[1] <= rg_processed[1] - amt;
-    rg_buffered[1] <= rg_buffered[1] - amt;
+                            user: data_in_tmp.user };
+    rg_tmp[0] <= rg_tmp[0] >> amt;
+    rg_processed[0] <= rg_processed[0] - amt;
+    rg_buffered[0] <= rg_buffered[0] - amt;
     deparse_send_r <= data;
     flit_ff.enq(?);
-    dbprint(4, $format("Deparser:rl_deparse_send rg_processed=%d rg_buffered=%d amt=%d", rg_processed[1], rg_buffered[1], amt, fshow(data)));
+    dbprint(4, $format("Deparser:rl_deparse_send rg_processed=%d rg_buffered=%d amt=%d", rg_processed[0], rg_buffered[0], amt, fshow(data)));
   endrule
 
   function Rules genDeparseNextRule(PulseWire wl, DeparserState state, Integer i);
@@ -258,7 +250,7 @@ module mkDeparser (Deparser);
         // rg_tmp = data << rg_buffered | rg_tmp;
         // rg_buffered += len
         let v = data_in_ff.first;
-        data_in_tmp[0] <= v;
+        data_in_tmp <= v; // delay sop and eop by one cycle
         rg_tmp[0] <= zeroExtend(v.data) << rg_buffered[0] | rg_tmp[0];
 
         dbprint(4, $format("Deparser:rl_data_ff_load "));
@@ -302,12 +294,8 @@ module mkDeparser (Deparser);
   Empty fsmrl <- addRules(foldl(rJoin, emptyRules, fsmRules));
 
   interface metadata = toPipeIn(meta_in_ff);
-  interface PktWriteServer writeServer;
-    interface writeData = toPut(data_in_ff);
-  endinterface
-  interface PktWriteClient writeClient;
-    interface writeData = toGet(data_out_ff);
-  endinterface
+  interface writeServer = toPipeIn(data_in_ff);
+  interface writeClient = toPipeOut(data_out_ff);
   method Action set_verbosity (int verbosity);
     cf_verbosity <= verbosity;
   endmethod
