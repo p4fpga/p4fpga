@@ -42,7 +42,7 @@ import GetPut::*;
 import Pipe::*;
 import TxRx::*;
 import Utils::*;
-
+`include "ConnectalProjectConfig.bsv"
 `include "Debug.defines"
 
 interface Engine#(numeric type depth, type metaI, type actI);

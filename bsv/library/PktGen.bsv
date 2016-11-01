@@ -36,6 +36,7 @@ import Pipe::*;
 import Ethernet::*;
 import Stream::*;
 import PacketBuffer::*;
+`include "ConnectalProjectConfig.bsv"
 `include "Debug.defines"
 
 typedef 1 MinimumIPG; // 1 beat == 16 bytes

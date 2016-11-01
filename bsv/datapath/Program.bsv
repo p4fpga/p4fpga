@@ -25,7 +25,7 @@ import ConnectalTypes::*;
 import Control::*;
 import SynthBuilder::*;
 `include "SynthBuilder.defines"
-
+`include "ConnectalProjectConfig.bsv"
 `include "Debug.defines"
 //`include "TieOff.defines"
 //`TIEOFF_PIPEOUT("program ", MetadataRequest)

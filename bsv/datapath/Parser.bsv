@@ -25,9 +25,8 @@ import Library::*;
 import List::*;
 import UnitAppendList::*;
 import HList::*;
-`include "Debug.defines"
-
 `include "ConnectalProjectConfig.bsv"
+`include "Debug.defines"
 
 `define PARSER_STRUCT
 `include "ParserGenerated.bsv"

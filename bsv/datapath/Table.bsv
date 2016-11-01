@@ -56,7 +56,7 @@ import Vector::*;
 import StructDefines::*;
 import UnionDefines::*;
 import ConnectalTypes::*;
-
+`include "ConnectalProjectConfig.bsv"
 `include "Debug.defines"
 `include "SynthBuilder.defines"
 interface Table#(numeric type nActions, type metaI, type actI, type keyT, type valueT);

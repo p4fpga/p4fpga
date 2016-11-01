@@ -30,6 +30,7 @@ import Stream::*;
 import PacketBuffer::*;
 import Pipe::*;
 import TieOff::*;
+`include "ConnectalProjectConfig.bsv"
 `include "Debug.defines"
 `include "TieOff.defines"
 

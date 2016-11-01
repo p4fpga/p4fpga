@@ -41,6 +41,7 @@ import StoreAndForward::*;
 import Stream::*;
 import SpecialFIFOs::*;
 import SharedBuff::*;
+`include "ConnectalProjectConfig.bsv"
 `include "Debug.defines"
 
 typedef Bit#(9) EgressPort;

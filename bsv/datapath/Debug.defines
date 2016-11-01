@@ -2,9 +2,11 @@
    Reg#(int) cf_verbosity <- mkConfigRegU; \
    function Action dbprint(Integer level, Fmt msg); \
       action \
+`ifdef SIMULATION \
          if (cf_verbosity > fromInteger(level)) begin \
             $display("(%0d) " , $time, msg); \
          end \
+`endif \
       endaction \
    endfunction
 

@@ -45,6 +45,7 @@ import SpecialFIFOs::*;
 import Stream::*;
 import TieOff::*;
 import Vector::*;
+`include "ConnectalProjectConfig.bsv"
 `include "Debug.defines"
 
 typedef struct {

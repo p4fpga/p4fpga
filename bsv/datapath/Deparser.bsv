@@ -23,6 +23,7 @@
 // Deparser Template
 import Library::*;
 import BRAMFIFO::*;
+`include "ConnectalProjectConfig.bsv"
 `include "Debug.defines"
 
 // app-specific structs
@@ -96,6 +97,7 @@ module mkDeparser (Deparser);
 
    // pipeline register at data_in
    Reg#(ByteStream#(16)) data_in_tmp <- mkReg(defaultValue);
+   Array#(Reg#(Maybe#(void))) data_valid <- mkCReg(2, tagged Invalid);
 
    // stage 1
    FIFO#(void) flit_ff <- mkFIFO;
@@ -209,9 +211,6 @@ module mkDeparser (Deparser);
   // use rg_processed to keep track how much data in buffer has been processed;
   // use rg_buffered to keep track how much more data is yet to be processed;
   rule rl_deparse_send if (!deparse_done[0] && (rg_processed[0] > 0));
-    // rg_tmp >> amt
-    // rg_processed -= amt
-    // rg_buffered -= amt
     let amt = 128;
     if (rg_processed[0] < 128) begin
        amt = rg_processed[0];
@@ -246,16 +245,11 @@ module mkDeparser (Deparser);
     let len = fromInteger(i);
     return (rules
       rule rl_deparse_load if ((deparse_state_ff.first == state) && (rg_buffered[0] < len));
-        // take data from data_in_ff, shift and append
-        // rg_tmp = data << rg_buffered | rg_tmp;
-        // rg_buffered += len
         let v = data_in_ff.first;
-        data_in_tmp <= v; // delay sop and eop by one cycle
-        rg_tmp[0] <= zeroExtend(v.data) << rg_buffered[0] | rg_tmp[0];
-
-        dbprint(4, $format("Deparser:rl_data_ff_load "));
         data_in_ff.deq;
-
+        data_in_tmp <= v; // delay sop and eop by one cycle
+        rg_tmp[0] <= zeroExtend(data_in_tmp.data) << rg_buffered[0] | rg_tmp[0];
+        dbprint(4, $format("Deparser:rl_data_ff_load "));
         UInt#(NumBytes) n_bytes_used = countOnes(v.mask);
         UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
         move_buffered_amt(cExtend(n_bits_used));
@@ -268,12 +262,6 @@ module mkDeparser (Deparser);
     let len = fromInteger(i);
     return (rules 
       rule rl_deparse_send if ((deparse_state_ff.first == state) && (rg_buffered[0] >= len));
-        // rg_processed += len
-        // r <= rg_processed ?
-        // amt = rg_processed < 128 ? rg_processed : 128;
-        // rg_processed -= amt
-        // rg_buffered -= amt
-        // rg_tmp >> amt
         succeed_and_next(len);
         deparse_state_ff.deq;
         let metadata = meta[0];
