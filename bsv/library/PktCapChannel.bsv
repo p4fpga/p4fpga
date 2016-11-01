@@ -22,6 +22,7 @@
 
 import Clocks::*;
 import Connectable::*;
+import Channel::*;
 import DbgDefs::*;
 import DbgTypes::*;
 import Ethernet::*;
@@ -46,6 +47,12 @@ interface PktCapChannel;
    method PktCapRec read_perf_info();
    interface Put#(ByteStream#(8)) macRx;
 endinterface
+
+instance GetMacRx#(PktCapChannel);
+   function Put#(ByteStream#(8)) getMacRx(PktCapChannel chan);
+      return chan.macRx;
+   endfunction
+endinstance
 
 module mkPktCapChannel#(Clock rxClock, Reset rxReset)(PktCapChannel);
    let verbose = True;

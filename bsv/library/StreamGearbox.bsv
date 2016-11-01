@@ -35,6 +35,10 @@ import PrintTrace::*;
 interface StreamGearbox#(numeric type n, numeric type m);
    interface Put#(ByteStream#(n)) datain;
    interface Get#(ByteStream#(m)) dataout;
+   method Bit#(64) getEopCount;
+   method Bit#(64) getSopCount;
+   method Bit#(64) getIdleCount;
+   method Bit#(64) getDataCount;
 endinterface
 
 typeclass GetGearbox#(numeric type n, numeric type m);
@@ -56,7 +60,10 @@ typeclass MkStreamGearboxUp#(numeric type n, numeric type m);
 endtypeclass
 
 // Gearbox Box 1-to-2
-instance MkStreamGearboxUp#(n, m) provisos(Mul#(n, 2, m));
+instance MkStreamGearboxUp#(n, m)
+   provisos(Mul#(n, 2, m)
+           ,Add#(a__, TLog#(TAdd#(1, n)), 64)
+           ,Add#(1, b__, TLog#(TAdd#(1, n))));
    module mkStreamGearboxUp(StreamGearbox#(n, m));
       let verbose = True;
       FIFOF#(ByteStream#(n)) in_ff <- mkSizedFIFOF(2);
@@ -64,6 +71,11 @@ instance MkStreamGearboxUp#(n, m) provisos(Mul#(n, 2, m));
       Reg#(Bool) inProgress <- mkReg(False);
       Reg#(Bool) oddBeat    <- mkReg(True);
       Reg#(ByteStream#(n)) v_prev <- mkReg(defaultValue);
+
+      Reg#(Bit#(64)) idle_cycles <- mkReg(0);
+      Reg#(Bit#(64)) sopCount <- mkReg(0);
+      Reg#(Bit#(64)) eopCount <- mkReg(0);
+      Reg#(Bit#(64)) data_bytes <- mkReg(0);
 
       function ByteStream#(m) combine(Vector#(2, ByteStream#(n)) v);
          ByteStream#(m) data = defaultValue;
@@ -79,16 +91,21 @@ instance MkStreamGearboxUp#(n, m) provisos(Mul#(n, 2, m));
          inProgress <= v.sop;
          if (!v.sop)
             in_ff.deq;
+         else
+            sopCount <= sopCount + 1;
          if (verbose) $display("gearbox start");
       endrule
       rule readPacketOdd if (inProgress && oddBeat);
          let v <- toGet(in_ff).get;
          if (verbose) $display("gearbox read odd beat %h", v.data);
+         let bytes = zeroExtend(pack(countOnes(v.mask)));
+         data_bytes <= data_bytes + bytes;
          if (v.eop) begin
             ByteStream#(n) vo = defaultValue;
             out_ff.enq(combine(vec(v, vo)));
             if (verbose) $display("gearbox odd eop %h %h", v.data, v.mask);
             inProgress <= False;
+            eopCount <= eopCount + 1;
          end
          else begin
             oddBeat <= !oddBeat;
@@ -98,16 +115,36 @@ instance MkStreamGearboxUp#(n, m) provisos(Mul#(n, 2, m));
 
       rule readPacketEven if (inProgress && !oddBeat);
          let v <- toGet(in_ff).get;
+         let bytes = zeroExtend(pack(countOnes(v.mask)));
+         data_bytes <= data_bytes + bytes;
          out_ff.enq(combine(vec(v_prev, v)));
          if (verbose) $display("gearbox read even beat %h", v.data);
          if (v.eop) begin
             inProgress <= False;
             if (verbose) $display("gearbox even eop %h %h %h %h", v.data, v.mask, v_prev.data, v_prev.mask);
+            eopCount <= eopCount + 1;
          end
          oddBeat <= !oddBeat;
       endrule
+
+      rule count_idle_cycles (!inProgress);
+         idle_cycles <= idle_cycles + 1;
+      endrule
+
       interface datain = toPut(in_ff);
       interface dataout = toGet(out_ff);
+      method Bit#(64) getEopCount;
+         return eopCount;
+      endmethod
+      method Bit#(64) getSopCount;
+         return sopCount;
+      endmethod
+      method Bit#(64) getIdleCount;
+         return idle_cycles;
+      endmethod
+      method Bit#(64) getDataCount;
+         return data_bytes;
+      endmethod
    endmodule
 endinstance
 
@@ -121,8 +158,8 @@ instance MkStreamGearboxDn#(n, m) provisos(Mul#(m, 2, n));
       let clock <- exposeCurrentClock();
       let reset <- exposeCurrentReset();
 
-      FIFO#(ByteStream#(n)) in_ff <- mkFIFO;//printTimedTraceM("gbi", mkFIFO);
-      FIFO#(ByteStream#(m)) out_ff <- mkFIFO;//printTimedTraceM("gbo", mkFIFO());
+      FIFO#(ByteStream#(n)) in_ff <- mkFIFO;
+      FIFO#(ByteStream#(m)) out_ff <- mkFIFO;
       Gearbox#(2, 1, ByteStream#(m)) fifoTxData <- mkNto1Gearbox(clock, reset, clock, reset);
 
       function Vector#(2, ByteStream#(m)) split(ByteStream#(n) in);

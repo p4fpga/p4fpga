@@ -412,9 +412,6 @@ module mkStoreAndFwdFromMacToRing#(Clock rxClock, Reset rxReset)(StoreAndFwdFrom
 
    // stats
    Reg#(Bit#(64)) total_cycles <- mkReg(0, clocked_by rxClock, reset_by rxReset);
-   Reg#(Bit#(64)) idle_cycles <- mkReg(0, clocked_by rxClock, reset_by rxReset);
-   Reg#(Bit#(64)) sopCount <- mkReg(0, clocked_by rxClock, reset_by rxReset);
-   Reg#(Bit#(64)) eopCount <- mkReg(0, clocked_by rxClock, reset_by rxReset);
    Reg#(Bit#(64)) data_bytes <- mkReg(0, clocked_by rxClock, reset_by rxReset);
 
    rule total_cycle;
@@ -430,15 +427,15 @@ module mkStoreAndFwdFromMacToRing#(Clock rxClock, Reset rxReset)(StoreAndFwdFrom
       if (verbose) $display("(%0d) macToRing:: writeToFifo", $time);
    endrule
 
-//   rule count_idle_cycles (!inProgress);
-//      idle_cycles <= idle_cycles + 1;
-//   endrule
-
    interface PktWriteClient writeClient;
       interface writeData = toGet(writeDataFifo);
    endinterface
    interface macRx = gearbox.datain;
    method ThruDbgRec sdbg;
-      return ThruDbgRec {data_bytes: data_bytes, sops: sopCount, eops: eopCount, idle_cycles: idle_cycles, total_cycles: total_cycles};
+      return ThruDbgRec {data_bytes: gearbox.getDataCount(),
+                         sops: gearbox.getSopCount(),
+                         eops: gearbox.getEopCount(),
+                         idle_cycles: gearbox.getIdleCount(),
+                         total_cycles: total_cycles};
    endmethod
 endmodule
