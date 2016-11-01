@@ -93,7 +93,6 @@ rule rl_accept if (delay_ff.notEmpty);
     let ipv4 <- toGet(ipv4_out_ff).get;
     meta.hdr.ipv4 = ipv4;
     rg_tmp[0] <= 0;
-    rg_shift_amt[0] <= 0;
     rg_buffered[0] <= 0;
     meta_in_ff.enq(meta);
 endrule
