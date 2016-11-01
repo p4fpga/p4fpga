@@ -101,81 +101,6 @@ public:
     MemServerIndication(unsigned int id) : MemServerIndicationWrapper(id) {}
 };
 
-void usage (const char *program_name) {
-    printf("%s: p4fpga tester\n"
-     "usage: %s [OPTIONS] \n",
-     program_name, program_name);
-    printf("\nOther options:\n"
-    " -p, --parser=FILE                pcap trace to run\n"
-    " -I, --intf=interface             listen on interface\n"
-    " -r, --rate=x                     packet generation rate\n"
-    );
-}
-
-struct arg_info {
-    double rate;
-    uint64_t tracelen;
-    uint64_t instance; // pktgen instances
-    bool metagen;
-};
-
-static void 
-parse_options(int argc, char *argv[], char **pcap_file, char **intf, char **outf, struct arg_info* info) {
-    int c, option_index;
-
-    static struct option long_options [] = {
-        {"help",                no_argument, 0, 'h'},
-        {"pcap",                required_argument, 0, 'p'},
-        {"intf",                required_argument, 0, 'I'},
-        {"outf",                required_argument, 0, 'O'},
-        {"pktgen-rate",         required_argument, 0, 'r'},
-        {"pktgen-count",        required_argument, 0, 'n'},
-        {"pktgen-instance",     required_argument, 0, 'g'},
-        {"metagen",             no_argument, 0, 'M'},
-        {0, 0, 0, 0}
-    };
-
-    static std::string short_options
-        (long_options_to_short_options(long_options));
-
-    for (;;) {
-        c = getopt_long(argc, argv, short_options.c_str(), long_options, &option_index);
-
-        if (c == -1)
-            break;
-
-        switch (c) {
-            case 'h':
-                usage(get_exe_name(argv[0]));
-                break;
-            case 'p':
-                *pcap_file = optarg;
-                break;
-            case 'I':
-                fprintf(stderr, "%s", optarg);
-                *intf = optarg;
-                break;
-            case 'O':
-                fprintf(stderr, "%s", optarg);
-                *outf = optarg;
-                break;
-            case 'r':
-                info->rate = strtod(optarg, NULL);
-                break;
-            case 'n':
-                info->tracelen = strtol(optarg, NULL, 0);
-                break;
-            case 'M':
-                info->metagen = true;
-                break;
-            case 'g':
-                info->instance = strtol(optarg, NULL, 0);
-            default:
-                break;
-        }
-    }
-}
-
 /* processPacket(): Callback function called by pcap_loop() everytime a packet */
 /* arrives to the network card. This function prints the captured raw data in  */
 /* hexadecimal.                                                                */
@@ -244,28 +169,103 @@ void run_demo(char *intf, char *outf) {
   //}
 }
 
+void usage (const char *program_name) {
+    printf("%s: p4fpga tester\n"
+     "usage: %s [OPTIONS] \n",
+     program_name, program_name);
+    printf("\nOther options:\n"
+    " -p, --parser=FILE                pcap trace to run\n"
+    " -I, --intf=interface             listen on interface\n"
+    " -r, --rate=x                     packet generation rate\n"
+    " -n, --pktgen-count=n             packet generation count\n"
+    " -i, --pktgen-intf=n              packet generation interface\n"
+    " -v, --verbose=n                  set verbosity level\n"
+    );
+}
+
 int main(int argc, char **argv)
 {
     char *pcap_file=NULL;
-    struct arg_info arguments = {0.0, 0, 0};
     char *intf=NULL, *outf=NULL; 
+
+    double rate = 0.0;
+    long tracelen = 0;
+    long instance = 0; // pktgen instances
+    bool metagen = false;
+    long verbose = 0;
 
     struct pcap_trace_info pcap_info = {0, 0};
     MainIndication echoindication(IfcNames_MainIndicationH2S);
     device = new MainRequestProxy(IfcNames_MainRequestS2H);
 
-    parse_options(argc, argv, &pcap_file, &intf, &outf, &arguments);
-    device->set_verbosity(6);
+    int c, option_index;
+
+    static struct option long_options [] = {
+        {"help",                no_argument, 0, 'h'},
+        {"pcap",                required_argument, 0, 'p'},
+//        {"intf",                required_argument, 0, 'I'},
+//        {"outf",                required_argument, 0, 'O'},
+        {"pktgen-rate",         required_argument, 0, 'r'},
+        {"pktgen-count",        required_argument, 0, 'n'},
+        {"pktgen-instance",     required_argument, 0, 'i'},
+        {"metagen",             no_argument, 0, 'M'},
+        {"verbose",             required_argument, 0, 'v'},
+        {0, 0, 0, 0}
+    };
+
+    static std::string short_options
+        (long_options_to_short_options(long_options));
+
+    for (;;) {
+        c = getopt_long(argc, argv, short_options.c_str(), long_options, &option_index);
+
+        if (c == -1)
+            break;
+
+        switch (c) {
+            case 'h':
+                usage(get_exe_name(argv[0]));
+                break;
+            case 'p':
+                pcap_file = optarg;
+                break;
+//            case 'I':
+//                fprintf(stderr, "%s", optarg);
+//                intf = optarg;
+//                break;
+//            case 'O':
+//                fprintf(stderr, "%s", optarg);
+//                outf = optarg;
+//                break;
+            case 'r':
+                rate = strtod(optarg, NULL);
+                break;
+            case 'n':
+                tracelen = strtol(optarg, NULL, 0);
+                break;
+            case 'M':
+                metagen = true;
+                break;
+            case 'i':
+                instance = strtol(optarg, NULL, 0);
+                break;
+            case 'v':
+                verbose = strtol(optarg, NULL, 0);
+                break;
+            default:
+                break;
+        }
+    }
+
+    device->set_verbosity(verbose);
 
     // application specific call
     // e.g. insert table entries here.
     app_init(device);
 
     device->read_version();
-//    sem_wait(&sem_read_version);
-//    fprintf(stderr, "receved version rsp\n");
-//
-//    sleep(3);
+
+    sleep(3);
 
     // if specified intf on command line
     if (intf && outf) {
@@ -273,10 +273,10 @@ int main(int argc, char **argv)
     }
 
     // load pcap to pktgen
-    hwpktgen = (arguments.rate && arguments.tracelen) ? true : false;
+    hwpktgen = (rate && tracelen) ? true : false;
 
     // load pcap to metagen
-    metagen = (arguments.metagen) ? true : false;
+    metagen = (metagen) ? true : false;
 
     if (pcap_file) {
       fprintf(stderr, "Attempts to read pcap file %s\n", pcap_file);
@@ -285,18 +285,18 @@ int main(int argc, char **argv)
 
     if (hwpktgen) {
       fprintf(stderr, "%lx %llx\n", pcap_info.packet_count, pcap_info.byte_count);
-      int idle = compute_idle(&pcap_info, arguments.rate, LINK_SPEED);
+      int idle = compute_idle(&pcap_info, rate, LINK_SPEED);
       fprintf(stderr, "IDLE=%d\n", idle);
-      device->pktcap_start(arguments.tracelen);
-      device->pktgen_start(arguments.tracelen, idle, arguments.instance);
+      device->pktcap_start(tracelen);
+      device->pktgen_start(tracelen, idle, instance);
     }
 
     if (metagen) {
-      fprintf(stderr, "start metagen %ld\n", arguments.tracelen);
-      device->metagen_start(arguments.tracelen, 1);
+      fprintf(stderr, "start metagen %ld\n", tracelen);
+      device->metagen_start(tracelen, 1);
     }
 
-    sleep(300);
+    sleep(30);
 
     device->read_pktcap_perf_info();
     return 0;
