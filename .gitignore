@@ -41,3 +41,10 @@ examples/*/matchtable_model.cpp
 examples/*/generatedbsv*
 examples/*/nfsume*
 examples/*/bluesim*
+matchtable_model.cpp
+cvc/
+bluesim/
+nfsume*/
+*.p4
+sample_input/
+sample_outputs/
