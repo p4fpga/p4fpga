@@ -46,6 +46,12 @@ void TableCodeGen::emitTableRequestType(const IR::P4Table* table) {
   }
   type_builder->decr_indent();
   type_builder->append_format("} %sReqT deriving (Bits, FShow);", type);
+
+  type_builder->append_line("instance DefaultValue#(%sReqT);", type);
+  type_builder->incr_indent();
+  type_builder->append_line("defaultValue = unpack(0);");
+  type_builder->decr_indent();
+  type_builder->append_line("endinstance");
 }
 
 void TableCodeGen::emitActionEnum(const IR::P4Table* table) {
