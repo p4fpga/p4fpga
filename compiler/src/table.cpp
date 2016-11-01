@@ -26,6 +26,7 @@ namespace FPGA {
 void TableCodeGen::emitTableRequestType(const IR::P4Table* table) {
   cstring name = nameFromAnnotation(table->annotations, table->name);
   cstring type = CamelCase(name);
+  type_builder->append_line("import DefaultValue::*;");
   type_builder->append_line("typedef struct{");
   type_builder->incr_indent();
   if ((key_width % 9) != 0) {
