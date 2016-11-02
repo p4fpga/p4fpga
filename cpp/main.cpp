@@ -183,6 +183,7 @@ void usage (const char *program_name) {
     " -n, --pktgen-count=n             packet generation count\n"
     " -i, --pktgen-intf=n              packet generation interface\n"
     " -v, --verbose=n                  set verbosity level\n"
+    " -m, --metagen=n                  generate metadata with <n> cycles gap in-between.\n"
     );
 }
 
@@ -195,6 +196,7 @@ int main(int argc, char **argv)
     long tracelen = 0;
     long instance = 0; // pktgen instances
     long verbose = 0;
+    long meta_gap = 0; // by default, pump metadata thru p4 pipeline with no gap
 
     struct pcap_trace_info pcap_info = {0, 0};
     MainIndication echoindication(IfcNames_MainIndicationH2S);
@@ -204,13 +206,13 @@ int main(int argc, char **argv)
 
     static struct option long_options [] = {
         {"help",                no_argument, 0, 'h'},
+        {"metagen",             required_argument, 0, 'm'},
         {"pcap",                required_argument, 0, 'p'},
 //        {"intf",                required_argument, 0, 'I'},
 //        {"outf",                required_argument, 0, 'O'},
         {"pktgen-rate",         required_argument, 0, 'r'},
         {"pktgen-count",        required_argument, 0, 'n'},
         {"pktgen-instance",     required_argument, 0, 'i'},
-        {"metagen",             no_argument, 0, 'M'},
         {"verbose",             required_argument, 0, 'v'},
         {0, 0, 0, 0}
     };
@@ -245,8 +247,9 @@ int main(int argc, char **argv)
             case 'n':
                 tracelen = strtol(optarg, NULL, 0);
                 break;
-            case 'M':
+            case 'm':
                 metagen = true;
+                meta_gap = strtol(optarg, NULL, 0);
                 break;
             case 'i':
                 instance = strtol(optarg, NULL, 0);
@@ -292,7 +295,7 @@ int main(int argc, char **argv)
 
     if (metagen) {
       fprintf(stderr, "start metagen %ld\n", tracelen);
-      device->metagen_start(tracelen, 1);
+      device->metagen_start(tracelen, meta_gap);
     }
 
     sleep(30);
