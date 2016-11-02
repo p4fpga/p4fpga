@@ -48,6 +48,8 @@ import HashUnit::*;
 import BRAMCore::*;
 import StmtFSM::*;
 
+`define FAST_VALUE
+
 interface DMHCIfc#(numeric type num_entries, numeric type k, numeric type c, numeric type key_width, numeric type value_width);
 	method Bool is_enabled();
 	method Action flush();
@@ -145,6 +147,7 @@ module mkDMHC(DMHCIfc#(num_entries, k, c, key_width, value_width))
              inited <= True;
              m_table.b.put(True, ~0, unpack(0));
              mslot_counter <= 0;
+             $display("(%0d) match table inited", $time);
           end
        end
     endrule
@@ -163,7 +166,7 @@ module mkDMHC(DMHCIfc#(num_entries, k, c, key_width, value_width))
 			re_value = re_value ^ g_slots[j].value;
 		end
 		rec_value <= re_value;
-		$display("[%d]: mslot addr: %d", $time, re_maddr);
+		$display("[%0d]: mslot addr: %d", $time, re_maddr);
 		m_table.a.put(False, re_maddr, ?);
         stage2_ff.enq(req);
 	endrule
@@ -172,7 +175,7 @@ module mkDMHC(DMHCIfc#(num_entries, k, c, key_width, value_width))
     rule lookup_mtable if (inited);
        let req <- toGet(stage2_ff).get;
        let mslot = m_table.a.read;
-       $display("[%d]: mslot.key: %d, mslot.value: %d", $time, mslot.key, mslot.value);
+       $display("[%0d]: mslot.key: %d, mslot.value: %d", $time, mslot.key, mslot.value);
        //check if there was a hit...
        if(req == mslot.key) begin
           is_hit_wire <= True;
