@@ -71,7 +71,7 @@ seq
 				tmp_gslot.key = tmp_gslot.key ^ repair_gslots[j].key;
 				tmp_gslot.value = tmp_gslot.value ^ repair_gslots[j].value;
 			`elsif FAST_VALUE
-				tmp_gslot.value = tmp_gslot.value ^ repair_gslots[j].value;
+			  tmp_gslot.value = tmp_gslot.value ^ repair_gslots[j].value;
 			`endif
 				tmp_gslot.maddr = tmp_gslot.maddr ^ repair_gslots[j].maddr;
 				tmp_gslots[j].mslot = victim_mslot_addr;
@@ -82,7 +82,7 @@ seq
 		tmp_gslot.key = tmp_gslot.key ^ mslot_to_repair.key;
 		tmp_gslot.value = tmp_gslot.value ^ mslot_to_repair.value;
 	`elsif FAST_VALUE
-		tmp_gslot.value = tmp_gslot.value ^ mslot_to_repair.value;
+	  tmp_gslot.value = tmp_gslot.value ^ mslot_to_repair.value;
 	`endif
 		tmp_gslot.maddr = tmp_gslot.maddr ^ victim_mslot_addr;
 		tmp_gslot.degree = 1;
