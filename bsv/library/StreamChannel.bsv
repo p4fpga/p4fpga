@@ -61,7 +61,7 @@ module mkStoreAndFwdBuffer#(Integer id)(StoreAndFwdBuffer);
    FIFO#(ByteStream#(16)) readDataFifo <- mkFIFO;
    FIFO#(Bit#(EtherLen)) readLenFifo <- mkFIFO;
    FIFO#(Bit#(EtherLen)) readReqFifo <- mkFIFO;
-   FIFO#(ByteStream#(16)) writeDataFifo <- printTraceM("OutChan", mkFIFO);
+   FIFO#(ByteStream#(16)) writeDataFifo <- mkFIFO;
    Reg#(Bool) readStarted <- mkReg(False);
 
    PktReadClient#(16) readClient = (interface PktReadClient;
@@ -284,7 +284,7 @@ module mkStreamRxChannel#(Clock rxClock, Reset rxReset, Integer id)(StreamRxChan
    interface writeClient = hostchan.writeClient;
    interface next = hostchan.next;
    method Action set_verbosity (int verbosity);
-      cf_verbosity <= verbosity;
+      //cf_verbosity <= verbosity;
       hostchan.set_verbosity(verbosity);
    endmethod
 endmodule

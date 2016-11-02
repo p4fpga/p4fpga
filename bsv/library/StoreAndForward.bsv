@@ -424,7 +424,11 @@ module mkStoreAndFwdFromMacToRing#(Clock rxClock, Reset rxReset)(StoreAndFwdFrom
    rule writeData;
       let v <- gearbox.dataout.get;
       writeDataFifo.enq(v);
-      if (verbose) $display("(%0d) macToRing:: writeToFifo", $time);
+      if (verbose) begin
+         if (v.sop) begin
+            $display("(%0d) packet_in: Rx MAC", $time);
+         end
+      end
    endrule
 
    interface PktWriteClient writeClient;

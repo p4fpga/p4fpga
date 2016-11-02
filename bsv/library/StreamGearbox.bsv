@@ -65,7 +65,7 @@ instance MkStreamGearboxUp#(n, m)
            ,Add#(a__, TLog#(TAdd#(1, n)), 64)
            ,Add#(1, b__, TLog#(TAdd#(1, n))));
    module mkStreamGearboxUp(StreamGearbox#(n, m));
-      let verbose = True;
+      let verbose = False;
       FIFOF#(ByteStream#(n)) in_ff <- mkSizedFIFOF(2);
       FIFOF#(ByteStream#(m)) out_ff <- mkSizedFIFOF(2);
       Reg#(Bool) inProgress <- mkReg(False);
