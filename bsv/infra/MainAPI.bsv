@@ -68,17 +68,10 @@ module mkMainAPI #(MainIndication indication,
 
   rule rl_pktgen_start;
      let _ <- toGet(start).get;
-     if (rg_inst >= 1) begin
-        pktgen[0].start(rg_iter, rg_ipg);
-     end
-     if (rg_inst >= 2) begin
-        pktgen[1].start(rg_iter, rg_ipg);
-     end
-     if (rg_inst >= 3) begin
-        pktgen[2].start(rg_iter, rg_ipg);
-     end
-     if (rg_inst >= 4) begin
-        pktgen[3].start(rg_iter, rg_ipg);
+     for (Integer i=0; i<`NUM_PKTGEN; i=i+1) begin
+        if (rg_inst[i] == 1'b1) begin
+           pktgen[i].start(rg_iter, rg_ipg);
+        end
      end
   endrule
 

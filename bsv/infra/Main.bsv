@@ -41,6 +41,7 @@ import PktGen::*;
 import Board::*;
 import Runtime::*;
 import Program::*;
+import Printf::*;
 import Pipe::*;
 import Channel::*;
 import Stream::*;
@@ -48,6 +49,7 @@ import StructDefines::*;
 import ConnectalTypes::*;
 import NfsumePins::*;
 `include "ConnectalProjectConfig.bsv"
+`include "TieOff.defines"
 `ifdef BOARD_nfsume
 import Xilinx10GE::*;
 import XilinxMacWrap::*;
@@ -88,12 +90,13 @@ module mkMain #(HostInterface host, MainIndication indication, ConnectalMemory::
 
   // Port 5-8 is PktGen
   messageM("Generating pktgen/pktcap channels.");
-  Vector#(4, PktGenChannel) pktgen <- genWithM(mkPktGenChannel(txClock, txReset));
+  Vector#(`NUM_PKTGEN, PktGenChannel) pktgen <- genWithM(mkPktGenChannel(txClock, txReset));
 
   PktCapChannel pktcap <- mkPktCapChannel(rxClock, rxReset);
 
-  // Port 6 is MetaGen
+  // Port 9 is MetaGen
   // Generate parsed packet metadata to test p4 pipeline throughput
+  messageM("Generating channel " + sprintf("%d", valueOf(metagen_offset)) + " :metadata generation");
   MetaGenChannel metagen <- mkMetaGenChannel(valueOf(metagen_offset));
   mkConnection(metagen.next, prog.prev[valueOf(metagen_offset)]);
 
@@ -109,7 +112,7 @@ module mkMain #(HostInterface host, MainIndication indication, ConnectalMemory::
 
 `ifdef SIMULATION
   // internal loopback pktgen -> rxchan
-  Vector#(4, SyncFIFOIfc#(ByteStream#(8))) lpbk_ff <- replicateM(mkSyncFIFO(16, txClock, txReset, rxClock));
+  Vector#(`NUM_PKTGEN, SyncFIFOIfc#(ByteStream#(8))) lpbk_ff <- replicateM(mkSyncFIFO(16, txClock, txReset, rxClock));
   mapM_(uncurry(mkConnection), zip(map(getMacTx, pktgen), map(toPut, lpbk_ff)));
   mapM_(uncurry(mkConnection), zip(map(toGet, lpbk_ff), map(getMacRx, runtime.rxchan)));
 

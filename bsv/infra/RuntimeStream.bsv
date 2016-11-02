@@ -102,8 +102,8 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    Vector#(ntx, TxChannel) _txchan <- replicateM(mkTxChannel(txClock, txReset));
 
    // processed metadata to stream pipeline
-   // mapM_(mkTieOff, map(toPipeOut, meta_ff));
-   mapM_(uncurry(mkConnection), zip(genWith(metaPipeOut), map(getMetaIn, _streamchan)));
+   //mapM_(mkTieOff, map(toPipeOut, meta_ff)); // for processing pipeline only experiment
+   mapM_(uncurry(mkConnection), zip(genWith(metaPipeOut), map(getMetaIn, _streamchan))); // for full pipeline experiment
 
    // drop streamed bytes on the floor
    // mkTieOff(_hostchan[0].writeClient.writeData);
@@ -150,6 +150,7 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    interface txchan = _txchan;
    interface hostchan = _hostchan;
    method Action set_verbosity (int verbosity);
+      $display("(%0d) set verbosity to %d", $time, verbosity);
       cf_verbosity <= verbosity;
       mapM_(uncurry(set_verbosity), zip(_rxchan, replicate(verbosity)));
       mapM_(uncurry(set_verbosity), zip(_streamchan, replicate(verbosity)));
