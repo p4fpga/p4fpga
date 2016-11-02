@@ -48,10 +48,13 @@ extern void app_init(MainRequestProxy* device);
 
 void device_writePacketData(uint64_t* data, uint8_t* mask, int sop, int eop) {
     if (hwpktgen) {
+      fprintf(stderr, "write pktgen\n");
       device->writePktGenData(data, mask, sop, eop);
     } else if (metagen) {
+      fprintf(stderr, "write metadata\n");
       device->writeMetaGenData(data, mask, sop, eop);
     } else {
+      fprintf(stderr, "write hostchan\n");
       device->writePacketData(data, mask, sop, eop);
     }
 }
@@ -191,7 +194,6 @@ int main(int argc, char **argv)
     double rate = 0.0;
     long tracelen = 0;
     long instance = 0; // pktgen instances
-    bool metagen = false;
     long verbose = 0;
 
     struct pcap_trace_info pcap_info = {0, 0};
@@ -274,9 +276,6 @@ int main(int argc, char **argv)
 
     // load pcap to pktgen
     hwpktgen = (rate && tracelen) ? true : false;
-
-    // load pcap to metagen
-    metagen = (metagen) ? true : false;
 
     if (pcap_file) {
       fprintf(stderr, "Attempts to read pcap file %s\n", pcap_file);
