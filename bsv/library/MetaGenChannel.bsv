@@ -45,9 +45,9 @@ endinterface
 
 module mkMetaGenChannel#(Integer id)(MetaGenChannel);
    `PRINT_DEBUG_MSG
-   StreamInChannel host <- mkStreamInChannel(0);
+   StreamInChannel host <- mkStreamInChannel(id);
    Reg#(Bit#(32)) rg_iter <- mkReg(0);
-   Reg#(Bit#(32)) rg_freq <- mkReg(1);
+   Reg#(Bit#(32)) rg_gap <- mkReg(1);
    Reg#(Bit#(32)) freq_cnt <- mkReg(0);
    Reg#(Bool) bstart <- mkReg(False);
    PulseWire w_send_meta <- mkPulseWire;
@@ -59,10 +59,11 @@ module mkMetaGenChannel#(Integer id)(MetaGenChannel);
    mkConnection(toGet(host.next), toPut(meta_in_ff));
 
    rule rl_freq_ctrl if (bstart && meta_in_ff.notEmpty);
-      if (freq_cnt < rg_freq) begin
+      if (freq_cnt < rg_gap) begin
          freq_cnt <= freq_cnt + 1;
       end
       else begin
+         freq_cnt <= 0;
          w_send_meta.send();
       end
    endrule
@@ -81,15 +82,15 @@ module mkMetaGenChannel#(Integer id)(MetaGenChannel);
 
    // frequency N means send a metadata once every n cycles
    method Action start(Bit#(32) iter, Bit#(32) freq);
-      $display("(%0d) metagen start %d", $time, iter);
+      $display("(%0d) metagen start %d gap %d", $time, iter, freq);
       rg_iter <= iter;
-      rg_freq <= freq;
+      rg_gap <= freq;
       bstart <= True;
    endmethod
    method Action stop();
       $display("(%0d) metagen stop", $time);
       rg_iter <= 0;
-      rg_freq <= 1;
+      rg_gap <= 0;
       freq_cnt <= 0;
       bstart <= False;
    endmethod
