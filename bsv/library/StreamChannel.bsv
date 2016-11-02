@@ -150,13 +150,16 @@ module mkStreamOutChannel#(Integer id)(StreamOutChannel);
       dbprint(3, $format("initiate transmit packet id=%d", id));
    endrule
 
+   rule set_verbose (cf_verbosity > 0);
+      pktBuff.set_verbosity(cf_verbosity);
+      modifier.set_verbosity(cf_verbosity);
+   endrule
+
    interface prev = toPipeIn(meta_ff);
    interface writeServer= pktBuff.writeServer;
    interface writeClient = modifier.writeClient;
    method Action set_verbosity (int verbosity);
       cf_verbosity <= verbosity;
-      pktBuff.set_verbosity(verbosity);
-      modifier.set_verbosity(verbosity);
    endmethod
 endmodule
 
@@ -235,6 +238,11 @@ module mkStreamInChannel#(Integer id)(StreamInChannel);
       dbprint(3, $format("send packet ingress %d ", id, fshow(meta)));
    endrule
 
+   rule set_verbose (cf_verbosity > 0);
+      parser.set_verbosity(cf_verbosity);
+      pktBuff.set_verbosity(cf_verbosity);
+   endrule
+
    interface writeServer = pktBuff.writeServer;
    interface writeClient = (interface PktWriteClient;
       interface writeData = toGet(writeDataFifo);
@@ -242,8 +250,6 @@ module mkStreamInChannel#(Integer id)(StreamInChannel);
    interface next = toPipeOut(outReqFifo);
    method Action set_verbosity (int verbosity);
       cf_verbosity <= verbosity;
-      parser.set_verbosity(verbosity);
-      pktBuff.set_verbosity(verbosity);
    endmethod
 endmodule
 
@@ -280,11 +286,15 @@ module mkStreamRxChannel#(Clock rxClock, Reset rxReset, Integer id)(StreamRxChan
    StreamInChannel hostchan <- mkStreamInChannel(id);
    StoreAndFwdFromMacToRing macToRing <- mkStoreAndFwdFromMacToRing(rxClock, rxReset);
    mkConnection(macToRing.writeClient, hostchan.writeServer);
+
+   rule set_verbose (cf_verbosity > 0);
+      hostchan.set_verbosity(cf_verbosity);
+   endrule
+
    interface macRx = macToRing.macRx;
    interface writeClient = hostchan.writeClient;
    interface next = hostchan.next;
    method Action set_verbosity (int verbosity);
-      //cf_verbosity <= verbosity;
-      hostchan.set_verbosity(verbosity);
+      cf_verbosity <= verbosity;
    endmethod
 endmodule

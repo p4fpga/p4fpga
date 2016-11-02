@@ -47,6 +47,7 @@ import Utils::*;
 
 interface Engine#(numeric type depth, type metaI, type actI);
    interface Server#(Tuple2#(metaI, actI), metaI) prev_control_state;
+   // extern clients
    method Action set_verbosity(int verbosity);
 endinterface
 module mkEngine#(List#(function ActionValue#(metaI) func(metaI meta, actI param)) proc)(Engine#(depth, metaI, actI))

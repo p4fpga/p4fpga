@@ -72,10 +72,12 @@ interface Runtime#(numeric type nrx, numeric type ntx, numeric type nhs);
 endinterface
 
 module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Runtime#(nrx, ntx, nhs))
-   provisos(Add#(ntx, a__, 8) // FIXME: make ntx == 8, caused by take()
-           ,Add#(TAdd#(nrx, nhs), b__, 8) // introduced by take()
+   provisos(NumAlias#(TLog#(TAdd#(nrx, nhs)), cblogn)
+           ,NumAlias#(TExp#(cblogn), cbn)
            ,NumAlias#(TAdd#(nrx, nhs), npi)
            ,NumAlias#(nhs, rx_offset)
+           ,Add#(TAdd#(nrx, rx_offset), a__, TExp#(TLog#(TAdd#(nrx, rx_offset))))
+           ,Add#(ntx, b__, TExp#(TLog#(TAdd#(nrx, rx_offset))))
            ); 
 
    Vector#(npi, FIFOF#(MetadataRequest)) meta_ff <- replicateM(mkFIFOF);
@@ -122,14 +124,15 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_up_32), map(getWriteData, input_queues))); // gearbox -> input queue
    mapM(uncurry(mkConnection), zip(map(getReadLen, input_queues), map(getReadReq, input_queues))); // immediate transmit, performance issue?
 
-   XBar#(64) xbar <- mkXBar(3, destOf, mkMerge2x1_lru, 3, 0); // last two parameters are log(size) and idx
-   Vector#(8, Put#(ByteStream#(64))) input_ports = toVector(xbar.input_ports);
+   messageM("Generate Crossbar with parameter: port=" + sprintf("%d", valueOf(cbn)));
+   XBar#(64) xbar <- mkXBar(valueOf(cblogn), destOf, mkMerge2x1_lru, valueOf(cblogn), 0); // last two parameters are log(size) and idx
+   Vector#(cbn, Put#(ByteStream#(64))) input_ports = toVector(xbar.input_ports);
    mapM(uncurry(mkConnection), zip(map(getReadData, input_queues), take(input_ports))); // input queue -> xbar,
 
-   Vector#(8, PacketBuffer#(64)) output_queues <- mapM(mkPacketBuffer, genWith(sprintf("outputQ %h"))); // output queue
+   Vector#(cbn, PacketBuffer#(64)) output_queues <- mapM(mkPacketBuffer, genWith(sprintf("outputQ %h"))); // output queue
    mapM(uncurry(mkConnection), zip(map(getReadLen, output_queues), map(getReadReq, output_queues))); // immediate transmit
 
-   Vector#(8, Get#(ByteStream#(64))) outvec = toVector(xbar.output_ports);
+   Vector#(cbn, Get#(ByteStream#(64))) outvec = toVector(xbar.output_ports);
    Vector#(ntx, StreamGearbox#(64, 32)) gearbox_dn_32 <- replicateM(mkStreamGearboxDn());
    Vector#(ntx, StreamGearbox#(32, 16)) gearbox_dn_16 <- replicateM(mkStreamGearboxDn());
    //mapM_(mkTieOff, outvec); // want to see which idx is going out of
@@ -141,9 +144,10 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
 
    // forward packet to any of these ports will be dropped
    mkTieOff(output_queues[0].readServer.readData);
-   mkTieOff(output_queues[5].readServer.readData);
-   mkTieOff(output_queues[6].readServer.readData);
-   mkTieOff(output_queues[7].readServer.readData);
+   for (Integer i=valueOf(npi); i<valueOf(cbn); i=i+1) begin
+      messageM("TieOff crossbar port " + sprintf("%d", i) + " as drop");
+      mkTieOff(output_queues[i].readServer.readData);
+   end
 
    interface prev = genWith(metaPipeIn); // metadata in
    interface rxchan = _rxchan;
@@ -162,4 +166,6 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
 endmodule
 
 `SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(4, 4, 1), mkRuntime_4_4_1)
+`SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(6, 6, 1), mkRuntime_6_6_1)
+`SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(10, 10, 1), mkRuntime_10_10_1)
 endpackage

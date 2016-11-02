@@ -74,6 +74,12 @@ module mkMain #(HostInterface host, MainIndication indication, ConnectalMemory::
   Clock rxClock = board.rxClock;
   Reset rxReset = board.rxReset;
 
+  // Runtime#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) runtime <- mkRuntime_10_10_1(rxClock, rxReset, txClock, txReset);
+  // Program#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN, naux) prog <- mkProgram_10_10_1_11();
+
+  //Runtime#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) runtime <- mkRuntime_6_6_1(rxClock, rxReset, txClock, txReset);
+  //Program#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN, naux) prog <- mkProgram_6_6_1_7();
+ 
   Runtime#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) runtime <- mkRuntime_4_4_1(rxClock, rxReset, txClock, txReset);
   Program#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN, naux) prog <- mkProgram_4_4_1_5();
 
