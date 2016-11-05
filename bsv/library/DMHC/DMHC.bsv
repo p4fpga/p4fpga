@@ -166,7 +166,7 @@ module mkDMHC(DMHCIfc#(num_entries, k, c, key_width, value_width))
 			re_value = re_value ^ g_slots[j].value;
 		end
 		rec_value <= re_value;
-		$display("[%0d]: mslot addr: %d", $time, re_maddr);
+		$display("[%0d]: mslot addr: %d rec_value %h", $time, re_maddr, re_value);
 		m_table.a.put(False, re_maddr, ?);
         stage2_ff.enq(req);
 	endrule
@@ -183,6 +183,8 @@ module mkDMHC(DMHCIfc#(num_entries, k, c, key_width, value_width))
        else begin
           is_hit_wire <= False;
        end
+       // FIXME: ensure pipeline correctness
+       rec_value <= mslot.value;
     endrule
 
    /** methods **/	

@@ -167,5 +167,5 @@ endmodule
 
 `SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(4, 4, 1), mkRuntime_4_4_1)
 `SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(6, 6, 1), mkRuntime_6_6_1)
-`SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(10, 10, 1), mkRuntime_10_10_1)
+//`SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(10, 10, 1), mkRuntime_10_10_1)
 endpackage

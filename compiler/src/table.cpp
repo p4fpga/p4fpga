@@ -162,7 +162,6 @@ cstring TableCodeGen::gatherTableKeys() {
     LOG1("key size" << s);
     field_width += s;
     cstring name = f->name.toString();
-    builder->append_line("let %s = fromMaybe(?, data.meta.meta.%s);", name, name);
     fields += name + cstring(": ") + name;
     if (k != key_vec.back()) {
       fields += cstring(",");
@@ -182,7 +181,14 @@ void TableCodeGen::emitFunctionLookup(const IR::P4Table* table) {
   builder->append_line("function ConnectalTypes::%sReqT table_request(MetadataRequest data);", type);
   builder->incr_indent();
   cstring fields = gatherTableKeys();
-  builder->append_line("let v = ConnectalTypes::%sReqT {%s};", type, fields);
+  // FIXME: work around for SOSR
+  builder->append_line("ConnectalTypes::%sReqT v = defaultValue;", type);
+  builder->append_line("if (data.meta.hdr.ethernet matches tagged Valid .ethernet) begin");
+  builder->incr_indent();
+  builder->append_line("let dstAddr = ethernet.hdr.dstAddr;");
+  builder->append_line("v = ConnectalTypes::%sReqT {%s};", type, fields);
+  builder->decr_indent();
+  builder->append_line("end");
   builder->append_line("return v;");
   builder->decr_indent();
   builder->append_line("endfunction");
@@ -275,7 +281,7 @@ void TableCodeGen::emit(const IR::P4Table* table) {
   int actionSize = (actionList != nullptr) ? actionList->size() : 0;
   CHECK_NULL(builder);
   builder->append_line("typedef Table#(%d, MetadataRequest, %sParam, ConnectalTypes::%sReqT, ConnectalTypes::%sRspT) %sTable;", actionSize, type, type, type, type);
-  builder->append_line("typedef MatchTable#(%d, %d, SizeOf#(ConnectalTypes::%sReqT), SizeOf#(ConnectalTypes::%sRspT)) %sMatchTable;", id, 256, type, type, type);
+  builder->append_line("typedef MatchTable#(1, %d, %d, SizeOf#(ConnectalTypes::%sReqT), SizeOf#(ConnectalTypes::%sRspT)) %sMatchTable;", id, 256, type, type, type);
   builder->append_line("`SynthBuildModule1(mkMatchTable, String, %sMatchTable, mkMatchTable_%s)", type, type);
   emitFunctionLookup(table);
   emitFunctionExecute(table);

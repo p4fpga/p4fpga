@@ -3,6 +3,8 @@ import Ethernet::*;
 import Utils::*;
 import Vector::*;
 
+`include "ConnectalProjectConfig.bsv"
+
 typedef struct {
   PacketInstance pkt;
   MetadataT meta;
@@ -31,6 +33,7 @@ instance DefaultValue#(Header#(t))
 endinstance
 
 //NOTE: MetadataT struct based on v1model
+`ifndef MDP
 typedef struct {
     Headers hdr;
     Metadata meta;
@@ -39,5 +42,6 @@ typedef struct {
 instance DefaultValue#(MetadataT);
     defaultValue = unpack(0);
 endinstance
+`endif
 
 `include "StructGenerated.bsv"

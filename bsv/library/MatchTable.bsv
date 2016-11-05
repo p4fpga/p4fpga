@@ -317,11 +317,12 @@ module mkMatchTableDMHC#(String name)(MatchTable#(`HASH, uniq, depth, keySz, act
    rule do_delay;
       let v <- toGet(delay_ff).get;
       delay2_ff.enq(v);
+      $display("(%0d) dmhc %d", $time, dmhc.is_hit);
    endrule
 
    rule do_resp;
       let v <- toGet(delay2_ff).get;
-      $display("(%0d) MatchTable:do_resp %s key: %h", $time, name, v);
+      $display("(%0d) MatchTable:do_resp %s key: %h, ishit: %d", $time, name, v, dmhc.is_hit);
       if (dmhc.is_hit) begin
          let val = dmhc.get_value;
          readDataFifo.enq(tagged Valid val);

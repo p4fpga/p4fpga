@@ -46,6 +46,7 @@ static sem_t sem_read_version;
 
 extern void app_init(MainRequestProxy* device);
 
+
 void device_writePacketData(uint64_t* data, uint8_t* mask, int sop, int eop) {
     if (hwpktgen) {
       fprintf(stderr, "write pktgen\n");
@@ -298,7 +299,7 @@ int main(int argc, char **argv)
       device->metagen_start(tracelen, meta_gap);
     }
 
-    sleep(30);
+    sleep(3000);
 
     device->read_pktcap_perf_info();
     return 0;
