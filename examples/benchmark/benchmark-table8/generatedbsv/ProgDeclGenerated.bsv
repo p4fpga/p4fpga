@@ -1,0 +1,8 @@
+method forward_table_add_entry=ingress.forward_table_add_entry;
+method table_1_add_entry=ingress.table_1_add_entry;
+method table_2_add_entry=ingress.table_2_add_entry;
+method table_3_add_entry=ingress.table_3_add_entry;
+method table_4_add_entry=ingress.table_4_add_entry;
+method table_5_add_entry=ingress.table_5_add_entry;
+method table_6_add_entry=ingress.table_6_add_entry;
+method table_7_add_entry=ingress.table_7_add_entry;
