@@ -17,7 +17,7 @@ typedef enum {
 } ForwardActionT deriving (Bits, Eq, FShow);
 `MATCHTABLE_SIM(31, 36, 50, forward)
 typedef Table#(3, MetadataRequest, ForwardParam, ConnectalTypes::ForwardReqT, ConnectalTypes::ForwardRspT) ForwardTable;
-typedef MatchTable#(31, 256, SizeOf#(ConnectalTypes::ForwardReqT), SizeOf#(ConnectalTypes::ForwardRspT)) ForwardMatchTable;
+typedef MatchTable#(1, 31, 256, SizeOf#(ConnectalTypes::ForwardReqT), SizeOf#(ConnectalTypes::ForwardRspT)) ForwardMatchTable;
 `SynthBuildModule1(mkMatchTable, String, ForwardMatchTable, mkMatchTable_Forward)
 instance Table_request #(ConnectalTypes::ForwardReqT);
     function ConnectalTypes::ForwardReqT table_request(MetadataRequest data);
@@ -51,7 +51,7 @@ typedef enum {
 } Ipv4LpmActionT deriving (Bits, Eq, FShow);
 `MATCHTABLE_SIM(4, 36, 43, ipv4_lpm)
 typedef Table#(3, MetadataRequest, Ipv4LpmParam, ConnectalTypes::Ipv4LpmReqT, ConnectalTypes::Ipv4LpmRspT) Ipv4LpmTable;
-typedef MatchTable#(4, 256, SizeOf#(ConnectalTypes::Ipv4LpmReqT), SizeOf#(ConnectalTypes::Ipv4LpmRspT)) Ipv4LpmMatchTable;
+typedef MatchTable#(1, 4, 256, SizeOf#(ConnectalTypes::Ipv4LpmReqT), SizeOf#(ConnectalTypes::Ipv4LpmRspT)) Ipv4LpmMatchTable;
 `SynthBuildModule1(mkMatchTable, String, Ipv4LpmMatchTable, mkMatchTable_Ipv4Lpm)
 instance Table_request #(ConnectalTypes::Ipv4LpmReqT);
     function ConnectalTypes::Ipv4LpmReqT table_request(MetadataRequest data);
@@ -109,7 +109,7 @@ instance Action_execute #(Ipv4LpmParam);
                tagged SetNhopReqT {nhop_ipv4: .nhop_ipv4, _port: ._port}: begin
                   req.meta.meta.nhop_ipv4 = tagged Valid nhop_ipv4;
                   req.meta.standard_metadata.egress_port = tagged Valid _port;
-                  $display("(%0d) execute action");
+                  $display("(%0d) execute action", $time);
                end
             endcase
             $display("(%0d) step 1 updated req: ", $time, fshow(req));
@@ -223,7 +223,7 @@ typedef enum {
 } SendFrameActionT deriving (Bits, Eq, FShow);
 `MATCHTABLE_SIM(16, 9, 50, send_frame)
 typedef Table#(3, MetadataRequest, SendFrameParam, ConnectalTypes::SendFrameReqT, ConnectalTypes::SendFrameRspT) SendFrameTable;
-typedef MatchTable#(16, 256, SizeOf#(ConnectalTypes::SendFrameReqT), SizeOf#(ConnectalTypes::SendFrameRspT)) SendFrameMatchTable;
+typedef MatchTable#(1, 16, 256, SizeOf#(ConnectalTypes::SendFrameReqT), SizeOf#(ConnectalTypes::SendFrameRspT)) SendFrameMatchTable;
 `SynthBuildModule1(mkMatchTable, String, SendFrameMatchTable, mkMatchTable_SendFrame)
 instance Table_request #(ConnectalTypes::SendFrameReqT);
     function ConnectalTypes::SendFrameReqT table_request(MetadataRequest req);
