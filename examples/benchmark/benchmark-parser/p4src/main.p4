@@ -1,4 +1,5 @@
 #define ETHERTYPE_IPV4 0x0800
+#define ETHERTYPE_PTP 0x088F7
 
 #define TCP_PROTOCOL 0x06
 #define UDP_PROTOCOL 0x11
@@ -10,80 +11,42 @@ header_type ethernet_t {
         etherType : 16;
     }
 }
-header ethernet_t ethernet;
-
-parser start {
-    return parse_ethernet;
+header_type ptp_t {
+    fields {
+        transportSpecific : 4;
+        messageType       : 4;
+        reserved          : 4;
+        versionPTP        : 4;
+        messageLength     : 16;
+        domainNumber      : 8;
+        reserved2         : 8;
+        flags             : 16;
+        correction        : 64;
+        reserved3         : 32;
+        sourcePortIdentity: 80;
+        sequenceId        : 16;
+        ptpControl        : 8;
+        logMessagePeriod  : 8;
+        originTimestamp   : 80;
+    }
 }
+parser start { return parse_ethernet; }
+header ethernet_t ethernet;
 
 parser parse_ethernet {
     extract(ethernet);
     return select(latest.etherType) {
-        ETHERTYPE_IPV4 : parse_ipv4; 
-        default : ingress;
-    }
-}
-header_type ipv4_t {
-    fields {
-        version : 4;
-        ihl : 4;
-        diffserv : 8;
-        totalLen : 16;
-        identification : 16;
-        flags : 3;
-        fragOffset : 13;
-        ttl : 8;
-        protocol : 8;
-        hdrChecksum : 16;
-        srcAddr : 32;
-        dstAddr : 32;
-    }
-}
-header ipv4_t ipv4;
+	ETHERTYPE_PTP: parse_ptp;
+	default : ingress;
 
-parser parse_ipv4 {
-    extract(ipv4);
-    return select(latest.protocol) {
-        TCP_PROTOCOL : parse_tcp;
-        UDP_PROTOCOL : parse_udp;
-        default : ingress;
     }
 }
-header_type tcp_t {
-    fields {
-        srcPort : 16;
-        dstPort : 16;
-        seqNo : 32;
-        ackNo : 32;
-        dataOffset : 4;
-        res : 3;
-        ecn : 3;
-        ctrl : 6;
-        window : 16;
-        checksum : 16;
-        urgentPtr : 16;
-    }
-}
-header tcp_t tcp;
+header ptp_t ptp;
 
-parser parse_tcp {
-    extract(tcp);
-    return ingress;
-}
-header_type udp_t {
-    fields {
-        srcPort : 16;
-        dstPort : 16;
-        length_ : 16;
-        checksum : 16;
-    }
-}
-header udp_t udp;
-
-parser parse_udp {
-    extract(udp);
-    return select(latest.dstPort) {
-	37009   : parse_header_0;
+parser parse_ptp {
+    extract(ptp);
+    return select(latest.reserved2) {
+	1       : parse_header_0;
 	default : ingress;
 
     }
@@ -386,6 +349,214 @@ header header_18_t header_18;
 
 parser parse_header_18 {
     extract(header_18);
+    return select(latest.field_0) {
+	0       : ingress;
+	default : parse_header_19;
+
+    }
+}
+header_type header_19_t {
+    fields {
+		field_0 : 16;
+
+    }
+}
+header header_19_t header_19;
+
+parser parse_header_19 {
+    extract(header_19);
+    return select(latest.field_0) {
+	0       : ingress;
+	default : parse_header_20;
+
+    }
+}
+header_type header_20_t {
+    fields {
+		field_0 : 16;
+
+    }
+}
+header header_20_t header_20;
+
+parser parse_header_20 {
+    extract(header_20);
+    return select(latest.field_0) {
+	0       : ingress;
+	default : parse_header_21;
+
+    }
+}
+header_type header_21_t {
+    fields {
+		field_0 : 16;
+
+    }
+}
+header header_21_t header_21;
+
+parser parse_header_21 {
+    extract(header_21);
+    return select(latest.field_0) {
+	0       : ingress;
+	default : parse_header_22;
+
+    }
+}
+header_type header_22_t {
+    fields {
+		field_0 : 16;
+
+    }
+}
+header header_22_t header_22;
+
+parser parse_header_22 {
+    extract(header_22);
+    return select(latest.field_0) {
+	0       : ingress;
+	default : parse_header_23;
+
+    }
+}
+header_type header_23_t {
+    fields {
+		field_0 : 16;
+
+    }
+}
+header header_23_t header_23;
+
+parser parse_header_23 {
+    extract(header_23);
+    return select(latest.field_0) {
+	0       : ingress;
+	default : parse_header_24;
+
+    }
+}
+header_type header_24_t {
+    fields {
+		field_0 : 16;
+
+    }
+}
+header header_24_t header_24;
+
+parser parse_header_24 {
+    extract(header_24);
+    return select(latest.field_0) {
+	0       : ingress;
+	default : parse_header_25;
+
+    }
+}
+header_type header_25_t {
+    fields {
+		field_0 : 16;
+
+    }
+}
+header header_25_t header_25;
+
+parser parse_header_25 {
+    extract(header_25);
+    return select(latest.field_0) {
+	0       : ingress;
+	default : parse_header_26;
+
+    }
+}
+header_type header_26_t {
+    fields {
+		field_0 : 16;
+
+    }
+}
+header header_26_t header_26;
+
+parser parse_header_26 {
+    extract(header_26);
+    return select(latest.field_0) {
+	0       : ingress;
+	default : parse_header_27;
+
+    }
+}
+header_type header_27_t {
+    fields {
+		field_0 : 16;
+
+    }
+}
+header header_27_t header_27;
+
+parser parse_header_27 {
+    extract(header_27);
+    return select(latest.field_0) {
+	0       : ingress;
+	default : parse_header_28;
+
+    }
+}
+header_type header_28_t {
+    fields {
+		field_0 : 16;
+
+    }
+}
+header header_28_t header_28;
+
+parser parse_header_28 {
+    extract(header_28);
+    return select(latest.field_0) {
+	0       : ingress;
+	default : parse_header_29;
+
+    }
+}
+header_type header_29_t {
+    fields {
+		field_0 : 16;
+
+    }
+}
+header header_29_t header_29;
+
+parser parse_header_29 {
+    extract(header_29);
+    return select(latest.field_0) {
+	0       : ingress;
+	default : parse_header_30;
+
+    }
+}
+header_type header_30_t {
+    fields {
+		field_0 : 16;
+
+    }
+}
+header header_30_t header_30;
+
+parser parse_header_30 {
+    extract(header_30);
+    return select(latest.field_0) {
+	0       : ingress;
+	default : parse_header_31;
+
+    }
+}
+header_type header_31_t {
+    fields {
+		field_0 : 16;
+
+    }
+}
+header header_31_t header_31;
+
+parser parse_header_31 {
+    extract(header_31);
     return select(latest.field_0) {
 	default : ingress;
 
