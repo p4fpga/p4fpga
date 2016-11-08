@@ -197,3 +197,9 @@ instance MkStreamGearboxDn#(n, m) provisos(Mul#(m, 2, n));
       interface dataout = toGet(out_ff);
    endmodule
 endinstance
+
+`SynthBuildModule(mkStreamGearboxUp, StreamGearbox#(16, 32), mkStreamGearboxUp_16_32)
+`SynthBuildModule(mkStreamGearboxUp, StreamGearbox#(32, 64), mkStreamGearboxUp_32_64)
+`SynthBuildModule(mkStreamGearboxDn, StreamGearbox#(32, 16), mkStreamGearboxDn_32_16)
+`SynthBuildModule(mkStreamGearboxDn, StreamGearbox#(64, 32), mkStreamGearboxDn_64_32)
+

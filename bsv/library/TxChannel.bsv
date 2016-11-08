@@ -33,66 +33,6 @@ import `DEPARSER::*;
 import `TYPEDEF::*;
 `include "Debug.defines"
 
-// // Encapsulate Egress Pipeline, Tx Ring
-// interface TxChannel;
-//    interface MemReadClient#(`DataBusWidth) readClient;
-//    interface MemFreeClient freeClient;
-//    interface PipeIn#(MetadataRequest) prev;
-//    interface Get#(ByteStream#(8)) macTx;
-//    method TxChannelDbgRec read_debug_info;
-//    method DeparserPerfRec read_deparser_perf_info;
-//    method Action set_verbosity (int verbosity);
-// endinterface
-// 
-// instance GetMacTx#(TxChannel);
-//    function Get#(ByteStream#(8)) getMacTx(TxChannel chan);
-//       return chan.macTx;
-//    endfunction
-// endinstance
-// 
-// // merge StreamOutChannel
-// // 
-// module mkTxChannel#(Clock txClock, Reset txReset)(TxChannel);
-//    RX #(MetadataRequest)  rx_prev_req <- mkRX;
-//    let rx_prev_req_info = rx_prev_req.u;
-//    PacketBuffer#(16) pktBuff <- mkPacketBuffer();
-//    Deparser deparser <- mkDeparser();
-//    HeaderSerializer serializer <- mkHeaderSerializer();
-//    StoreAndFwdFromMemToRing egress <- mkStoreAndFwdFromMemToRing();
-//    StoreAndFwdFromRingToMac ringToMac <- mkStoreAndFwdFromRingToMac(txClock, txReset);
-// 
-//    mkConnection(egress.writeClient, deparser.writeServer);
-//    mkConnection(deparser.writeClient, serializer.writeServer); 
-//    mkConnection(serializer.writeClient, pktBuff.writeServer);
-//    mkConnection(ringToMac.readClient, pktBuff.readServer);
-// 
-//    rule handle_request;
-//       let req = rx_prev_req_info.first;
-//       rx_prev_req_info.deq;
-//       let meta = req.meta;
-//       let pkt = req.pkt;
-//       $display("(%0d) TxChannel:handle_request ", $time, fshow(req));
-//       egress.eventPktSend.enq(pkt);
-//       deparser.metadata.enq(meta);
-//    endrule
-// 
-//    interface macTx = ringToMac.macTx;
-//    interface readClient = egress.readClient;
-//    interface freeClient = egress.free;
-//    interface prev = rx_prev_req.e;
-//    method TxChannelDbgRec read_debug_info;
-//       return TxChannelDbgRec {
-//          egressCount : 0,
-//          pktBuff: pktBuff.dbg
-//          };
-//    endmethod
-//    method read_deparser_perf_info = deparser.read_perf_info;
-//    method Action set_verbosity (int verbosity);
-//       deparser.set_verbosity(verbosity);
-//       serializer.set_verbosity(verbosity);
-//    endmethod
-// endmodule
-
 // FIXME:
 interface TxChannel;
    interface PktWriteServer#(16) writeServer;
@@ -123,7 +63,7 @@ endinstance
 // Tx Channel
 module mkTxChannel#(Clock txClock, Reset txReset)(TxChannel);
    `PRINT_DEBUG_MSG
-   PacketBuffer#(16) pktBuff <- mkPacketBuffer("txchan");
+   PacketBuffer#(16) pktBuff <- mkPacketBuffer_16("txchan");
    StoreAndFwdFromRingToMac ringToMac <- mkStoreAndFwdFromRingToMac(txClock, txReset);
    mkConnection(ringToMac.readClient, pktBuff.readServer);
 

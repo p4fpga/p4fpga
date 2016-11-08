@@ -59,6 +59,7 @@ typedef TLog#(TDiv#(PktDataWidth, 8)) MaskSize;
 typedef TAdd#(DataSize, 1) NumBits;
 typedef TAdd#(MaskSize, 1) NumBytes;
 
+(* synthesize *)
 module mkHeaderSerializer(HeaderSerializer);
    `PRINT_DEBUG_MSG
 

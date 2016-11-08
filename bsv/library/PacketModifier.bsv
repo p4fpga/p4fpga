@@ -40,17 +40,18 @@ interface PacketModifier;
    method Action set_verbosity (int verbosity);
 endinterface
 
+(* synthesize *)
 module mkPacketModifier(PacketModifier);
    `PRINT_DEBUG_MSG
    FIFOF#(MetadataRequest) req_ff <- printTimedTraceM("modifier", mkFIFOF);
-   Deparser deparser <- mkDeparser();
+//   Deparser deparser <- mkDeparser();
    HeaderSerializer serializer <- mkHeaderSerializer();
 
    rule rl_req;
       let req <- toGet(req_ff).get;
       let meta = req.meta;
       let pkt = req.pkt;
-      deparser.metadata.enq(meta);
+//      deparser.metadata.enq(meta);
       // set user metadata in output bytestream for cross bar
       let egress_port = meta.standard_metadata.egress_port;
       if (egress_port matches tagged Valid .p) begin
@@ -63,17 +64,18 @@ module mkPacketModifier(PacketModifier);
       dbprint(3, $format("stream out metadata %d", pkt, fshow(meta)));
    endrule
 
-   rule deparse_to_serializer;
-      let v <- toGet(deparser.writeClient).get;
-      serializer.writeServer.enq(v);
-   endrule
+//   rule deparse_to_serializer;
+//      let v <- toGet(deparser.writeClient).get;
+//      serializer.writeServer.enq(v);
+//   endrule
 
-   interface writeServer= deparser.writeServer;
+//   interface writeServer= deparser.writeServer;
+   interface writeServer= serializer.writeServer;
    interface writeClient = serializer.writeClient;
    interface prev = toPipeIn(req_ff);
    method Action set_verbosity (int verbosity);
       cf_verbosity <= verbosity;
-      deparser.set_verbosity(verbosity);
+//      deparser.set_verbosity(verbosity);
       serializer.set_verbosity(verbosity);
    endmethod
 endmodule

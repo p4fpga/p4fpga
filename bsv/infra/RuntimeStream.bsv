@@ -22,6 +22,7 @@
 
 package Runtime;
 
+import Clocks::*;
 import Library::*;
 import RxChannel::*;
 import TxChannel::*;
@@ -94,14 +95,15 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
       return buff.writeServer.writeData;
    endfunction
 
-   let clock <- exposeCurrentClock();
-   let reset <- exposeCurrentReset();
+   let defaultClock <- exposeCurrentClock();
+   let defaultReset <- exposeCurrentReset();
+   Reset localReset <- mkSyncReset(2, defaultReset, defaultClock);
 
    function Integer add_base (Integer j) = (valueOf(nhs) + j);
-   Vector#(nhs, StreamInChannel) _hostchan <- genWithM(mkStreamInChannel);
-   Vector#(nrx, StreamRxChannel) _rxchan <- genWithM(compose(mkStreamRxChannel(rxClock, rxReset), add_base));
-   Vector#(npi, StreamOutChannel) _streamchan <- genWithM(mkStreamOutChannel());
-   Vector#(ntx, TxChannel) _txchan <- replicateM(mkTxChannel(txClock, txReset));
+   Vector#(nhs, StreamInChannel) _hostchan <- genWithM(mkStreamInChannel, clocked_by defaultClock, reset_by localReset);
+   Vector#(nrx, StreamRxChannel) _rxchan <- genWithM(compose(mkStreamRxChannel(rxClock, rxReset), add_base), clocked_by defaultClock, reset_by localReset);
+   Vector#(npi, StreamOutChannel) _streamchan <- genWithM(mkStreamOutChannel, clocked_by defaultClock, reset_by localReset);
+   Vector#(ntx, TxChannel) _txchan <- replicateM(mkTxChannel(txClock, txReset), clocked_by defaultClock, reset_by localReset);
 
    // processed metadata to stream pipeline
    //mapM_(mkTieOff, map(toPipeOut, meta_ff)); // for processing pipeline only experiment
@@ -110,8 +112,8 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    // drop streamed bytes on the floor
    // mkTieOff(_hostchan[0].writeClient.writeData);
 
-   Vector#(npi, StreamGearbox#(16, 32)) gearbox_up_16 <- replicateM(mkStreamGearboxUp());
-   Vector#(npi, StreamGearbox#(32, 64)) gearbox_up_32 <- replicateM(mkStreamGearboxUp());
+   Vector#(npi, StreamGearbox#(16, 32)) gearbox_up_16 <- replicateM(mkStreamGearboxUp_16_32, clocked_by defaultClock, reset_by localReset);
+   Vector#(npi, StreamGearbox#(32, 64)) gearbox_up_32 <- replicateM(mkStreamGearboxUp_32_64, clocked_by defaultClock, reset_by localReset);
    let write_clients = append(map(getWriteClient, _hostchan), map(getWriteClient, _rxchan));
    mapM(uncurry(mkConnection), zip(write_clients, map(getWriteServer, _streamchan)));
    mapM(uncurry(mkConnection), zip(map(getWriteClient, _streamchan), map(getDataIn, gearbox_up_16)));
@@ -120,21 +122,21 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    // DEBUG: sink after gearbox_up_32
    //mapM_(mkTieOff, map(getDataOut, gearbox_up_32));
 
-   Vector#(npi, PacketBuffer#(64)) input_queues <- mapM(mkPacketBuffer, genWith(sprintf("inputQ %h"))); // input queue
+   Vector#(npi, PacketBuffer#(64)) input_queues <- mapM(mkPacketBuffer_64, genWith(sprintf("inputQ %h")), clocked_by defaultClock, reset_by localReset); // input queue
    mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_up_32), map(getWriteData, input_queues))); // gearbox -> input queue
    mapM(uncurry(mkConnection), zip(map(getReadLen, input_queues), map(getReadReq, input_queues))); // immediate transmit, performance issue?
 
    messageM("Generate Crossbar with parameter: port=" + sprintf("%d", valueOf(cbn)));
-   XBar#(64) xbar <- mkXBar(valueOf(cblogn), destOf, mkMerge2x1_lru, valueOf(cblogn), 0); // last two parameters are log(size) and idx
+   XBar#(64) xbar <- mkXBar(valueOf(cblogn), destOf, mkMerge2x1_lru, valueOf(cblogn), 0, clocked_by defaultClock, reset_by localReset); // last two parameters are log(size) and idx
    Vector#(cbn, Put#(ByteStream#(64))) input_ports = toVector(xbar.input_ports);
    mapM(uncurry(mkConnection), zip(map(getReadData, input_queues), take(input_ports))); // input queue -> xbar,
 
-   Vector#(cbn, PacketBuffer#(64)) output_queues <- mapM(mkPacketBuffer, genWith(sprintf("outputQ %h"))); // output queue
+   Vector#(cbn, PacketBuffer#(64)) output_queues <- mapM(mkPacketBuffer_64, genWith(sprintf("outputQ %h")), clocked_by defaultClock, reset_by localReset); // output queue
    mapM(uncurry(mkConnection), zip(map(getReadLen, output_queues), map(getReadReq, output_queues))); // immediate transmit
 
    Vector#(cbn, Get#(ByteStream#(64))) outvec = toVector(xbar.output_ports);
-   Vector#(ntx, StreamGearbox#(64, 32)) gearbox_dn_32 <- replicateM(mkStreamGearboxDn());
-   Vector#(ntx, StreamGearbox#(32, 16)) gearbox_dn_16 <- replicateM(mkStreamGearboxDn());
+   Vector#(ntx, StreamGearbox#(64, 32)) gearbox_dn_32 <- replicateM(mkStreamGearboxDn_64_32, clocked_by defaultClock, reset_by localReset);
+   Vector#(ntx, StreamGearbox#(32, 16)) gearbox_dn_16 <- replicateM(mkStreamGearboxDn_32_16, clocked_by defaultClock, reset_by localReset);
    //mapM_(mkTieOff, outvec); // want to see which idx is going out of
    mapM(uncurry(mkConnection), zip(outvec, map(get_write_data, output_queues))); // xbar -> output queue
    mapM(uncurry(mkConnection), zip(map(getReadData, takeAt(`NUM_HOSTCHAN, output_queues)), map(getDataIn, gearbox_dn_32))); // output queue -> gearbox

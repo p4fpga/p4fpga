@@ -45,8 +45,11 @@ import SpecialFIFOs::*;
 import Stream::*;
 import TieOff::*;
 import Vector::*;
+import SynthBuilder::*;
+import ConnectalBram::*;
 `include "ConnectalProjectConfig.bsv"
 `include "Debug.defines"
+`include "SynthBuilder.defines"
 
 typedef struct {
    Bit#(PktAddrWidth) addr;
@@ -166,7 +169,7 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
    // Memory
    BRAM_Configure bramConfig = defaultValue;
    bramConfig.latency = 1;
-   BRAM2Port#(Bit#(PktAddrWidth), ByteStream#(n)) memBuffer <- mkBRAM2Server(bramConfig);
+   BRAM2Port#(Bit#(PktAddrWidth), ByteStream#(n)) memBuffer <- ConnectalBram::mkBRAM2Server(bramConfig);
 
    FIFO#(ByteStream#(n)) fifoWriteData <- mkFIFO;
    FIFOF#(Bit#(EtherLen)) fifoEop <- mkFIFOF;
@@ -283,4 +286,9 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
       cf_verbosity <= verbosity;
    endmethod
 endmodule
+
+`SynthBuildModule1(mkPacketBuffer, String, PacketBuffer#(8), mkPacketBuffer_8)
+`SynthBuildModule1(mkPacketBuffer, String, PacketBuffer#(16), mkPacketBuffer_16)
+`SynthBuildModule1(mkPacketBuffer, String, PacketBuffer#(64), mkPacketBuffer_64)
+
 endpackage: PacketBuffer

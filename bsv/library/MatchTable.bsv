@@ -20,23 +20,24 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-import FIFO::*;
-import FIFOF::*;
-import GetPut::*;
-import ClientServer::*;
-import StmtFSM::*;
-import Vector::*;
-import DefaultValue::*;
 import BRAM::*;
-import FShow::*;
-import Pipe::*;
-import StringUtils::*;
-import List::*;
-import PrintTrace::*;
-import DMHC::*;
-import SynthBuilder::*;
 import Bcam::*;
 import BcamTypes::*;
+import ClientServer::*;
+import ConnectalBram::*;
+import DMHC::*;
+import DefaultValue::*;
+import FIFO::*;
+import FIFOF::*;
+import FShow::*;
+import GetPut::*;
+import List::*;
+import Pipe::*;
+import PrintTrace::*;
+import StmtFSM::*;
+import StringUtils::*;
+import SynthBuilder::*;
+import Vector::*;
 
 `include "SynthBuilder.defines"
 `include "ConnectalProjectConfig.bsv"
@@ -181,7 +182,7 @@ module mkMatchTableSynth(MatchTable#(`BCAM, uniq, depth, keySz, actionSz))
 
    BRAM_Configure cfg = defaultValue;
    cfg.latency = 2;
-   BRAM2Port#(Bit#(depthSz), Bit#(actionSz)) ram <- mkBRAM2Server(cfg);
+   BRAM2Port#(Bit#(depthSz), Bit#(actionSz)) ram <- ConnectalBram::mkBRAM2Server(cfg);
 
    Reg#(Bit#(depthSz)) addrIdx <- mkReg(0);
 
