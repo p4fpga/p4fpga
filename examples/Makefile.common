@@ -43,8 +43,11 @@ CONNECTALFLAGS += -m $(P4FPGADIR)/bsv/library/AsymmetricBRAM/mem_model.c
 CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/bsv/
 CONNECTALFLAGS += --nocache
 CONNECTALFLAGS += --cxxflags=-std=c++11
+CONNECTALFLAGS += --bscflags="-no-warn-action-shadowing"
 
 CONNECTALFLAGS += -D ClockDefaultParam
+
+#CONNECTALFLAGS += -m matchtable_model.cpp
 
 # add path to questasim LIBRARY_PATH to link xsimtop.so with libstdc++ provided by questasim
 CONNECTALFLAGS += --cxxflags="-L\"/home/hwang/questasim/questa_sim/gcc-4.3.3-linux_x86_64/lib64\""
@@ -63,15 +66,15 @@ CONNECTALFLAGS += --verilog=$(P4FPGADIR)/bsv/AsymmetricBRAM
 PIN_TYPE = NfsumePins
 PIN_TYPE_INCLUDE = NfsumePins
 PIN_BINDINGS ?= LED:LED SFP:SFP SFPA:SFPA SFPB:SFPB SFPC:SFPC SFPD:SFPD
-PINOUT_FILE = $(SONICDIR)/boards/nfsume.json
+PINOUT_FILE = $(P4FPGADIR)/boards/nfsume.json
 CONNECTALFLAGS += -D XILINX_SYS_CLK
 CONNECTALFLAGS += --xci=$(IPDIR)/$(BOARD)/ten_gig_eth_mac_0/ten_gig_eth_mac_0.xci
 CONNECTALFLAGS += --xci=$(IPDIR)/$(BOARD)/ten_gig_eth_pcs_pma_shared/ten_gig_eth_pcs_pma_shared.xci
 CONNECTALFLAGS += --xci=$(IPDIR)/$(BOARD)/ten_gig_eth_pcs_pma_non_shared/ten_gig_eth_pcs_pma_non_shared.xci
 CONNECTALFLAGS += --constraint=timing_constraints.xdc --implconstraint=timing_constraints.xdc
 prebuild::
-	(cd $(BOARD); BUILDCACHE_CACHEDIR=$(BUILDCACHE_CACHEDIR) $(BUILDCACHE) vivado -notrace -mode batch -source $(SONICDIR)/hw/scripts/generate-mac.tcl)
-	(cd $(BOARD); BUILDCACHE_CACHEDIR=$(BUILDCACHE_CACHEDIR) $(BUILDCACHE) vivado -notrace -mode batch -source $(SONICDIR)/hw/scripts/connectal-synth-phy.tcl)
+	(cd $(BOARD); BUILDCACHE_CACHEDIR=$(BUILDCACHE_CACHEDIR) $(BUILDCACHE) vivado -notrace -mode batch -source $(P4FPGADIR)/bsv/scripts/generate-mac.tcl)
+	(cd $(BOARD); BUILDCACHE_CACHEDIR=$(BUILDCACHE_CACHEDIR) $(BUILDCACHE) vivado -notrace -mode batch -source $(P4FPGADIR)/bsv/scripts/connectal-synth-phy.tcl)
 endif
 
 run:

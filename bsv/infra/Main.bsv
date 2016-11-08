@@ -103,7 +103,7 @@ module mkMain #(HostInterface host, MainIndication indication, ConnectalMemory::
   // Port 9 is MetaGen
   // Generate parsed packet metadata to test p4 pipeline throughput
   messageM("Generating channel " + sprintf("%d", valueOf(metagen_offset)) + " :metadata generation");
-  MetaGenChannel metagen <- mkMetaGenChannel(valueOf(metagen_offset));
+  MetaGenChannel metagen <- mkMetaGenChannel();
   mkConnection(metagen.next, prog.prev[valueOf(metagen_offset)]);
 
   // return processed metadata to runtime

@@ -43,9 +43,10 @@ interface MetaGenChannel;
    method Action stop();
 endinterface
 
-module mkMetaGenChannel#(Integer id)(MetaGenChannel);
+(* synthesize *)
+module mkMetaGenChannel(MetaGenChannel);
    `PRINT_DEBUG_MSG
-   StreamInChannel host <- mkStreamInChannel(id);
+   StreamInChannel host <- mkStreamInChannel(255);
    Reg#(Bit#(32)) rg_iter <- mkReg(0);
    Reg#(Bit#(32)) rg_gap <- mkReg(1);
    Reg#(Bit#(32)) freq_cnt <- mkReg(0);
@@ -70,7 +71,7 @@ module mkMetaGenChannel#(Integer id)(MetaGenChannel);
 
    rule rl_send_metadata if (w_send_meta);
       let req = meta_in_ff.first;
-      req.meta.standard_metadata.ingress_port = tagged Valid fromInteger(id);
+      req.meta.standard_metadata.ingress_port = tagged Valid fromInteger(0); //FIXME: fake metadata goes to channel 0
       rg_iter <= rg_iter - 1;
       meta_out_ff.enq(req);
       $display("(%0d) enqueue iter=%d", $time, rg_iter);
