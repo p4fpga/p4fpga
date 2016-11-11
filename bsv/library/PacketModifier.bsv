@@ -75,7 +75,7 @@ module mkPacketModifier(PacketModifier);
    interface prev = toPipeIn(req_ff);
    method Action set_verbosity (int verbosity);
       cf_verbosity <= verbosity;
-//      deparser.set_verbosity(verbosity);
+      deparser.set_verbosity(verbosity);
       serializer.set_verbosity(verbosity);
    endmethod
 endmodule

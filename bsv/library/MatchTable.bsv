@@ -24,7 +24,7 @@ import BRAM::*;
 import Bcam::*;
 import BcamTypes::*;
 import ClientServer::*;
-import ConnectalBram::*;
+//import ConnectalBram::*;
 import DMHC::*;
 import DefaultValue::*;
 import FIFO::*;
@@ -182,7 +182,7 @@ module mkMatchTableSynth(MatchTable#(`BCAM, uniq, depth, keySz, actionSz))
 
    BRAM_Configure cfg = defaultValue;
    cfg.latency = 2;
-   BRAM2Port#(Bit#(depthSz), Bit#(actionSz)) ram <- ConnectalBram::mkBRAM2Server(cfg);
+   BRAM2Port#(Bit#(depthSz), Bit#(actionSz)) ram <- mkBRAM2Server(cfg);
 
    Reg#(Bit#(depthSz)) addrIdx <- mkReg(0);
 

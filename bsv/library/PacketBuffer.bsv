@@ -46,7 +46,7 @@ import Stream::*;
 import TieOff::*;
 import Vector::*;
 import SynthBuilder::*;
-import ConnectalBram::*;
+//import ConnectalBram::*;
 `include "ConnectalProjectConfig.bsv"
 `include "Debug.defines"
 `include "SynthBuilder.defines"
@@ -168,8 +168,9 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
 
    // Memory
    BRAM_Configure bramConfig = defaultValue;
-   bramConfig.latency = 1;
-   BRAM2Port#(Bit#(PktAddrWidth), ByteStream#(n)) memBuffer <- ConnectalBram::mkBRAM2Server(bramConfig);
+   //bramConfig.memorySize = 1024;
+   bramConfig.latency = 2;
+   BRAM2Port#(Bit#(PktAddrWidth), ByteStream#(n)) memBuffer <- mkBRAM2Server(bramConfig);
 
    FIFO#(ByteStream#(n)) fifoWriteData <- mkFIFO;
    FIFOF#(Bit#(EtherLen)) fifoEop <- mkFIFOF;
