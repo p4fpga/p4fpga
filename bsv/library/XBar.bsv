@@ -13,6 +13,8 @@ import Stream::*;
 import PrintTrace::*;
 import Printf::*;
 
+`include "SynthBuilder.defines"
+
 // ================================================================
 // Basic building block: a 2-to-1 merge
 

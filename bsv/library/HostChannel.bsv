@@ -50,6 +50,7 @@ interface HostChannel;
    method Action set_verbosity (int verbosity);
 endinterface
 
+(* synthesize *)
 module mkHostChannel(HostChannel);
    let verbose = True;
    FIFOF#(MetadataRequest) outReqFifo <- mkFIFOF;

@@ -218,10 +218,10 @@ module mkDeparser (Deparser);
         UInt#(NumBytes) n_bytes_used = countOnes(v.mask);
         UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
         move_buffered_amt(cExtend(n_bits_used));
-        dbprint(3, $format("Deparser rl_deparse_load shift_amt=%d ", rg_shift_amt, fshow(state), fshow(v)));
         if (v.sop) begin
           rg_sop <= True;
         end
+        dbprint(3, $format("Deparser rl_deparse_load shift_amt=%d ", rg_shift_amt, fshow(state), fshow(v)));
         data_in_ff.deq;
       endrule
     endrules);
@@ -285,11 +285,11 @@ module mkDeparser (Deparser);
     rg_processed <= rg_processed - 128;
     rg_beat <= rg_beat - 1;
     ByteStream#(16) beat = ByteStream { sop: rg_sop, eop: False, data: data, mask: 'hffff, user:0 };
-    $display("(%0d) stage3 cont ", $time, fshow(beat));
-    $display("(%0d) stage3 cont rg_shift_amt next = %d", $time, rg_shift_amt);
     if (rg_sop) begin
       rg_sop <= False;
     end
+    $display("(%0d) stage3 cont ", $time, fshow(beat));
+    $display("(%0d) stage3 cont rg_shift_amt next = %d", $time, rg_shift_amt);
     data_out_ff.enq(beat);
   endrule
 
@@ -301,10 +301,9 @@ module mkDeparser (Deparser);
     if (rg_sop) begin
       rg_sop <= False;
     end
-    $display("(%0d) stage3 end %h", $time, rg_stage3);
-    $display("(%0d) stage3 rg_processed %d", $time, rg_processed);
     deparsing <= False;
     stage3_ff.deq;
+    $display("(%0d) stage3 end %h rg_processed %d", $time, rg_stage3, rg_processed);
     data_out_ff.enq(beat);
   endrule
 
@@ -314,11 +313,11 @@ module mkDeparser (Deparser);
     deparse_done <= True;
     header_done <= False;
     rg_shift_amt <= 0;
-    dbprint(3, $format("Deparser:rl_completion len=%d %h", rg_shift_amt, rg_tmp));
+    Bit#(128) data = truncate(rg_tmp);
     Bit#(128) data_mask = create_mask(cExtend(rg_shift_amt));
     Bit#(16) mask_out = create_mask(cExtend(rg_shift_amt >> 3));
-    Bit#(128) data = truncate(rg_tmp);
     let beat = ByteStream { sop: False, eop: False, data: data, mask: mask_out, user:0 };
+    dbprint(3, $format("Deparser:rl_completion len=%d %h", rg_shift_amt, rg_tmp));
     dbprint(4, $format("Deparser:rl_completion ", fshow(beat)));
     data_out_ff.enq(beat);
  endrule

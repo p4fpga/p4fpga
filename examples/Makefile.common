@@ -44,6 +44,7 @@ CONNECTALFLAGS += --bsvpath=$(P4FPGADIR)/bsv/
 CONNECTALFLAGS += --nocache
 CONNECTALFLAGS += --cxxflags=-std=c++11
 CONNECTALFLAGS += --bscflags="-no-warn-action-shadowing"
+CONNECTALFLAGS += --verilog=$(P4FPGADIR)/bsv/verilog/
 
 CONNECTALFLAGS += -D ClockDefaultParam
 

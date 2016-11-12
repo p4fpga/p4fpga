@@ -36,6 +36,7 @@ import Printf::*;
 import Stream::*;
 import StreamGearbox::*;
 import XBar::*;
+import Vector::*;
 import SynthBuilder::*;
 `include "ConnectalProjectConfig.bsv"
 `include "Debug.defines"
@@ -47,7 +48,7 @@ typedef 512 DatapathWidth;
 typedef TDiv#(DatapathWidth, ChannelWidth) BusRatio;
 
 // FIXME: make this right
-function Bit#(32) destOf (ByteStream#(64) x);
+function Bit#(32) destOf (ByteStream#(n) x);
    // return egress_port in metadata
    return x.user;
    //return 2; //truncate(pack (x.data)) & 'hF;
@@ -127,18 +128,16 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    mapM(uncurry(mkConnection), zip(map(getReadLen, input_queues), map(getReadReq, input_queues))); // immediate transmit, performance issue?
 
    messageM("Generate Crossbar with parameter: port=" + sprintf("%d", valueOf(cbn)));
-   XBar#(64) xbar <- mkXBar(valueOf(cblogn), destOf, mkMerge2x1_lru, valueOf(cblogn), 0, clocked_by defaultClock, reset_by localReset); // last two parameters are log(size) and idx
-   Vector#(cbn, Put#(ByteStream#(64))) input_ports = toVector(xbar.input_ports);
-   mapM(uncurry(mkConnection), zip(map(getReadData, input_queues), take(input_ports))); // input queue -> xbar,
+   XBar_synth#(nrx, ntx, nhs, 64) xbar <- mkXBar_synth(); // last two parameters are log(size) and idx
+   mapM(uncurry(mkConnection), zip(map(getReadData, input_queues), take(xbar.input_ports))); // input queue -> xbar,
 
    Vector#(cbn, PacketBuffer#(64)) output_queues <- mapM(mkPacketBuffer_64, genWith(sprintf("outputQ %h")), clocked_by defaultClock, reset_by localReset); // output queue
    mapM(uncurry(mkConnection), zip(map(getReadLen, output_queues), map(getReadReq, output_queues))); // immediate transmit
 
-   Vector#(cbn, Get#(ByteStream#(64))) outvec = toVector(xbar.output_ports);
    Vector#(ntx, StreamGearbox#(64, 32)) gearbox_dn_32 <- replicateM(mkStreamGearboxDn_64_32, clocked_by defaultClock, reset_by localReset);
    Vector#(ntx, StreamGearbox#(32, 16)) gearbox_dn_16 <- replicateM(mkStreamGearboxDn_32_16, clocked_by defaultClock, reset_by localReset);
-   //mapM_(mkTieOff, outvec); // want to see which idx is going out of
-   mapM(uncurry(mkConnection), zip(outvec, map(get_write_data, output_queues))); // xbar -> output queue
+   //mapM_(mkTieOff, xbar.output_ports); // want to see which idx is going out of
+   mapM(uncurry(mkConnection), zip(xbar.output_ports, map(get_write_data, output_queues))); // xbar -> output queue
    mapM(uncurry(mkConnection), zip(map(getReadData, takeAt(`NUM_HOSTCHAN, output_queues)), map(getDataIn, gearbox_dn_32))); // output queue -> gearbox
 
    mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_dn_32), map(getDataIn, gearbox_dn_16)));
@@ -168,6 +167,20 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
 endmodule
 
 `SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(4, 4, 1), mkRuntime_4_4_1)
-`SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(6, 6, 1), mkRuntime_6_6_1)
+//`SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(6, 6, 1), mkRuntime_6_6_1)
 //`SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(10, 10, 1), mkRuntime_10_10_1)
+
+interface XBar_synth #(numeric type nrx, numeric type ntx, numeric type nhs, numeric type t);
+   interface Vector#(TExp#(TLog#(TAdd#(nrx, nhs))), Put#(ByteStream#(t))) input_ports;
+   interface Vector#(TExp#(TLog#(TAdd#(nrx, nhs))), Get#(ByteStream#(t))) output_ports;
+endinterface
+module mkXBar_synth(XBar_synth#(nrx, ntx, nhs, t))
+   provisos (NumAlias#(TLog#(TAdd#(nrx, nhs)), cblogn)
+            ,NumAlias#(TExp#(cblogn), cbn));
+   let _i <- mkXBar(valueOf(cblogn), destOf, mkMerge2x1_lru, valueOf(cblogn), 0);
+   interface input_ports = toVector(_i.input_ports);
+   interface output_ports = toVector(_i.output_ports);
+endmodule
+`SynthBuildModule(mkXBar_synth, XBar_synth#(4, 4, 1, 64), mkXBar_synth_64)
+
 endpackage

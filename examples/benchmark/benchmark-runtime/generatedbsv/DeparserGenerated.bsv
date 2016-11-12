@@ -31,11 +31,13 @@ function Action transit_next_state(MetadataT metadata);
     action
     let vec = nextDeparseState(metadata);
     if (vec == 0) begin
-        w_deparse_header_done.send();
+        header_done <= True;
+        dbprint(4, $format("Deparser:rl_deparse_header_done"));
     end
     else begin
         Bit#(2) nextHeader = truncate(pack(countZerosLSB(vec)% 3));
         DeparserState nextState = unpack(nextHeader);
+        dbprint(4, $format("Deparser next_state ", fshow(nextState)));
         case (nextState) matches
             StateDeparseEthernet: w_ethernet.send();
             StateDeparseIpv4: w_ipv4.send();
@@ -45,7 +47,7 @@ function Action transit_next_state(MetadataT metadata);
     endaction
 endfunction
 function MetadataT update_metadata(DeparserState state);
-    let metadata = meta[0];
+    let metadata = rg_metadata;
     case (state) matches
         StateDeparseEthernet :
             metadata.hdr.ethernet = updateState(metadata.hdr.ethernet, tagged StructDefines::NotPresent);
