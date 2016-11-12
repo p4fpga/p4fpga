@@ -128,7 +128,7 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    mapM(uncurry(mkConnection), zip(map(getReadLen, input_queues), map(getReadReq, input_queues))); // immediate transmit, performance issue?
 
    messageM("Generate Crossbar with parameter: port=" + sprintf("%d", valueOf(cbn)));
-   XBar_synth#(nrx, ntx, nhs, 64) xbar <- mkXBar_synth(); // last two parameters are log(size) and idx
+   XBar_synth#(nrx, ntx, nhs, 64) xbar <- mkXBar_synth(clocked_by defaultClock, reset_by localReset); // last two parameters are log(size) and idx
    mapM(uncurry(mkConnection), zip(map(getReadData, input_queues), take(xbar.input_ports))); // input queue -> xbar,
 
    Vector#(cbn, PacketBuffer#(64)) output_queues <- mapM(mkPacketBuffer_64, genWith(sprintf("outputQ %h")), clocked_by defaultClock, reset_by localReset); // output queue

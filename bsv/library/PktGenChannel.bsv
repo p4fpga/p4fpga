@@ -72,6 +72,7 @@ module mkPktGenChannel#(Clock txClock, Reset txReset, Integer id)(PktGenChannel)
 
    // PktGen operates at 250MHz, which should be faster than portal even after half the throughput by gearbox,
    // so we don't need a deep write_ff here
+   Reg#(Bool) started <- mkReg(False);
    FIFO#(ByteStream#(16)) write_ff <- mkFIFO; 
    StreamGearbox#(16, 8) gearbox <- mkStreamGearboxDn();
 
@@ -110,11 +111,13 @@ module mkPktGenChannel#(Clock txClock, Reset txReset, Integer id)(PktGenChannel)
       pktgen.set_verbosity(v);
    endrule
 
-   method Action start(Bit#(32) iter, Bit#(32) ipg);
+   method Action start(Bit#(32) iter, Bit#(32) ipg) if (!started);
       start_sync_ff.enq(tuple2(iter, ipg));
+      started <= True;
    endmethod
-   method Action stop ();
+   method Action stop () if (started);
       stop_sync_ff.enq(1'b1);
+      started <= False;
    endmethod
    interface writeData = toPut(write_ff);
    interface macTx = pktgen.writeClient.writeData;

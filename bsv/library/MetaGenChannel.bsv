@@ -47,19 +47,19 @@ endinterface
 module mkMetaGenChannel(MetaGenChannel);
    `PRINT_DEBUG_MSG
    StreamInChannel host <- mkStreamInChannel(255);
-   Reg#(Bit#(32)) rg_iter <- mkReg(0);
-   Reg#(Bit#(32)) rg_gap <- mkReg(1);
-   Reg#(Bit#(32)) freq_cnt <- mkReg(0);
-   Reg#(Bool) bstart <- mkReg(False);
+   Reg#(Bit#(20)) rg_iter <- mkReg(0);
+   Reg#(Bit#(20)) rg_gap <- mkReg(1);
+   Reg#(Bit#(20)) freq_cnt <- mkReg(0);
    PulseWire w_send_meta <- mkPulseWire;
    FIFOF#(MetadataRequest) meta_in_ff <- mkFIFOF;
    FIFOF#(MetadataRequest) meta_out_ff <- mkFIFOF;
+   FIFOF#(Bool) pktgen_running <- mkFIFOF;
 
    // drain packet
    mkTieOff(host.writeClient.writeData);
    mkConnection(toGet(host.next), toPut(meta_in_ff));
 
-   rule rl_freq_ctrl if (bstart && meta_in_ff.notEmpty);
+   rule rl_freq_ctrl if (meta_in_ff.notEmpty && pktgen_running.notEmpty());
       if (freq_cnt < rg_gap) begin
          freq_cnt <= freq_cnt + 1;
       end
@@ -75,25 +75,24 @@ module mkMetaGenChannel(MetaGenChannel);
       rg_iter <= rg_iter - 1;
       meta_out_ff.enq(req);
       $display("(%0d) enqueue iter=%d", $time, rg_iter);
-      if (rg_iter == 1) begin
+      if (rg_iter == 0) begin
          meta_in_ff.deq;
-         bstart <= False;
       end
    endrule
 
    // frequency N means send a metadata once every n cycles
-   method Action start(Bit#(32) iter, Bit#(32) freq);
+   method Action start(Bit#(32) iter, Bit#(32) freq) if (!pktgen_running.notEmpty());
       $display("(%0d) metagen start %d gap %d", $time, iter, freq);
-      rg_iter <= iter;
-      rg_gap <= freq;
-      bstart <= True;
+      rg_iter <= truncate(iter);
+      rg_gap <= truncate(freq);
+      pktgen_running.enq(True);
    endmethod
-   method Action stop();
+   method Action stop() if (pktgen_running.notEmpty());
       $display("(%0d) metagen stop", $time);
       rg_iter <= 0;
       rg_gap <= 0;
       freq_cnt <= 0;
-      bstart <= False;
+      pktgen_running.deq;
    endmethod
    interface writeData = host.writeServer.writeData;
    interface next = toPipeOut(meta_out_ff);

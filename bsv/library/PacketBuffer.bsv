@@ -148,6 +148,8 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
    `PRINT_DEBUG_MSG
    Clock current_clock <- exposeCurrentClock;
    Reset current_reset <- exposeCurrentReset;
+   Reset localReset <- mkSyncReset(2, current_reset, current_clock);
+
    // Mac
    Wire#(Bit#(64))              data        <- mkWire;
    Wire#(Bool)                  valid       <- mkWire;
@@ -182,7 +184,7 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
 
    FIFOF#(Bit#(EtherLen))    fifoLen     <- mkSizedFIFOF(16);
    FIFOF#(Bit#(EtherLen))    fifoReadReq <- mkSizedFIFOF(4);
-   FIFOF#(ByteStream#(n))    fifoReadData <- mkBypassFIFOF();
+   FIFOF#(ByteStream#(n))    fifoReadData <- mkSizedFIFOF(4);
 
    rule enq_stage1;
       ByteStream#(n) d <- toGet(fifoWriteData).get;

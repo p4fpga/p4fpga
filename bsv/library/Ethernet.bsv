@@ -37,7 +37,7 @@ typedef `NUMBER_OF_10G_PORTS NumPorts;
 typedef 4 NumPorts;
 `endif
 
-typedef 10   PktAddrWidth;
+typedef 8   PktAddrWidth;
 typedef 128  PktDataWidth;
 typedef 16   EtherLen; //14 bits is enough!
 

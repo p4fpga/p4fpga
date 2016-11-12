@@ -128,7 +128,7 @@ module mkPktGen#(Integer id)(PktGen)
    interface PktWriteClient writeClient;
        interface Get writeData = toGet(outgoing_fifo);
    endinterface
-   method Action start(Bit#(32) pc, Bit#(32) ipg) if (pktCount==0 && traceLen!=0);
+   method Action start(Bit#(32) pc, Bit#(32) ipg) if (pktCount==0 && traceLen!=0 && !infiniteLoop);
       started <= True;
       ipgCount <= ipg; // double idle amount because output rate is 10G
       if (pc != 0) begin
@@ -139,7 +139,7 @@ module mkPktGen#(Integer id)(PktGen)
          infiniteLoop <= True;
       end
    endmethod
-   method Action stop();
+   method Action stop() if (infiniteLoop);
       infiniteLoop <= False;
    endmethod
    method Action set_verbosity (int verbosity);
