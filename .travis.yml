@@ -20,12 +20,7 @@ env:
     - P4C=$PWD/../p4c
     - P4FPGA=$PWD
   matrix:
-    - CONNECTAL_TEST=$P4FPGA/examples/01-multiproto CONNECTAL_ARCH=bluesim
-    - CONNECTAL_TEST=$P4FPGA/examples/02-paxos-acceptor CONNECTAL_ARCH=bluesim
-    - CONNECTAL_TEST=$P4FPGA/examples/04-switch CONNECTAL_ARCH=bluesim
-    - CONNECTAL_TEST=$P4FPGA/examples/06-ntables CONNECTAL_ARCH=bluesim
-    - CONNECTAL_TEST=$P4FPGA/examples/07-mdp CONNECTAL_ARCH=bluesim
-    - CONNECTAL_TEST=$P4FPGA/examples/09-l2forwarding CONNECTAL_ARCH=bluesim
+    - CONNECTAL_TEST=$P4FPGA/examples/benchmark/benchmark-runtime CONNECTAL_ARCH=bluesim
 script:
 - ls Bluespec-2015.09.beta2
 - export PYTHONPATH=$PWD/scripts; cd $CONNECTAL; make scripts/syntax/parsetab.py;
