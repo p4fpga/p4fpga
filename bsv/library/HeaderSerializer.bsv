@@ -78,6 +78,7 @@ module mkHeaderSerializer(HeaderSerializer);
 
    Reg#(Bit#(PktDataWidth)) data_buffered <- mkReg(0);
    Reg#(Bit#(MaskWidth)) mask_buffered <- mkReg(0);
+   Reg#(Bool) sop_buffered <- mkReg(False);
    Reg#(UInt#(TAdd#(MaskSize, 1))) n_bytes_buffered <- mkReg(0);
    Reg#(UInt#(TAdd#(DataSize, 1))) n_bits_buffered <- mkReg(0);
 
@@ -93,8 +94,6 @@ module mkHeaderSerializer(HeaderSerializer);
    FIFOF#(Bool) send_last1_ff <- mkFIFOF;
 
    FIFOF#(ReqT) stage2_ff <- mkSizedFIFOF(4);
-
-   Array#(Reg#(Bool)) sop_buff <- mkCReg(2, False);
 
    rule rl_serialize_stage0;
       let v = data_in_ff.first;
@@ -141,10 +140,6 @@ module mkHeaderSerializer(HeaderSerializer);
       let total_bits = v.n_bits;
       let flit = v.flit;
 
-      if (flit.sop) begin
-         sop_buff[0] <= True;
-      end
-
       let req = ReqT {byte_shift: n_bytes_buffered, bit_shift: n_bits_buffered, flit: flit};
       stage2_ff.enq(req);
 
@@ -164,8 +159,8 @@ module mkHeaderSerializer(HeaderSerializer);
             send_last1_ff.enq(True);
          end
       end
-      dbprint(3, $format("HeaderSerializer:rl_serialize_stage1 maskwidth=%d buffered %d", fromInteger(valueOf(MaskWidth)), total_bytes));
-      dbprint(3, $format("HeaderSerializer:rl_serialize_stage1 ", fshow(data_in_ff.first)));
+      dbprint(3, $format("HeaderSerializer:rl_serialize_stage1 buffered %d", total_bytes));
+      dbprint(3, $format("HeaderSerializer:rl_serialize_stage1 ", fshow(v.flit)));
    endrule
 
    (* mutually_exclusive = "rl_send_full_frame, rl_buffer_partial_frame, rl_eop_full_frame, rl_eop_partial_frame" *)
@@ -183,11 +178,10 @@ module mkHeaderSerializer(HeaderSerializer);
       mask_buffered <= v.flit.mask >> n_bytes_used;
       // send flit
       ByteStream#(16) eth = defaultValue;
-      eth.sop = sop_buff[1];
+      eth.sop = sop_buffered;
       eth.eop = False;
       eth.mask = 'hffff;
       eth.data = data;
-      sop_buff[1] <= False;
       // set egress_port to stream
       eth.user = zeroExtend(egress_port);
       data_out_ff.enq(eth);
@@ -198,14 +192,17 @@ module mkHeaderSerializer(HeaderSerializer);
       let v = stage2_ff.first;
       stage2_ff.deq;
       buff_frame_ff.deq;
-      // shift and append
       let data = (v.flit.data << v.bit_shift) | data_buffered;
-      // shift and append
       let mask = (v.flit.mask << v.byte_shift) | mask_buffered;
-      // update buffered data
       data_buffered <= data;
-      // update buffered mask
       mask_buffered <= mask;
+      // Note: work okay with ethernet and 128-bit datapath
+      if (!sop_buffered && v.flit.sop) begin
+         sop_buffered <= True;
+      end
+      else begin
+         sop_buffered <= False;
+      end
       dbprint(3, $format("HeaderSerializer:rl_buffer_partial_frame "));
    endrule
 
