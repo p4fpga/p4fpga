@@ -30,6 +30,7 @@ import DefaultValue::*;
 import Ethernet::*;
 import EthMac::*;
 import GetPut::*;
+import FIFO::*;
 import FIFOF::*;
 import MemMgmt::*;
 import MemTypes::*;
@@ -65,6 +66,12 @@ typedef struct {
    ByteStream#(16) flit;
 } ReqT deriving (Bits);
 
+typedef struct {
+   UInt#(NumBytes) n_bytes;
+   UInt#(NumBits) n_bits;
+   ByteStream#(16) flit;
+} Stage0_t deriving (Bits);
+
 (* synthesize *)
 module mkHeaderSerializer(HeaderSerializer);
    `PRINT_DEBUG_MSG
@@ -78,14 +85,18 @@ module mkHeaderSerializer(HeaderSerializer);
    FIFOF#(ByteStream#(16)) data_out_ff <- mkSizedFIFOF(4);
    FIFOF#(EgressPort) meta_in_ff <- mkSizedFIFOF(16);
 
-   FIFOF#(ReqT) send_frame_ff <- mkFIFOF;
-   FIFOF#(ReqT) buff_frame_ff <- mkFIFOF;
-   FIFOF#(ReqT) send_last2_ff <- mkFIFOF;
-   FIFOF#(ReqT) send_last1_ff <- mkFIFOF;
+   FIFOF#(Stage0_t) stage0_ff <- mkFIFOF;
+
+   FIFOF#(Bool) send_frame_ff <- mkFIFOF;
+   FIFOF#(Bool) buff_frame_ff <- mkFIFOF;
+   FIFOF#(Bool) send_last2_ff <- mkFIFOF;
+   FIFOF#(Bool) send_last1_ff <- mkFIFOF;
+
+   FIFOF#(ReqT) stage2_ff <- mkSizedFIFOF(4);
 
    Array#(Reg#(Bool)) sop_buff <- mkCReg(2, False);
 
-   rule rl_serialize_stage1;
+   rule rl_serialize_stage0;
       let v = data_in_ff.first;
       data_in_ff.deq;
 
@@ -94,52 +105,73 @@ module mkHeaderSerializer(HeaderSerializer);
       let total_bytes = n_bytes_buffered + n_bytes_used;
       let total_bits = n_bits_buffered + n_bits_used;
 
-      if (v.sop) begin
-         sop_buff[0] <= True;
-      end
-
-      // keep track of n_bytes_used and n_bytes_buffered, and decide what to do next.
       if (!v.eop) begin
-         // new byte + existing byte more than one flit?
          if (total_bytes >= fromInteger(valueOf(MaskWidth))) begin
             $display("(%0d) send_frame %d ", $time, total_bytes);
-            let req = ReqT {byte_shift: n_bytes_buffered, bit_shift: n_bits_buffered, flit: v};
             n_bytes_buffered <= total_bytes - 16;
             n_bits_buffered <= total_bits - 128;
-            send_frame_ff.enq(req);
          end
          else begin
             $display("(%0d) buff_frame %d ", $time, total_bytes);
-            let req = ReqT {byte_shift: n_bytes_buffered, bit_shift: n_bits_buffered, flit: v};
             n_bytes_buffered <= total_bytes;
             n_bits_buffered <= total_bits;
-            buff_frame_ff.enq(req);
          end
       end
       else begin
          if (total_bytes >= fromInteger(valueOf(MaskWidth))) begin
             $display("(%0d) send_last2 %d ", $time, total_bytes);
-            let req = ReqT {byte_shift: n_bytes_buffered, bit_shift: n_bits_buffered, flit: v};
             n_bytes_buffered <= total_bytes - 16;
             n_bits_buffered <= total_bits - 128;
-            send_last2_ff.enq(req);
          end
          else begin
             $display("(%0d) send_last1 %d ", $time, total_bytes);
-            let req = ReqT {byte_shift: n_bytes_buffered, bit_shift: n_bits_buffered, flit: v};
             n_bytes_buffered <= 0;
             n_bits_buffered <= 0;
-            send_last1_ff.enq(req);
          end
       end
 
+      let req = Stage0_t {n_bytes: total_bytes, n_bits: total_bits, flit: v};
+      stage0_ff.enq(req);
+   endrule
+
+   rule rl_serialize_stage1;
+      let v = stage0_ff.first;
+      stage0_ff.deq;
+      let total_bytes = v.n_bytes;
+      let total_bits = v.n_bits;
+      let flit = v.flit;
+
+      if (flit.sop) begin
+         sop_buff[0] <= True;
+      end
+
+      let req = ReqT {byte_shift: n_bytes_buffered, bit_shift: n_bits_buffered, flit: flit};
+      stage2_ff.enq(req);
+
+      if (!flit.eop) begin
+         if (total_bytes >= fromInteger(valueOf(MaskWidth))) begin
+            send_frame_ff.enq(True);
+         end
+         else begin
+            buff_frame_ff.enq(True);
+         end
+      end
+      else begin
+         if (total_bytes >= fromInteger(valueOf(MaskWidth))) begin
+            send_last2_ff.enq(True);
+         end
+         else begin
+            send_last1_ff.enq(True);
+         end
+      end
       dbprint(3, $format("HeaderSerializer:rl_serialize_stage1 maskwidth=%d buffered %d", fromInteger(valueOf(MaskWidth)), total_bytes));
       dbprint(3, $format("HeaderSerializer:rl_serialize_stage1 ", fshow(data_in_ff.first)));
    endrule
 
    (* mutually_exclusive = "rl_send_full_frame, rl_buffer_partial_frame, rl_eop_full_frame, rl_eop_partial_frame" *)
-   rule rl_send_full_frame;
-      let v = send_frame_ff.first;
+   rule rl_send_full_frame if (send_frame_ff.notEmpty);
+      let v = stage2_ff.first;
+      stage2_ff.deq;
       send_frame_ff.deq;
       let egress_port = meta_in_ff.first;
       // shift data by n_bits_buffered and concat;
@@ -162,8 +194,9 @@ module mkHeaderSerializer(HeaderSerializer);
       dbprint(3, $format("HeaderSerializer:rl_send_full_frame ", fshow(eth)));
    endrule
 
-   rule rl_buffer_partial_frame;
-      let v = buff_frame_ff.first;
+   rule rl_buffer_partial_frame if (buff_frame_ff.notEmpty());
+      let v = stage2_ff.first;
+      stage2_ff.deq;
       buff_frame_ff.deq;
       // shift and append
       let data = (v.flit.data << v.bit_shift) | data_buffered;
@@ -177,8 +210,9 @@ module mkHeaderSerializer(HeaderSerializer);
    endrule
 
    // FIXME: there may be a bug here, when last beat has eop enabled and more than 16 bytes left to send.
-   rule rl_eop_full_frame;
-      let v = send_last2_ff.first;
+   rule rl_eop_full_frame if (send_last2_ff.notEmpty());
+      let v = stage2_ff.first;
+      stage2_ff.deq;
       send_last2_ff.deq;
       let egress_port = meta_in_ff.first;
       let data = v.flit.data << v.bit_shift | data_buffered; 
@@ -194,8 +228,9 @@ module mkHeaderSerializer(HeaderSerializer);
       meta_in_ff.deq;
    endrule
 
-   rule rl_eop_partial_frame;
-      let v = send_last1_ff.first;
+   rule rl_eop_partial_frame if (send_last1_ff.notEmpty());
+      let v = stage2_ff.first;
+      stage2_ff.deq;
       send_last1_ff.deq;
       let egress_port = meta_in_ff.first;
       let data = (v.flit.data << v.bit_shift) | data_buffered;
