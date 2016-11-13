@@ -25,7 +25,7 @@ script:
 - ls Bluespec-2015.09.beta2
 - export PYTHONPATH=$PWD/scripts; cd $CONNECTAL; make scripts/syntax/parsetab.py;
 #- cd $P4C; bash bootstrap.sh; ln -s extensions/c++ $P4FPGA/src; cd build; make -j8
-- export PATH=$PATH:$P4C/build/; cd $CONNECTAL_TEST; make build.$CONNECTAL_ARCH run.$CONNECTAL_ARCH
+- export PATH=$PATH:$P4C/build/; cd $CONNECTAL_TEST; make build.$CONNECTAL_ARCH -j4; make run.$CONNECTAL_ARCH 
 sudo: required
 dist: trusty
 os:
