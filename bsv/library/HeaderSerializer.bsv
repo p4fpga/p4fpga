@@ -67,8 +67,10 @@ typedef struct {
 } ReqT deriving (Bits);
 
 typedef struct {
-   UInt#(NumBytes) n_bytes;
-   UInt#(NumBits) n_bits;
+   UInt#(NumBytes) n_bytes_total;
+   UInt#(NumBits) n_bits_total;
+   UInt#(NumBytes) n_bytes_buffered;
+   UInt#(NumBits) n_bits_buffered;
    ByteStream#(16) flit;
 } Stage0_t deriving (Bits);
 
@@ -99,45 +101,51 @@ module mkHeaderSerializer(HeaderSerializer);
       let v = data_in_ff.first;
       data_in_ff.deq;
 
-      UInt#(NumBytes) n_bytes_used = countOnes(data_in_ff.first.mask);
-      UInt#(NumBits) n_bits_used = cExtend(n_bytes_used) << 3;
-      let total_bytes = n_bytes_buffered + n_bytes_used;
-      let total_bits = n_bits_buffered + n_bits_used;
+      // number of byte/bit recvd from deparser
+      UInt#(NumBytes) n_bytes_recvd = countOnes(data_in_ff.first.mask);
+      UInt#(NumBits) n_bits_recvd = cExtend(n_bytes_recvd) << 3;
+      // number of byte/bit in serializer to send
+      let n_bytes_total = n_bytes_buffered + n_bytes_recvd;
+      let n_bits_total = n_bits_buffered + n_bits_recvd;
 
       if (!v.eop) begin
-         if (total_bytes >= fromInteger(valueOf(MaskWidth))) begin
-            $display("(%0d) send_frame %d ", $time, total_bytes);
-            n_bytes_buffered <= total_bytes - 16;
-            n_bits_buffered <= total_bits - 128;
+         if (n_bytes_total >= fromInteger(valueOf(MaskWidth))) begin
+            $display("(%0d) send_frame %d ", $time, n_bytes_total);
+            n_bytes_buffered <= n_bytes_total - 16;
+            n_bits_buffered <= n_bits_total - 128;
          end
          else begin
-            $display("(%0d) buff_frame %d ", $time, total_bytes);
-            n_bytes_buffered <= total_bytes;
-            n_bits_buffered <= total_bits;
+            $display("(%0d) buff_frame %d ", $time, n_bytes_total);
+            n_bytes_buffered <= n_bytes_total;
+            n_bits_buffered <= n_bits_total;
          end
       end
       else begin
-         if (total_bytes >= fromInteger(valueOf(MaskWidth))) begin
-            $display("(%0d) send_last2 %d ", $time, total_bytes);
-            n_bytes_buffered <= total_bytes - 16;
-            n_bits_buffered <= total_bits - 128;
+         if (n_bytes_total >= fromInteger(valueOf(MaskWidth))) begin
+            $display("(%0d) send_last2 %d ", $time, n_bytes_total);
+            n_bytes_buffered <= n_bytes_total - 16;
+            n_bits_buffered <= n_bits_total - 128;
          end
          else begin
-            $display("(%0d) send_last1 %d ", $time, total_bytes);
+            $display("(%0d) send_last1 %d ", $time, n_bytes_total);
             n_bytes_buffered <= 0;
             n_bits_buffered <= 0;
          end
       end
 
-      let req = Stage0_t {n_bytes: total_bytes, n_bits: total_bits, flit: v};
+      let req = Stage0_t {n_bytes_total: n_bytes_total, n_bits_total: n_bits_total,
+                          n_bytes_buffered: n_bytes_buffered, n_bits_buffered: n_bits_buffered, flit: v};
       stage0_ff.enq(req);
    endrule
 
    rule rl_serialize_stage1;
       let v = stage0_ff.first;
       stage0_ff.deq;
-      let total_bytes = v.n_bytes;
-      let total_bits = v.n_bits;
+      // n_bytes_buffered contains updated value
+      let total_bytes = v.n_bytes_total;
+      let total_bits = v.n_bits_total;
+      let n_bytes_buffered = v.n_bytes_buffered;
+      let n_bits_buffered = v.n_bits_buffered;
       let flit = v.flit;
 
       let req = ReqT {byte_shift: n_bytes_buffered, bit_shift: n_bits_buffered, flit: flit};
@@ -170,6 +178,7 @@ module mkHeaderSerializer(HeaderSerializer);
       send_frame_ff.deq;
       let egress_port = meta_in_ff.first;
       // shift data by n_bits_buffered and concat;
+      dbprint(3, $format("HeaderSerializer:rl_send_full_frame %d %d", v.bit_shift, v.byte_shift));
       let data = v.flit.data << v.bit_shift | data_buffered;
       // update total byte buffered, 16 - xxx
       let n_bytes_used = fromInteger(valueOf(MaskWidth)) - v.byte_shift;
@@ -182,6 +191,9 @@ module mkHeaderSerializer(HeaderSerializer);
       eth.eop = False;
       eth.mask = 'hffff;
       eth.data = data;
+      if (sop_buffered) begin
+         sop_buffered <= False;
+      end
       // set egress_port to stream
       eth.user = zeroExtend(egress_port);
       data_out_ff.enq(eth);
@@ -194,6 +206,7 @@ module mkHeaderSerializer(HeaderSerializer);
       buff_frame_ff.deq;
       let data = (v.flit.data << v.bit_shift) | data_buffered;
       let mask = (v.flit.mask << v.byte_shift) | mask_buffered;
+      dbprint(3, $format("HeaderSerializer:rl_buffer_partial_frame %d %d", v.bit_shift, v.byte_shift));
       data_buffered <= data;
       mask_buffered <= mask;
       // Note: work okay with ethernet and 128-bit datapath
@@ -203,7 +216,7 @@ module mkHeaderSerializer(HeaderSerializer);
       else begin
          sop_buffered <= False;
       end
-      dbprint(3, $format("HeaderSerializer:rl_buffer_partial_frame "));
+      dbprint(3, $format("HeaderSerializer:rl_buffer_partial_frame ", fshow(data)));
    endrule
 
    // FIXME: there may be a bug here, when last beat has eop enabled and more than 16 bytes left to send.
