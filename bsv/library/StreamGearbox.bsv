@@ -24,6 +24,7 @@ import DefaultValue::*;
 import GetPut::*;
 import FIFO::*;
 import FIFOF::*;
+import BRAMFIFO::*;
 import Vector::*;
 import Stream::*;
 import Gearbox::*;
@@ -66,8 +67,8 @@ instance MkStreamGearboxUp#(n, m)
            ,Add#(1, b__, TLog#(TAdd#(1, n))));
    module mkStreamGearboxUp(StreamGearbox#(n, m));
       let verbose = False;
-      FIFOF#(ByteStream#(n)) in_ff <- mkSizedFIFOF(2);
-      FIFOF#(ByteStream#(m)) out_ff <- mkSizedFIFOF(2);
+      FIFOF#(ByteStream#(n)) in_ff <- mkFIFOF;
+      FIFOF#(ByteStream#(m)) out_ff <- mkFIFOF;
       Reg#(Bool) inProgress <- mkReg(False);
       Reg#(Bool) oddBeat    <- mkReg(True);
       Reg#(ByteStream#(n)) v_prev <- mkReg(defaultValue);
@@ -158,8 +159,8 @@ instance MkStreamGearboxDn#(n, m) provisos(Mul#(m, 2, n));
       let clock <- exposeCurrentClock();
       let reset <- exposeCurrentReset();
 
-      FIFO#(ByteStream#(n)) in_ff <- mkFIFO;
-      FIFO#(ByteStream#(m)) out_ff <- mkFIFO;
+      FIFOF#(ByteStream#(n)) in_ff <- mkFIFOF;
+      FIFOF#(ByteStream#(m)) out_ff <- mkFIFOF;
       Gearbox#(2, 1, ByteStream#(m)) fifoTxData <- mkNto1Gearbox(clock, reset, clock, reset);
 
       function Vector#(2, ByteStream#(m)) split(ByteStream#(n) in);
