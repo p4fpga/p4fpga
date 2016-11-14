@@ -51,10 +51,9 @@ module mkParser(Parser);
    PulseWire w_parse_done <- mkPulseWire();
    PulseWire w_parse_header_done <- mkPulseWireOR();
    PulseWire w_load_header <- mkPulseWireOR();
-   Array#(Reg#(Bit#(10))) rg_next_header_len <- mkCReg(3, 0);
-   Array#(Reg#(Bit#(10))) rg_buffered <- mkCReg(3, 0);
-   Array#(Reg#(Bit#(512))) rg_tmp <- mkCReg(2, 0);
-
+   Reg#(Bit#(512)) rg_tmp <- mkReg(0);
+   Array#(Reg#(Bit#(10))) rg_next_header_len <- mkCReg(2, 0);
+   Array#(Reg#(Bit#(10))) rg_buffered <- mkCReg(2, 0);
    Array#(Reg#(Maybe#(void))) data_in_tmp <- mkCReg(2, tagged Invalid);
 
    `define PARSER_STATE
@@ -70,12 +69,6 @@ module mkParser(Parser);
    function Action fetch_next_header0(Bit#(10) len);
      action
        rg_next_header_len[0] <= len;
-       w_parse_header_done.send();
-     endaction
-   endfunction
-   function Action fetch_next_header1(Bit#(10) len);
-     action
-       rg_next_header_len[1] <= len;
        w_parse_header_done.send();
      endaction
    endfunction
@@ -98,9 +91,9 @@ module mkParser(Parser);
    `include "ParserGenerated.bsv"
    `undef PARSER_FUNCTION
 
-   rule rl_data_ff_load if ((!parse_done[1] && rg_buffered[1] < rg_next_header_len[2]) && (w_parse_header_done || w_load_header));
+   rule rl_data_ff_load if ((!parse_done[1] && rg_buffered[1] < rg_next_header_len[1]) && (w_parse_header_done || w_load_header));
       data_in_tmp[1] <= tagged Valid;
-      dbprint(4, $format("Parser dequeue data %d %d", rg_buffered[1], rg_next_header_len[2]));
+      dbprint(4, $format("Parser dequeue data %d %d", rg_buffered[1], rg_next_header_len[1]));
    endrule
 
    rule rl_start_state_deq if (parse_done[1] && sop_this_cycle && !w_parse_header_done);
@@ -132,8 +125,8 @@ module mkParser(Parser);
             if (isValid(data_in_tmp[0])) begin
                data_in_tmp[0] <= tagged Invalid;
                data_in_ff.deq;
-               let data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp[0];
-               rg_tmp[0] <= zeroExtend(data);
+               let data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp;
+               rg_tmp <= zeroExtend(data);
                move_shift_amt(128);
                dbprint(4, $format("Parser State %h buffered %d, %h, %h", parse_state_ff.first, rg_buffered[0], data_this_cycle, data));
             end
@@ -167,15 +160,15 @@ module mkParser(Parser);
          rule rl_extract if ((parse_state_ff.first == state) && (rg_buffered[0] >= len));
             // load data_in_ff in Valid
             // process data_in_ff in next cycle
-            let data = rg_tmp[0];
+            let data = rg_tmp;
             if (isValid(data_in_tmp[0])) begin
                data_in_tmp[0] <= tagged Invalid;
                data_in_ff.deq;
-               data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp[0];
+               data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp;
             end
             dbprint(4, $format("Parser State %h buffered %d, %h, %h", parse_state_ff.first, rg_buffered[0], data_this_cycle, data));
             extract_header(state, data);
-            rg_tmp[0] <= zeroExtend(data >> len);
+            rg_tmp <= zeroExtend(data >> len);
             succeed_and_next(len);
             parse_state_ff.deq;
          endrule
