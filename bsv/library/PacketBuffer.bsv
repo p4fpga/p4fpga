@@ -183,8 +183,8 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
    Reg#(Bool)                   outPacket   <- mkReg(False);
 
    FIFOF#(Bit#(EtherLen))    fifoLen     <- mkSizedFIFOF(16);
-   FIFOF#(Bit#(EtherLen))    fifoReadReq <- mkSizedFIFOF(4);
-   FIFOF#(ByteStream#(n))    fifoReadData <- mkSizedFIFOF(4);
+   FIFOF#(Bit#(EtherLen))    fifoReadReq <- mkFIFOF;
+   FIFOF#(ByteStream#(n))    fifoReadData <- mkFIFOF;
 
    rule enq_stage1;
       ByteStream#(n) d <- toGet(fifoWriteData).get;

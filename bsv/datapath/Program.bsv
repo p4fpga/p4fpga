@@ -89,6 +89,7 @@ module mkProgram(Program#(nrx, ntx, nhs, nextra))
 `include "ProgDeclGenerated.bsv"
 endmodule
 
+`SynthBuildModule(mkProgram, Program#(1,1,1,2), mkProgram_1_1_1_2)
 `SynthBuildModule(mkProgram, Program#(4,4,1,2), mkProgram_4_4_1_2)
 `SynthBuildModule(mkProgram, Program#(4,4,1,5), mkProgram_4_4_1_5)
 `SynthBuildModule(mkProgram, Program#(6,6,1,7), mkProgram_6_6_1_7)
