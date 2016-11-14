@@ -22,8 +22,8 @@ interface Board;
    interface Clock rxClock;
    interface Reset rxReset;
 `ifdef BOARD_nfsume
-   interface Vector#(4, Put#(ByteStream#(8))) packet_tx;
-   interface Vector#(4, Get#(ByteStream#(8))) packet_rx;
+   interface Vector#(`NUM_TXCHAN, Put#(ByteStream#(8))) packet_tx;
+   interface Vector#(`NUM_TXCHAN, Get#(ByteStream#(8))) packet_rx;
    interface `PinType pins;
 `endif
 endinterface
@@ -39,11 +39,18 @@ module mkBoard#(Clock hostClock)(Board);
   Reset _txReset <- mkSyncReset(2, defaultReset, _txClock);
   Clock _rxClock = _txClock;
   Reset _rxReset = _txReset;
-  Vector#(4, EthMacIfc) mac <- replicateM(mkEthMac(mgmtClock, _txClock, _txReset, clocked_by _txClock, reset_by _txReset));
+  Vector#(`NUM_TXCHAN, EthMacIfc) mac <- replicateM(mkEthMac(mgmtClock, _txClock, _txReset, clocked_by _txClock, reset_by _txReset));
   function Get#(XGMIIData) getTx(EthMacIfc _mac); return _mac.tx; endfunction
   function Put#(XGMIIData) getRx(EthMacIfc _mac); return _mac.rx; endfunction
-  mapM(uncurry(mkConnection), zip(map(getTx, mac), phys.tx));
-  mapM(uncurry(mkConnection), zip(phys.rx, map(getRx, mac)));
+
+  for (Integer i=0; i<`NUM_TXCHAN; i=i+1) begin
+    mkConnection(mac[i].tx, phys.tx[i]);
+    mkConnection(phys.rx[i], mac[i].rx);
+  end
+
+  //mapM(uncurry(mkConnection), zip(map(getTx, mac), phys.tx));
+  //mapM(uncurry(mkConnection), zip(phys.rx, map(getRx, mac)));
+
   NfsumeLeds leds <- mkNfsumeLeds(mgmtClock, _txClock);
   NfsumeSfpCtrl sfpctrl <- mkNfsumeSfpCtrl(phys);
   `endif
