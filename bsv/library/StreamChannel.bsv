@@ -102,7 +102,7 @@ interface StreamOutChannel;
    interface PktWriteServer#(16) writeServer;
    interface PipeIn#(MetadataRequest) prev;
    interface PipeOut#(ByteStream#(16)) writeClient;
-   method Action set_verbosity (int verbosity);
+   interface PipeIn#(int) verbose;
 endinterface
 
 instance GetWriteServer#(StreamOutChannel);
@@ -127,13 +127,14 @@ endinstance
 instance SetVerbosity#(StreamOutChannel);
    function Action set_verbosity(StreamOutChannel t, int verbosity);
       action
-         t.set_verbosity(verbosity);
+         t.verbose.enq(verbosity);
       endaction
    endfunction
 endinstance
 
 module mkStreamOutChannel#(Integer id)(StreamOutChannel);
    `PRINT_DEBUG_MSG
+   FIFOF#(int) verbose_ff <- mkFIFOF;
    FIFOF#(MetadataRequest) meta_ff <- mkFIFOF;
    StoreAndFwdBuffer pktBuff <- mkStoreAndFwdBuffer(id);
    PacketModifier modifier <- mkPacketModifier();
@@ -150,17 +151,17 @@ module mkStreamOutChannel#(Integer id)(StreamOutChannel);
       dbprint(3, $format("initiate transmit packet id=%d", id));
    endrule
 
-   rule set_verbose (cf_verbosity > 0);
-      pktBuff.set_verbosity(cf_verbosity);
-      modifier.set_verbosity(cf_verbosity);
+   rule set_verbose if (verbose_ff.notEmpty);
+      let v = verbose_ff.first;
+      verbose_ff.deq;
+      pktBuff.set_verbosity(v);
+      modifier.set_verbosity(v);
    endrule
 
    interface prev = toPipeIn(meta_ff);
    interface writeServer= pktBuff.writeServer;
    interface writeClient = modifier.writeClient;
-   method Action set_verbosity (int verbosity);
-      cf_verbosity <= verbosity;
-   endmethod
+   interface verbose = toPipeIn(verbose_ff);
 endmodule
 
 // Streaming version of HostChannel
@@ -168,7 +169,7 @@ interface StreamInChannel;
    interface PktWriteServer#(16) writeServer;
    interface PktWriteClient#(16) writeClient;
    interface PipeOut#(MetadataRequest) next;
-   method Action set_verbosity (int verbosity);
+   interface PipeIn#(int) verbose;
 endinterface
 
 instance GetWriteClient#(StreamInChannel);
@@ -180,13 +181,14 @@ endinstance
 instance SetVerbosity#(StreamInChannel);
    function Action set_verbosity(StreamInChannel t, int verbosity);
       action
-         t.set_verbosity(verbosity);
+         t.verbose.enq(verbosity);
       endaction
    endfunction
 endinstance
 
 module mkStreamInChannel#(Integer id)(StreamInChannel);
    `PRINT_DEBUG_MSG
+   FIFOF#(int) verbose_ff <- mkFIFOF;
    FIFOF#(MetadataRequest) outReqFifo <- mkFIFOF;
 
    // RingBuffer Read Client
@@ -238,9 +240,11 @@ module mkStreamInChannel#(Integer id)(StreamInChannel);
       dbprint(3, $format("send packet ingress %d ", id, fshow(meta)));
    endrule
 
-   rule set_verbose (cf_verbosity > 0);
-      parser.set_verbosity(cf_verbosity);
-      pktBuff.set_verbosity(cf_verbosity);
+   rule set_verbose if (verbose_ff.notEmpty);
+      let v = verbose_ff.first;
+      verbose_ff.deq;
+      parser.set_verbosity(v);
+      pktBuff.set_verbosity(v);
    endrule
 
    interface writeServer = pktBuff.writeServer;
@@ -248,16 +252,14 @@ module mkStreamInChannel#(Integer id)(StreamInChannel);
       interface writeData = toGet(writeDataFifo);
    endinterface);
    interface next = toPipeOut(outReqFifo);
-   method Action set_verbosity (int verbosity);
-      cf_verbosity <= verbosity;
-   endmethod
+   interface verbose = toPipeIn(verbose_ff);
 endmodule
 
 interface StreamRxChannel;
    interface Put#(ByteStream#(8)) macRx;
    interface PktWriteClient#(16) writeClient;
    interface PipeOut#(MetadataRequest) next;
-   method Action set_verbosity (int verbosity);
+   interface PipeIn#(int) verbose;
 endinterface
 
 instance GetWriteClient#(StreamRxChannel);
@@ -275,7 +277,7 @@ endinstance
 instance SetVerbosity#(StreamRxChannel);
    function Action set_verbosity(StreamRxChannel t, int verbosity);
       action
-         t.set_verbosity(verbosity);
+         t.verbose.enq(verbosity);
       endaction
    endfunction
 endinstance
@@ -283,18 +285,19 @@ endinstance
 // Streaming version of RxChannel
 module mkStreamRxChannel#(Clock rxClock, Reset rxReset, Integer id)(StreamRxChannel);
    `PRINT_DEBUG_MSG
+   FIFOF#(int) verbose_ff <- mkFIFOF;
    StreamInChannel hostchan <- mkStreamInChannel(id);
    StoreAndFwdFromMacToRing macToRing <- mkStoreAndFwdFromMacToRing(rxClock, rxReset);
    mkConnection(macToRing.writeClient, hostchan.writeServer);
 
-   rule set_verbose (cf_verbosity > 0);
-      hostchan.set_verbosity(cf_verbosity);
+   rule set_verbose if (verbose_ff.notEmpty);
+      let v = verbose_ff.first;
+      verbose_ff.deq;
+      cf_verbosity <= v;
    endrule
 
    interface macRx = macToRing.macRx;
    interface writeClient = hostchan.writeClient;
    interface next = hostchan.next;
-   method Action set_verbosity (int verbosity);
-      cf_verbosity <= verbosity;
-   endmethod
+   interface verbose = toPipeIn(verbose_ff);
 endmodule

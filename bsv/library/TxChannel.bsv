@@ -37,7 +37,7 @@ import `TYPEDEF::*;
 interface TxChannel;
    interface PktWriteServer#(16) writeServer;
    interface Get#(ByteStream#(8)) macTx;
-   method Action set_verbosity (int verbosity);
+   interface PipeIn#(int) verbose;
 endinterface
 
 instance GetMacTx#(TxChannel);
@@ -55,7 +55,7 @@ endinstance
 instance SetVerbosity#(TxChannel);
    function Action set_verbosity(TxChannel t, int verbosity);
       action
-         t.set_verbosity(verbosity);
+         t.verbose.enq(verbosity);
       endaction
    endfunction
 endinstance
@@ -63,15 +63,14 @@ endinstance
 // Tx Channel
 module mkTxChannel#(Clock txClock, Reset txReset)(TxChannel);
    `PRINT_DEBUG_MSG
+   FIFOF#(int) verbose_ff <- mkFIFOF;
    PacketBuffer#(16) pktBuff <- mkPacketBuffer_16("txchan");
    StoreAndFwdFromRingToMac ringToMac <- mkStoreAndFwdFromRingToMac(txClock, txReset);
    mkConnection(ringToMac.readClient, pktBuff.readServer);
 
    interface writeServer= pktBuff.writeServer;
    interface macTx = ringToMac.macTx;
-   method Action set_verbosity (int verbosity);
-      cf_verbosity <= verbosity;
-   endmethod
+   interface verbose = toPipeIn(verbose_ff);
 endmodule
 
 

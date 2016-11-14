@@ -47,11 +47,9 @@ import SynthBuilder::*;
 typedef 512 DatapathWidth;
 typedef TDiv#(DatapathWidth, ChannelWidth) BusRatio;
 
-// FIXME: make this right
 function Bit#(32) destOf (ByteStream#(n) x);
    // return egress_port in metadata
    return x.user;
-   //return 2; //truncate(pack (x.data)) & 'hF;
 endfunction
 
 /*
@@ -81,8 +79,11 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
            ,Add#(TAdd#(nrx, rx_offset), a__, TExp#(TLog#(TAdd#(nrx, rx_offset))))
            ,Add#(ntx, b__, TExp#(TLog#(TAdd#(nrx, rx_offset))))
            ); 
+   let defaultClock <- exposeCurrentClock();
+   let defaultReset <- exposeCurrentReset();
+   Reset localReset <- mkSyncReset(2, defaultReset, defaultClock);
 
-   Vector#(npi, FIFOF#(MetadataRequest)) meta_ff <- replicateM(mkFIFOF);
+   Vector#(npi, FIFOF#(MetadataRequest)) meta_ff <- replicateM(mkFIFOF, clocked_by defaultClock, reset_by localReset);
    function PipeIn#(MetadataRequest) metaPipeIn(Integer i);
       return toPipeIn(meta_ff[i]);
    endfunction
@@ -95,10 +96,6 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    function Put#(ByteStream#(64)) get_write_data(PacketBuffer#(64) buff);
       return buff.writeServer.writeData;
    endfunction
-
-   let defaultClock <- exposeCurrentClock();
-   let defaultReset <- exposeCurrentReset();
-   Reset localReset <- mkSyncReset(2, defaultReset, defaultClock);
 
    function Integer add_base (Integer j) = (valueOf(nhs) + j);
    Vector#(nhs, StreamInChannel) _hostchan <- genWithM(mkStreamInChannel, clocked_by defaultClock, reset_by localReset);
@@ -166,6 +163,7 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    endmethod
 endmodule
 
+`SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(1, 1, 1), mkRuntime_1_1_1)
 `SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(4, 4, 1), mkRuntime_4_4_1)
 //`SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(6, 6, 1), mkRuntime_6_6_1)
 //`SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(10, 10, 1), mkRuntime_10_10_1)
