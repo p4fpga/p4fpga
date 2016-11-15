@@ -31,7 +31,7 @@ function Action transit_next_state(MetadataT metadata);
     action
     let vec = nextDeparseState(metadata);
     if (vec == 0) begin
-        w_deparse_header_done.send();
+        header_done <= True;
     end
     else begin
         Bit#(2) nextHeader = truncate(pack(countZerosLSB(vec)% 3));
@@ -45,7 +45,7 @@ function Action transit_next_state(MetadataT metadata);
     endaction
 endfunction
 function MetadataT update_metadata(DeparserState state);
-    let metadata = meta[0];
+    let metadata = rg_metadata;
     case (state) matches
         StateDeparseEthernet :
             metadata.hdr.ethernet = updateState(metadata.hdr.ethernet, tagged StructDefines::NotPresent);
