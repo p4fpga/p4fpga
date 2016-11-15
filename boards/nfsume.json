@@ -1,0 +1,158 @@
+{
+	"leds[0]": {
+		"LED": "LED[0]"
+	},
+	"leds[1]": {
+		"LED": "LED[1]"
+	},
+    "sfp_refclk_p": {
+        "SFP": "SFP_REFCLK_P"
+    },
+    "sfp_refclk_n": {
+        "SFP": "SFP_REFCLK_N"
+    },
+    "serial_rx_p_v[0]": {
+        "SFPA": "ETH1_RX_p"
+    },
+    "serial_rx_n_v[0]": {
+        "SFPA": "ETH1_RX_n"
+    },
+    "serial_rx_p_v[1]": {
+        "SFPB": "ETH2_RX_p"
+    },
+    "serial_rx_n_v[1]": {
+        "SFPB": "ETH2_RX_n"
+    },
+    "serial_rx_p_v[2]": {
+        "SFPC": "ETH3_RX_p"
+    },
+    "serial_rx_n_v[2]": {
+        "SFPC": "ETH3_RX_n"
+    },
+    "serial_rx_p_v[3]": {
+        "SFPD": "ETH4_RX_p"
+    },
+    "serial_rx_n_v[3]": {
+        "SFPD": "ETH4_RX_n"
+    },
+    "serial_tx_p[0]": {
+        "SFPA": "ETH1_TX_p"
+    },
+    "serial_tx_n[0]": {
+        "SFPA": "ETH1_TX_n"
+    },
+    "serial_tx_p[1]": {
+        "SFPB": "ETH2_TX_p"
+    },
+    "serial_tx_n[1]": {
+        "SFPB": "ETH2_TX_n"
+    },
+    "serial_tx_p[2]": {
+        "SFPC": "ETH3_TX_p"
+    },
+    "serial_tx_n[2]": {
+        "SFPC": "ETH3_TX_n"
+    },
+    "serial_tx_p[3]": {
+        "SFPD": "ETH4_TX_p"
+    },
+    "serial_tx_n[3]": {
+        "SFPD": "ETH4_TX_n"
+    },
+    "sfpctrl_mod0_presnt_n_v[0]": {
+        "SFPA": "ETH1_MOD_DETECT"
+    },
+    "sfpctrl_mod0_presnt_n_v[1]": {
+        "SFPB": "ETH2_MOD_DETECT"
+    },
+    "sfpctrl_mod0_presnt_n_v[2]": {
+        "SFPC": "ETH3_MOD_DETECT"
+    },
+    "sfpctrl_mod0_presnt_n_v[3]": {
+        "SFPD": "ETH4_MOD_DETECT"
+    },
+    "sfpctrl_txdisable[0]": {
+        "SFPA": "ETH1_TX_DISABLE"
+    },
+    "sfpctrl_txdisable[1]": {
+        "SFPB": "ETH2_TX_DISABLE"
+    },
+    "sfpctrl_txdisable[2]": {
+        "SFPC": "ETH3_TX_DISABLE"
+    },
+    "sfpctrl_txdisable[3]": {
+        "SFPD": "ETH4_TX_DISABLE"
+    },
+    "sfpctrl_txfault_v[0]": {
+        "SFPA": "ETH1_TX_FAULT"
+    },
+    "sfpctrl_txfault_v[1]": {
+        "SFPB": "ETH2_TX_FAULT"
+    },
+    "sfpctrl_txfault_v[2]": {
+        "SFPC": "ETH3_TX_FAULT"
+    },
+    "sfpctrl_txfault_v[3]": {
+        "SFPD": "ETH4_TX_FAULT"
+    },
+    "sfpctrl_los_v[0]": {
+        "SFPA": "ETH1_RX_LOS"
+    },
+    "sfpctrl_los_v[1]": {
+        "SFPB": "ETH2_RX_LOS"
+    },
+    "sfpctrl_los_v[2]": {
+        "SFPC": "ETH3_RX_LOS"
+    },
+    "sfpctrl_los_v[3]": {
+        "SFPD": "ETH4_RX_LOS"
+    },
+    "sfpctrl_ratesel0[0]":{
+        "SFPA": "ETH1_RS[0]"
+    },
+    "sfpctrl_ratesel0[1]":{
+        "SFPB": "ETH2_RS[0]"
+    },
+    "sfpctrl_ratesel0[2]":{
+        "SFPC": "ETH3_RS[0]"
+    },
+    "sfpctrl_ratesel0[3]":{
+        "SFPD": "ETH4_RS[0]"
+    },
+    "sfpctrl_ratesel1[0]":{
+        "SFPA": "ETH1_RS[1]"
+    },
+    "sfpctrl_ratesel1[1]":{
+        "SFPB": "ETH2_RS[1]"
+    },
+    "sfpctrl_ratesel1[2]":{
+        "SFPC": "ETH3_RS[1]"
+    },
+    "sfpctrl_ratesel1[3]":{
+        "SFPD": "ETH4_RS[1]"
+    },
+    "led_grn[0]": {
+        "SFPA": "ETH1_LED[0]"
+    },
+    "led_grn[1]": {
+        "SFPB": "ETH2_LED[0]"
+    },
+    "led_grn[2]": {
+        "SFPC": "ETH3_LED[0]"
+    },
+    "led_grn[3]": {
+        "SFPD": "ETH4_LED[0]"
+    },
+    "led_ylw[0]": {
+        "SFPA": "ETH1_LED[1]"
+    },
+    "led_ylw[1]": {
+        "SFPB": "ETH2_LED[1]"
+    },
+    "led_ylw[2]": {
+        "SFPC": "ETH3_LED[1]"
+    },
+    "led_ylw[3]": {
+        "SFPD": "ETH4_LED[1]"
+    }
+}
