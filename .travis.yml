@@ -21,6 +21,8 @@ env:
     - P4FPGA=$PWD
   matrix:
     - CONNECTAL_TEST=$P4FPGA/examples/benchmark/benchmark-runtime CONNECTAL_ARCH=bluesim
+    - CONNECTAL_TEST=$P4FPGA/examples/benchmark/benchmark-parser CONNECTAL_ARCH=bluesim
+    - CONNECTAL_TEST=$P4FPGA/examples/benchmark/benchmark-mdp CONNECTAL_ARCH=bluesim
 script:
 - ls Bluespec-2015.09.beta2
 - export PYTHONPATH=$PWD/scripts; cd $CONNECTAL; make scripts/syntax/parsetab.py;
