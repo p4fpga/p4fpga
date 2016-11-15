@@ -1,27 +1,28 @@
 `include "ConnectalProjectConfig.bsv"
-import FIFO::*;
 import BuildVector::*;
+import Channel::*;
 import Clocks::*;
 import Connectable::*;
+import ConnectalTypes::*;
+import Control::*;
+import DbgDefs::*;
 import DefaultValue::*;
 import Ethernet::*;
+import FIFO::*;
 import GetPut::*;
-import PacketBuffer::*;
 import HostChannel::*;
-import TxChannel::*;
-import StreamChannel::*;
-import Stream::*;
-import Vector::*;
-import Control::*;
-import ConnectalTypes::*;
-import PktGenChannel::*;
-import PktCapChannel::*;
 import MetaGenChannel::*;
-import DbgDefs::*;
-import Runtime::*;
+import PacketBuffer::*;
+import Pipe::*;
+import PktCapChannel::*;
+import PktGenChannel::*;
 import Program::*;
+import Runtime::*;
+import Stream::*;
+import StreamChannel::*;
 import StructDefines::*;
-import Channel::*;
+import TxChannel::*;
+import Vector::*;
 
 interface MainRequest;
   method Action read_version();
@@ -82,7 +83,7 @@ module mkMainAPI #(MainIndication indication,
     endmethod
     method Action writePacketData (Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
        ByteStream#(16) beat = buildByteStream(data, mask, sop, eop);
-       runtime.hostchan[0].writeServer.writeData.put(beat);
+       runtime.hostchan[0].writeServer.enq(beat);
        $display("write data ", fshow(beat));
     endmethod
     // packet gen/cap interfaces
@@ -96,7 +97,7 @@ module mkMainAPI #(MainIndication indication,
     // metadata gen interface
     method Action writeMetaGenData(Vector#(2, Bit#(64)) data, Vector#(2, Bit#(8)) mask, Bit#(1) sop, Bit#(1) eop);
        ByteStream#(16) beat = buildByteStream(data, mask, sop, eop);
-       metagen.writeData.put(beat);
+       metagen.writeData.enq(beat);
     endmethod
     method Action pktgen_start (Bit#(32) iter, Bit#(32) ipg, Bit#(32) inst);
        rg_iter <= iter;

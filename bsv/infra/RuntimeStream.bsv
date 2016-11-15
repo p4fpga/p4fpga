@@ -94,7 +94,7 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    `PRINT_DEBUG_MSG
 
    function Put#(ByteStream#(64)) get_write_data(PacketBuffer#(64) buff);
-      return buff.writeServer.writeData;
+      return toPut(buff.writeServer);
    endfunction
 
    function Integer add_base (Integer j) = (valueOf(nhs) + j);
@@ -138,7 +138,11 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    mapM(uncurry(mkConnection), zip(map(getReadData, takeAt(`NUM_HOSTCHAN, output_queues)), map(getDataIn, gearbox_dn_32))); // output queue -> gearbox
 
    mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_dn_32), map(getDataIn, gearbox_dn_16)));
-   mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_dn_16), map(getWriteServer, _txchan)));
+   //mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_dn_16), map(getWriteServer, _txchan)));
+
+   for (Integer i=0; i<valueOf(ntx); i=i+1) begin
+      mkConnection(gearbox_dn_16[i].dataout, toPut(_txchan[i].writeServer));
+   end
 
    // forward packet to any of these ports will be dropped
    mkTieOff(output_queues[0].readServer.readData);
@@ -164,6 +168,7 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
 endmodule
 
 `SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(1, 1, 1), mkRuntime_1_1_1)
+`SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(2, 2, 1), mkRuntime_2_2_1)
 `SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(4, 4, 1), mkRuntime_4_4_1)
 //`SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(6, 6, 1), mkRuntime_6_6_1)
 //`SynthBuildModule4(mkRuntime, Clock, Reset, Clock, Reset, Runtime#(10, 10, 1), mkRuntime_10_10_1)

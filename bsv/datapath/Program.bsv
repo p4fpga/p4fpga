@@ -90,8 +90,9 @@ module mkProgram(Program#(nrx, ntx, nhs, nextra))
 endmodule
 
 `SynthBuildModule(mkProgram, Program#(1,1,1,2), mkProgram_1_1_1_2)
+`SynthBuildModule(mkProgram, Program#(2,2,1,3), mkProgram_2_2_1_3)
 `SynthBuildModule(mkProgram, Program#(4,4,1,2), mkProgram_4_4_1_2)
 `SynthBuildModule(mkProgram, Program#(4,4,1,5), mkProgram_4_4_1_5)
-`SynthBuildModule(mkProgram, Program#(6,6,1,7), mkProgram_6_6_1_7)
+//`SynthBuildModule(mkProgram, Program#(6,6,1,7), mkProgram_6_6_1_7)
 //`SynthBuildModule(mkProgram, Program#(10,10,1,11), mkProgram_10_10_1_11)
 

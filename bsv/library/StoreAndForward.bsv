@@ -398,7 +398,7 @@ module mkStoreAndFwdFromRingToMac#(Clock txClock, Reset txReset)(StoreAndFwdFrom
 endmodule
 
 interface StoreAndFwdFromMacToRing;
-   interface PktWriteClient#(16) writeClient;
+   interface PipeOut#(ByteStream#(16)) writeClient;
    interface Put#(ByteStream#(8)) macRx;
    method ThruDbgRec sdbg;
 endinterface
@@ -431,9 +431,7 @@ module mkStoreAndFwdFromMacToRing#(Clock rxClock, Reset rxReset)(StoreAndFwdFrom
       end
    endrule
 
-   interface PktWriteClient writeClient;
-      interface writeData = toGet(writeDataFifo);
-   endinterface
+   interface writeClient = toPipeOut(writeDataFifo);
    interface macRx = gearbox.datain;
    method ThruDbgRec sdbg;
       return ThruDbgRec {data_bytes: gearbox.getDataCount(),

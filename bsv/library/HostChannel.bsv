@@ -41,7 +41,7 @@ import `PARSER::*;
 import `TYPEDEF::*;
 
 interface HostChannel;
-   interface PktWriteServer#(16) writeServer;
+   interface PipeIn#(ByteStream#(16)) writeServer;
    interface MemWriteClient#(`DataBusWidth) writeClient;
    interface MemAllocClient mallocClient;
    interface PipeOut#(MetadataRequest) next;

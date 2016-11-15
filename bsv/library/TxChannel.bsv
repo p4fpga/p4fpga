@@ -35,7 +35,7 @@ import `TYPEDEF::*;
 
 // FIXME:
 interface TxChannel;
-   interface PktWriteServer#(16) writeServer;
+   interface PipeIn#(ByteStream#(16)) writeServer;
    interface Get#(ByteStream#(8)) macTx;
    interface PipeIn#(int) verbose;
 endinterface
@@ -48,7 +48,7 @@ endinstance
 
 instance GetWriteServer#(TxChannel);
    function Put#(ByteStream#(16)) getWriteServer(TxChannel chan);
-      return chan.writeServer.writeData;
+      return toPut(chan.writeServer);
    endfunction
 endinstance
 
@@ -64,11 +64,11 @@ endinstance
 module mkTxChannel#(Clock txClock, Reset txReset)(TxChannel);
    `PRINT_DEBUG_MSG
    FIFOF#(int) verbose_ff <- mkFIFOF;
-   PacketBuffer#(16) pktBuff <- mkPacketBuffer_16("txchan");
+   PacketBuffer#(16) pktBuff <- mkPacketBuffer("txchan");
    StoreAndFwdFromRingToMac ringToMac <- mkStoreAndFwdFromRingToMac(txClock, txReset);
    mkConnection(ringToMac.readClient, pktBuff.readServer);
 
-   interface writeServer= pktBuff.writeServer;
+   interface writeServer = pktBuff.writeServer;
    interface macTx = ringToMac.macTx;
    interface verbose = toPipeIn(verbose_ff);
 endmodule

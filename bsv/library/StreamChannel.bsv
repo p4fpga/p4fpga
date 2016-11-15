@@ -35,33 +35,25 @@ import `DEPARSER::*;
 import `TYPEDEF::*;
 `include "Debug.defines"
 
-function PktWriteClient#(16) toWriteClient(FIFO#(ByteStream#(16)) fifo);
-   PktWriteClient#(16) writeClient = (interface PktWriteClient;
-      interface writeData = toGet(fifo);
-   endinterface);
-   return writeClient;
-endfunction
-
 interface StoreAndFwdBuffer;
-   interface PktWriteServer#(16) writeServer;
+   interface PipeIn#(ByteStream#(16)) writeServer;
    interface PipeIn#(MetadataRequest) prev;
-   interface PktWriteClient#(16) writeClient;
+   interface PipeOut#(ByteStream#(16)) writeClient;
    method Action set_verbosity (int verbosity);
 endinterface
 
 module mkStoreAndFwdBuffer#(Integer id)(StoreAndFwdBuffer);
    `PRINT_DEBUG_MSG
-
    String msg = sprintf("store&fwd %d", id);
    FIFOF#(MetadataRequest) meta_ff <- mkFIFOF;
 
    PacketBuffer#(16) pktBuff <- mkPacketBuffer_16(msg);
 
    // RingBuffer Read Client
-   FIFO#(ByteStream#(16)) readDataFifo <- mkFIFO;
-   FIFO#(Bit#(EtherLen)) readLenFifo <- mkFIFO;
-   FIFO#(Bit#(EtherLen)) readReqFifo <- mkFIFO;
-   FIFO#(ByteStream#(16)) writeDataFifo <- mkFIFO;
+   FIFOF#(ByteStream#(16)) readDataFifo <- mkFIFOF;
+   FIFOF#(Bit#(EtherLen)) readLenFifo <- mkFIFOF;
+   FIFOF#(Bit#(EtherLen)) readReqFifo <- mkFIFOF;
+   FIFOF#(ByteStream#(16)) writeDataFifo <- mkFIFOF;
    Reg#(Bool) readStarted <- mkReg(False);
 
    PktReadClient#(16) readClient = (interface PktReadClient;
@@ -92,14 +84,14 @@ module mkStoreAndFwdBuffer#(Integer id)(StoreAndFwdBuffer);
 
    interface prev = toPipeIn(meta_ff);
    interface writeServer= pktBuff.writeServer;
-   interface writeClient = toWriteClient(writeDataFifo);
+   interface writeClient = toPipeOut(writeDataFifo);
    method Action set_verbosity (int verbosity);
       cf_verbosity <= verbosity;
    endmethod
 endmodule
 
 interface StreamOutChannel;
-   interface PktWriteServer#(16) writeServer;
+   interface PipeIn#(ByteStream#(16)) writeServer;
    interface PipeIn#(MetadataRequest) prev;
    interface PipeOut#(ByteStream#(16)) writeClient;
    interface PipeIn#(int) verbose;
@@ -107,7 +99,7 @@ endinterface
 
 instance GetWriteServer#(StreamOutChannel);
    function Put#(ByteStream#(16)) getWriteServer(StreamOutChannel chan);
-      return chan.writeServer.writeData;
+      return toPut(chan.writeServer);
    endfunction
 endinstance
 
@@ -140,7 +132,7 @@ module mkStreamOutChannel#(Integer id)(StreamOutChannel);
    PacketModifier modifier <- mkPacketModifier();
 
    rule pkt_buff_to_modifier;
-      let v <- toGet(pktBuff.writeClient.writeData).get;
+      let v <- toGet(pktBuff.writeClient).get;
       modifier.writeServer.enq(v);
    endrule
 
@@ -166,15 +158,15 @@ endmodule
 
 // Streaming version of HostChannel
 interface StreamInChannel;
-   interface PktWriteServer#(16) writeServer;
-   interface PktWriteClient#(16) writeClient;
+   interface PipeIn#(ByteStream#(16)) writeServer;
+   interface PipeOut#(ByteStream#(16)) writeClient;
    interface PipeOut#(MetadataRequest) next;
    interface PipeIn#(int) verbose;
 endinterface
 
 instance GetWriteClient#(StreamInChannel);
    function Get#(ByteStream#(16)) getWriteClient(StreamInChannel chan);
-      return chan.writeClient.writeData;
+      return toGet(chan.writeClient);
    endfunction
 endinstance
 
@@ -192,12 +184,12 @@ module mkStreamInChannel#(Integer id)(StreamInChannel);
    FIFOF#(MetadataRequest) outReqFifo <- mkFIFOF;
 
    // RingBuffer Read Client
-   FIFO#(ByteStream#(16)) readDataFifo <- mkFIFO;
-   FIFO#(Bit#(EtherLen)) readLenFifo <- mkFIFO;
-   FIFO#(Bit#(EtherLen)) readReqFifo <- mkFIFO;
-   FIFO#(ByteStream#(16)) writeDataFifo <- mkFIFO;
+   FIFOF#(ByteStream#(16)) readDataFifo <- mkFIFOF;
+   FIFOF#(Bit#(EtherLen)) readLenFifo <- mkFIFOF;
+   FIFOF#(Bit#(EtherLen)) readReqFifo <- mkFIFOF;
+   FIFOF#(ByteStream#(16)) writeDataFifo <- mkFIFOF;
+   FIFOF#(Bit#(EtherLen)) pktLenFifo <- mkFIFOF;
    Reg#(Bool) readStarted <- mkReg(False);
-   FIFO#(Bit#(EtherLen)) pktLenFifo <- mkFIFO;
 
    PacketBuffer#(16) pktBuff <- mkPacketBuffer_16("streamIn channel");
    Parser parser <- mkParser();
@@ -248,23 +240,21 @@ module mkStreamInChannel#(Integer id)(StreamInChannel);
    endrule
 
    interface writeServer = pktBuff.writeServer;
-   interface writeClient = (interface PktWriteClient;
-      interface writeData = toGet(writeDataFifo);
-   endinterface);
+   interface writeClient = toPipeOut(writeDataFifo);
    interface next = toPipeOut(outReqFifo);
    interface verbose = toPipeIn(verbose_ff);
 endmodule
 
 interface StreamRxChannel;
    interface Put#(ByteStream#(8)) macRx;
-   interface PktWriteClient#(16) writeClient;
+   interface PipeOut#(ByteStream#(16)) writeClient;
    interface PipeOut#(MetadataRequest) next;
    interface PipeIn#(int) verbose;
 endinterface
 
 instance GetWriteClient#(StreamRxChannel);
    function Get#(ByteStream#(16)) getWriteClient(StreamRxChannel chan);
-      return chan.writeClient.writeData;
+      return toGet(chan.writeClient);
    endfunction
 endinstance
 

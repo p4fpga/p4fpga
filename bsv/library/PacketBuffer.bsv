@@ -86,7 +86,7 @@ interface PktReadServer#(numeric type n);
 endinterface
 
 interface PacketBuffer#(numeric type n);
-   interface PktWriteServer#(n) writeServer;
+   interface PipeIn#(ByteStream#(n)) writeServer;
    interface PktReadServer#(n) readServer;
    method PktBuffDbgRec dbg;
    method Action set_verbosity (int verbosity);
@@ -138,7 +138,7 @@ endtypeclass
 
 instance WriteServer#(n);
    function Put#(ByteStream#(n)) getWriteData(PacketBuffer#(n) buff);
-      return buff.writeServer.writeData;
+      return toPut(buff.writeServer);
    endfunction
 endinstance
 
@@ -174,7 +174,7 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
    bramConfig.latency = 2;
    BRAM2Port#(Bit#(PktAddrWidth), ByteStream#(n)) memBuffer <- mkBRAM2Server(bramConfig);
 
-   FIFO#(ByteStream#(n)) fifoWriteData <- mkFIFO;
+   FIFOF#(ByteStream#(n)) fifoWriteData <- mkFIFOF;
    FIFOF#(Bit#(EtherLen)) fifoEop <- mkFIFOF;
    FIFO#(ReqT#(n)) incomingReqs     <- mkFIFO;
 
@@ -254,14 +254,7 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
    endrule
 
    // Big-endianess
-   interface PktWriteServer writeServer;
-      interface Put writeData;
-         method Action put(ByteStream#(n) d);
-            dbprint(3, $format("%s writeData : Packet data ", msg, fshow(d)));
-            fifoWriteData.enq(d);
-         endmethod
-      endinterface
-   endinterface
+   interface writeServer = toPipeIn(fifoWriteData);
    interface PktReadServer readServer;
       interface Get readData;
          method ActionValue#(ByteStream#(n)) get if (fifoReadData.notEmpty);

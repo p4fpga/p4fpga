@@ -80,8 +80,14 @@ module mkMain #(HostInterface host, MainIndication indication, ConnectalMemory::
   //Runtime#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) runtime <- mkRuntime_6_6_1(rxClock, rxReset, txClock, txReset);
   //Program#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN, naux) prog <- mkProgram_6_6_1_7();
  
-  Runtime#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) runtime <- mkRuntime_4_4_1(rxClock, rxReset, txClock, txReset);
-  Program#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN, naux) prog <- mkProgram_4_4_1_5();
+  // Runtime#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) runtime <- mkRuntime_4_4_1(rxClock, rxReset, txClock, txReset);
+  // Program#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN, naux) prog <- mkProgram_4_4_1_5();
+
+  //Runtime#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) runtime <- mkRuntime_1_1_1(rxClock, rxReset, txClock, txReset);
+  //Program#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN, naux) prog <- mkProgram_1_1_1_2;
+
+  Runtime#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN) runtime <- mkRuntime(rxClock, rxReset, txClock, txReset);
+  Program#(`NUM_RXCHAN, `NUM_TXCHAN, `NUM_HOSTCHAN, naux) prog <- mkProgram;
 
   // Port 0 is HostChan
   for (Integer i=0; i<`NUM_HOSTCHAN; i=i+1) begin

@@ -20,6 +20,8 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+package PktGenChannel;
+
 import Clocks::*;
 import Connectable::*;
 import Channel::*;
@@ -40,6 +42,8 @@ import SpecialFIFOs ::*;
 import Stream::*;
 import StreamGearbox::*;
 import Deparser::*;
+
+`include "SynthBuilder.defines"
 
 // Encapsulate a packet generator inside a channel
 interface PktGenChannel;
@@ -126,3 +130,11 @@ module mkPktGenChannel#(Clock txClock, Reset txReset, Integer id)(PktGenChannel)
    endmethod
 endmodule
 
+module mkPktGenChannel_synth_#(Clock txClock, Reset txReset)(PktGenChannel);
+   (* hide *) let _i <- mkPktGenChannel(txClock, txReset, 0);
+   return _i;
+endmodule
+
+//`SynthBuildModule2(mkPktGenChannel_synth_, Clock, Reset, PktGenChannel, mkPktGenChannel_synth)
+
+endpackage

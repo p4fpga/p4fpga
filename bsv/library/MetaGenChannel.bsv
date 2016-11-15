@@ -37,7 +37,7 @@ import TieOff::*;
 // Metadata Repeater to repeatedly generate multiple identical metadata from one
 // default behavior is to repeat exactly once
 interface MetaGenChannel;
-   interface Put#(ByteStream#(16)) writeData;
+   interface PipeIn#(ByteStream#(16)) writeData;
    interface PipeOut#(MetadataRequest) next;
    method Action start (Bit#(32) iter, Bit#(32) ipg);
    method Action stop();
@@ -56,7 +56,10 @@ module mkMetaGenChannel(MetaGenChannel);
    FIFOF#(Bool) pktgen_running <- mkFIFOF;
 
    // drain packet
-   mkTieOff(host.writeClient.writeData);
+   rule rl_drain_writeClient;
+      let v <- toGet(host.writeClient).get;
+   endrule
+
    mkConnection(toGet(host.next), toPut(meta_in_ff));
 
    rule rl_freq_ctrl if (meta_in_ff.notEmpty && pktgen_running.notEmpty());
@@ -94,6 +97,6 @@ module mkMetaGenChannel(MetaGenChannel);
       freq_cnt <= 0;
       pktgen_running.deq;
    endmethod
-   interface writeData = host.writeServer.writeData;
+   interface writeData = host.writeServer;
    interface next = toPipeOut(meta_out_ff);
 endmodule

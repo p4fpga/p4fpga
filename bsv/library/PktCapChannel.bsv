@@ -83,7 +83,7 @@ module mkPktCapChannel#(Clock rxClock, Reset rxReset)(PktCapChannel);
    SyncFIFOIfc#(Bit#(1)) pktCapStopSyncFifo <- mkSyncFIFO(4, defaultClock, defaultReset, rxClock);
 
    rule pkt_sink;
-      let v <- macToRing.writeClient.writeData.get;
+      let v <- toGet(macToRing.writeClient).get;
       pkt_sop <= v.sop;
       if (v.sop) begin
          pktCnt <= pktCnt + 1;

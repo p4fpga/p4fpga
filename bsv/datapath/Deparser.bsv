@@ -25,7 +25,7 @@ import Library::*;
 `include "ConnectalProjectConfig.bsv"
 `include "Debug.defines"
 
-`define BuffWidth 512
+`define BuffWidth 256
 
 // app-specific structs
 `define DEPARSER_STRUCT
@@ -110,7 +110,7 @@ module mkDeparser (Deparser);
    Reg#(Bit#(10)) rg_buffered <- mkReg(0); // number of bytes buffered in rg_tmp
    Reg#(Bit#(10)) rg_processed <- mkReg(0); // number of bytes in current header that have been sent.
    Reg#(Bit#(10)) rg_shift_amt <- mkReg(0); // number of bytes to shift to append new bytes to rg_tmp
-   Reg#(Bit#(512)) rg_tmp <- mkReg(0);
+   Reg#(Bit#(`BuffWidth)) rg_tmp <- mkReg(0);
    Reg#(Bit#(128)) eoh_mask <- mkReg(0); // mask for end of header
    Reg#(Bool) rg_sop <- mkReg(False);
    Reg#(Bool) rg_eop <- mkReg(False);
@@ -132,7 +132,7 @@ module mkDeparser (Deparser);
    let sop_this_cycle = data_in_ff.first.sop;
    let eop_this_cycle = data_in_ff.first.eop;
    let data_this_cycle = data_in_ff.first.data;
-   function Action report_deparse_action(String msg, Bit#(10) buffered, Bit#(10) processed, Bit#(10) shift, Bit#(512) data);
+   function Action report_deparse_action(String msg, Bit#(10) buffered, Bit#(10) processed, Bit#(10) shift, Bit#(`BuffWidth) data);
     action
       if (cf_verbosity > 0) begin
         $display("(%0d) Deparser:report_deparse_action %s buffered %d %d %d data %h", $time, msg, buffered, processed, shift, data);
