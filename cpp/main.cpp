@@ -299,7 +299,7 @@ int main(int argc, char **argv)
       device->metagen_start(tracelen, meta_gap);
     }
 
-    sleep(3000);
+    sleep(30);
 
     device->read_pktcap_perf_info();
     return 0;
