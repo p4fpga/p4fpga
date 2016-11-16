@@ -210,7 +210,7 @@ void FPGADeparser::emitStates() {
   builder->append_line("let vec = nextDeparseState(metadata);");
   builder->append_line("if (vec == 0) begin");
   builder->incr_indent();
-  builder->append_line("w_deparse_header_done.send();");
+  builder->append_line("header_done <= True;");
   builder->decr_indent();
   builder->append_line("end");
   builder->append_line("else begin");
@@ -236,7 +236,7 @@ void FPGADeparser::emitStates() {
   // Function: update_metadata
   builder->append_line("function MetadataT update_metadata(DeparserState state);");
   builder->incr_indent();
-  builder->append_line("let metadata = meta[0];");
+  builder->append_line("let metadata = rg_metadata;");
   builder->append_line("case (state) matches");
   builder->incr_indent();
   for (auto s : states) {
