@@ -46,6 +46,7 @@ module mkParser(Parser);
    `PRINT_DEBUG_MSG
    Reg#(Bool) parse_done[2] <- mkCReg(2, True);
    FIFO#(ParserState) parse_state_ff <- mkPipelineFIFO();
+   FIFOF#(Maybe#(Bit#(128))) data_ff <- mkDFIFOF(tagged Invalid);
    FIFOF#(ByteStream#(16)) data_in_ff <- mkFIFOF;
    FIFOF#(MetadataT) meta_in_ff <- mkFIFOF;
    PulseWire w_parse_done <- mkPulseWire();
@@ -72,6 +73,12 @@ module mkParser(Parser);
        w_parse_header_done.send();
      endaction
    endfunction
+   function Action fetch_next_header1(Bit#(10) len);
+     action
+       rg_next_header_len[1] <= len;
+       w_parse_header_done.send();
+     endaction
+   endfunction
    function Action move_shift_amt(Bit#(10) len);
      action
        rg_buffered[0] <= rg_buffered[0] + len;
@@ -81,6 +88,13 @@ module mkParser(Parser);
    function Action failed_and_trap(Bit#(10) offset);
      action
        rg_buffered[0] <= 0;
+     endaction
+   endfunction
+   function Action report_parse_action(ParserState state, Bit#(10) offset, Bit#(128) data, Bit#(512) buff);
+     action
+       if (cf_verbosity > 3) begin
+         $display("(%0d) Parser State %h buffered %d, %h, %h", $time, state, offset, data, buff);
+       end
      endaction
    endfunction
    let sop_this_cycle = data_in_ff.first.sop;
@@ -116,6 +130,7 @@ module mkParser(Parser);
       delay_ff.enq(?);
    endrule
 
+`ifndef MDP
    function Rules genLoadRule (ParserState state, Integer i);
       let len = fromInteger(i);
       return (rules 
@@ -176,12 +191,15 @@ module mkParser(Parser);
    endfunction
 
    List#(Rules) parse_fsm = List::nil;
+`endif
 
    `define PARSER_RULES
    `include "ParserGenerated.bsv"
    `undef PARSER_RULES
 
+`ifndef MDP
    Empty fsmrl <- addRules(foldl(rJoin, emptyRules, fsmRules));
+`endif
 
    interface frameIn = toPut(data_in_ff);
    interface meta = toGet(meta_in_ff);
