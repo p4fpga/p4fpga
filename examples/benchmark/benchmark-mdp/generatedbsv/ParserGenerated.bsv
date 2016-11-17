@@ -154,25 +154,25 @@ rule rl_start_parse_ethernet if ((w_start_parse_ethernet));
 endrule
 (* fire_when_enabled *)
 rule rl_parse_ethernet_load if ((parse_state_ff.first == StateParseEthernet) && (rg_buffered[0] < 112));
-  report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+  report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp);
   if (isValid(data_ff.first)) begin
     data_ff.deq;
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
+    let data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp;
+    rg_tmp <= zeroExtend(data);
     move_shift_amt(128);
   end
 endrule
 (* fire_when_enabled *)
 rule rl_parse_ethernet_extract if ((parse_state_ff.first == StateParseEthernet) && (rg_buffered[0] >= 112));
-  let data = rg_tmp[0];
+  let data = rg_tmp;
   if (isValid(data_ff.first)) begin
     data_ff.deq;
-    data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+    data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp;
   end
   report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
   let ethernet = extract_ethernet_t(truncate(data));
   compute_next_state_parse_ethernet(ethernet.etherType);
-  rg_tmp[0] <= zeroExtend(data >> 112);
+  rg_tmp <= zeroExtend(data >> 112);
   succeed_and_next(112);
   dbprint(4, $format("extract %s", "parse_ethernet"));
   dbprint(4, $format(fshow(ethernet)));
@@ -192,25 +192,25 @@ rule rl_parse_ethernet_start if ((w_parse_ethernet_start));
 endrule
 (* fire_when_enabled *)
 rule rl_parse_ipv4_load if ((parse_state_ff.first == StateParseIpv4) && (rg_buffered[0] < 160));
-  report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+  report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp);
   if (isValid(data_ff.first)) begin
     data_ff.deq;
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
+    let data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp;
+    rg_tmp <= zeroExtend(data);
     move_shift_amt(128);
   end
 endrule
 (* fire_when_enabled *)
 rule rl_parse_ipv4_extract if ((parse_state_ff.first == StateParseIpv4) && (rg_buffered[0] >= 160));
-  let data = rg_tmp[0];
+  let data = rg_tmp;
   if (isValid(data_ff.first)) begin
     data_ff.deq;
-    data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+    data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp;
   end
   report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
   let ipv4 = extract_ipv4_t(truncate(data));
   compute_next_state_parse_ipv4(ipv4.protocol);
-  rg_tmp[0] <= zeroExtend(data >> 160);
+  rg_tmp <= zeroExtend(data >> 160);
   succeed_and_next(160);
   dbprint(4, $format("extract %s", "parse_ipv4"));
   dbprint(4, $format(fshow(ipv4)));
@@ -230,25 +230,25 @@ rule rl_parse_ipv4_start if ((w_parse_ipv4_start));
 endrule
 (* fire_when_enabled *)
 rule rl_parse_udp_load if ((parse_state_ff.first == StateParseUdp) && (rg_buffered[0] < 64));
-  report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+  report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp);
   if (isValid(data_ff.first)) begin
     data_ff.deq;
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
+    let data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp;
+    rg_tmp <= zeroExtend(data);
     move_shift_amt(128);
   end
 endrule
 (* fire_when_enabled *)
 rule rl_parse_udp_extract if ((parse_state_ff.first == StateParseUdp) && (rg_buffered[0] >= 64));
-  let data = rg_tmp[0];
+  let data = rg_tmp;
   if (isValid(data_ff.first)) begin
     data_ff.deq;
-    data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+    data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp;
   end
   report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
   let udp = extract_udp_t(truncate(data));
   compute_next_state_parse_udp(udp.dstPort);
-  rg_tmp[0] <= zeroExtend(data >> 64);
+  rg_tmp <= zeroExtend(data >> 64);
   succeed_and_next(64);
   dbprint(4, $format("extract %s", "parse_udp"));
   dbprint(4, $format(fshow(udp)));
@@ -268,25 +268,25 @@ rule rl_parse_udp_start if ((w_parse_udp_start));
 endrule
 (* fire_when_enabled *)
 rule rl_parse_mdp_load if ((parse_state_ff.first == StateParseMdp) && (rg_buffered[0] < 96));
-  report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+  report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp);
   if (isValid(data_ff.first)) begin
     data_ff.deq;
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
+    let data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp;
+    rg_tmp <= zeroExtend(data);
     move_shift_amt(128);
   end
 endrule
 (* fire_when_enabled *)
 rule rl_parse_mdp_extract if ((parse_state_ff.first == StateParseMdp) && (rg_buffered[0] >= 96));
-  let data = rg_tmp[0];
+  let data = rg_tmp;
   if (isValid(data_ff.first)) begin
     data_ff.deq;
-    data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+    data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp;
   end
   report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
   compute_next_state_parse_mdp();
   let mdp = extract_mdp_packet_t(truncate(data));
-  rg_tmp[0] <= zeroExtend(data >> 96);
+  rg_tmp <= zeroExtend(data >> 96);
   succeed_and_next(96);
   dbprint(4, $format("extract %s", "parse_mdp"));
   dbprint(4, $format(fshow(mdp)));
@@ -300,25 +300,25 @@ rule rl_parse_mdp_parse_mdp_msg if ((w_parse_mdp_parse_mdp_msg));
 endrule
 (* fire_when_enabled *)
 rule rl_parse_mdp_msg_load if ((parse_state_ff.first == StateParseMdpMsg) && (rg_buffered[0] < 16));
-  report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+  report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp);
   if (isValid(data_ff.first)) begin
     data_ff.deq;
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
+    let data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp;
+    rg_tmp <= zeroExtend(data);
     move_shift_amt(128);
   end
 endrule
 (* fire_when_enabled *)
 rule rl_parse_mdp_msg_extract if ((parse_state_ff.first == StateParseMdpMsg) && (rg_buffered[0] >= 16));
-  let data = rg_tmp[0];
+  let data = rg_tmp;
   if (isValid(data_ff.first)) begin
     data_ff.deq;
-    data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+    data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp;
   end
   report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
   compute_next_state_parse_mdp_msg();
   let mdp_msg = extract_mdp_message_t(truncate(data));
-  rg_tmp[0] <= zeroExtend(data >> 16);
+  rg_tmp <= zeroExtend(data >> 16);
   succeed_and_next(16);
   dbprint(4, $format("extract %s", "parse_mdp_msg"));
   dbprint(4, $format(fshow(mdp_msg)));
@@ -332,25 +332,25 @@ rule rl_parse_mdp_msg_parse_mdp_sbe if ((w_parse_mdp_msg_parse_mdp_sbe));
 endrule
 (* fire_when_enabled *)
 rule rl_parse_mdp_sbe_load if ((parse_state_ff.first == StateParseMdpSbe) && (rg_buffered[0] < 64));
-  report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+  report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp);
   if (isValid(data_ff.first)) begin
     data_ff.deq;
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
+    let data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp;
+    rg_tmp <= zeroExtend(data);
     move_shift_amt(128);
   end
 endrule
 (* fire_when_enabled *)
 rule rl_parse_mdp_sbe_extract if ((parse_state_ff.first == StateParseMdpSbe) && (rg_buffered[0] >= 64));
-  let data = rg_tmp[0];
+  let data = rg_tmp;
   if (isValid(data_ff.first)) begin
     data_ff.deq;
-    data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+    data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp;
   end
   report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
   compute_next_state_parse_mdp_sbe();
   let mdp_sbe = extract_mdp_sbe_t(truncate(data));
-  rg_tmp[0] <= zeroExtend(data >> 64);
+  rg_tmp <= zeroExtend(data >> 64);
   succeed_and_next(64);
   dbprint(4, $format("extract %s", "parse_mdp_sbe"));
   dbprint(4, $format(fshow(mdp_sbe)));
@@ -364,25 +364,25 @@ rule rl_parse_mdp_sbe_parse_mdp_refreshbook if ((w_parse_mdp_sbe_parse_mdp_refre
 endrule
 (* fire_when_enabled *)
 rule rl_parse_mdp_refreshbook_load if ((parse_state_ff.first == StateParseMdpRefreshbook) && (rg_buffered[0] < 112));
-  report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp[0]);
+  report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, rg_tmp);
   if (isValid(data_ff.first)) begin
     data_ff.deq;
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
+    let data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp;
+    rg_tmp <= zeroExtend(data);
     move_shift_amt(128);
   end
 endrule
 (* fire_when_enabled *)
 rule rl_parse_mdp_refreshbook_extract if ((parse_state_ff.first == StateParseMdpRefreshbook) && (rg_buffered[0] >= 112));
-  let data = rg_tmp[0];
+  let data = rg_tmp;
   if (isValid(data_ff.first)) begin
     data_ff.deq;
-    data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+    data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp;
   end
   report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
   let extracted_data = extract_mdIncrementalRefreshBook32(truncate(data));
   compute_next_state_parse_mdp_refreshbook(extracted_data.noMDEntries);
-  rg_tmp[0] <= zeroExtend(data >> 112);
+  rg_tmp <= zeroExtend(data >> 112);
   succeed_and_next(112);
   dbprint(4, $format("extract %s", "parse_mdp_refreshbook"));
   dbprint(4, $format(fshow(extracted_data)));
@@ -405,24 +405,24 @@ endrule
 rule rl_parse_mdp_group_load if ((parse_state_ff.first == StateParseMdpGroup) && (rg_buffered[0] < 256));
   if (isValid(data_ff.first)) begin
     data_ff.deq;
-    let data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
-    rg_tmp[0] <= zeroExtend(data);
+    let data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp;
+    rg_tmp <= zeroExtend(data);
     move_shift_amt(128);
   end
 endrule
 (* fire_when_enabled *)
 rule rl_parse_mdp_group_extract if ((parse_state_ff.first == StateParseMdpGroup) && (rg_buffered[0] >= 256));
-  let data = rg_tmp[0];
+  let data = rg_tmp;
   if (isValid(data_ff.first)) begin
     data_ff.deq;
-    data = zeroExtend(data_this_cycle) << rg_shift_amt[0] | rg_tmp[0];
+    data = zeroExtend(data_this_cycle) << rg_buffered[0] | rg_tmp;
   end
   report_parse_action(parse_state_ff.first, rg_buffered[0], data_this_cycle, data);
   let v = ( event_metadata$group_size[0] - 'h1 );
   let extracted_data = extract_mdIncrementalRefreshBook32Group(truncate(data));
   event_metadata$group_size[0] <= v;
   compute_next_state_parse_mdp_group(v);
-  rg_tmp[0] <= zeroExtend(data >> 256);
+  rg_tmp <= zeroExtend(data >> 256);
   succeed_and_next(256);
   mdp_refreshbook_group_out_ff[v].enq(tagged Valid extracted_data);
   dbprint(4, $format("extract %s %h", "parse_mdp_group", v));
