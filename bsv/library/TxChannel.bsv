@@ -64,7 +64,7 @@ endinstance
 module mkTxChannel#(Clock txClock, Reset txReset)(TxChannel);
    `PRINT_DEBUG_MSG
    FIFOF#(int) verbose_ff <- mkFIFOF;
-   PacketBuffer#(16) pktBuff <- mkPacketBuffer("txchan");
+   PacketBuffer#(16, 8) pktBuff <- mkPacketBuffer("txchan");
    StoreAndFwdFromRingToMac ringToMac <- mkStoreAndFwdFromRingToMac(txClock, txReset);
    mkConnection(ringToMac.readClient, pktBuff.readServer);
 

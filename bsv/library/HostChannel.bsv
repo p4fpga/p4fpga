@@ -59,7 +59,7 @@ module mkHostChannel(HostChannel);
    Reg#(LUInt) ipv6Count <- mkReg(0);
    Reg#(LUInt) udpCount <- mkReg(0);
 
-   PacketBuffer#(16) pktBuff <- mkPacketBuffer_16("hostchan");
+   PacketBuffer#(16, 8) pktBuff <- mkPacketBuffer_16("hostchan");
    TapPktRead tap <- mkTapPktRead();
    Parser parser <- mkParser();
    StoreAndFwdFromRingToMem ringToMem <- mkStoreAndFwdFromRingToMem();
