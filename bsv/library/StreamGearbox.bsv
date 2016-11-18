@@ -160,6 +160,7 @@ instance MkStreamGearboxDn#(n, m) provisos(Mul#(m, 2, n));
       let reset <- exposeCurrentReset();
 
       FIFOF#(ByteStream#(n)) in_ff <- mkFIFOF;
+      FIFOF#(ByteStream#(m)) pipe_ff <- mkFIFOF;
       FIFOF#(ByteStream#(m)) out_ff <- mkFIFOF;
       Gearbox#(2, 1, ByteStream#(m)) fifoTxData <- mkNto1Gearbox(clock, reset, clock, reset);
 
@@ -187,10 +188,13 @@ instance MkStreamGearboxDn#(n, m) provisos(Mul#(m, 2, n));
 
       rule process_outgoing_packet;
          let data = fifoTxData.first; fifoTxData.deq;
-         let temp = head(data);
-         let bytes = zeroExtend(pack(countOnes(temp.mask)));
-         if (temp.mask != 0) begin
-            out_ff.enq(temp);
+         pipe_ff.enq(head(data));
+      endrule
+
+      rule send_data;
+         let data = pipe_ff.first; pipe_ff.deq;
+         if (data.mask != 0) begin
+            out_ff.enq(data);
          end
       endrule
 
