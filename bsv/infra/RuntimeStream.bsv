@@ -93,7 +93,7 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
 
    `PRINT_DEBUG_MSG
 
-   function Put#(ByteStream#(64)) get_write_data(PacketBuffer#(64) buff);
+   function Put#(ByteStream#(64)) get_write_data(PacketBuffer#(64, 4) buff);
       return toPut(buff.writeServer);
    endfunction
 
@@ -120,7 +120,7 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    // DEBUG: sink after gearbox_up_32
    //mapM_(mkTieOff, map(getDataOut, gearbox_up_32));
 
-   Vector#(npi, PacketBuffer#(64)) input_queues <- mapM(mkPacketBuffer_64, genWith(sprintf("inputQ %h")), clocked_by defaultClock, reset_by localReset); // input queue
+   Vector#(npi, PacketBuffer#(64, 4)) input_queues <- mapM(mkPacketBuffer_64, genWith(sprintf("inputQ %h")), clocked_by defaultClock, reset_by localReset); // input queue
    mapM(uncurry(mkConnection), zip(map(getDataOut, gearbox_up_32), map(getWriteData, input_queues))); // gearbox -> input queue
    mapM(uncurry(mkConnection), zip(map(getReadLen, input_queues), map(getReadReq, input_queues))); // immediate transmit, performance issue?
 
@@ -128,7 +128,7 @@ module mkRuntime#(Clock rxClock, Reset rxReset, Clock txClock, Reset txReset)(Ru
    XBar_synth#(nrx, ntx, nhs, 64) xbar <- mkXBar_synth(clocked_by defaultClock, reset_by localReset); // last two parameters are log(size) and idx
    mapM(uncurry(mkConnection), zip(map(getReadData, input_queues), take(xbar.input_ports))); // input queue -> xbar,
 
-   Vector#(cbn, PacketBuffer#(64)) output_queues <- mapM(mkPacketBuffer_64, genWith(sprintf("outputQ %h")), clocked_by defaultClock, reset_by localReset); // output queue
+   Vector#(cbn, PacketBuffer#(64, 4)) output_queues <- mapM(mkPacketBuffer_64, genWith(sprintf("outputQ %h")), clocked_by defaultClock, reset_by localReset); // output queue
    mapM(uncurry(mkConnection), zip(map(getReadLen, output_queues), map(getReadReq, output_queues))); // immediate transmit
 
    Vector#(ntx, StreamGearbox#(64, 32)) gearbox_dn_32 <- replicateM(mkStreamGearboxDn_64_32, clocked_by defaultClock, reset_by localReset);

@@ -47,7 +47,7 @@ module mkStoreAndFwdBuffer#(Integer id)(StoreAndFwdBuffer);
    String msg = sprintf("store&fwd %d", id);
    FIFOF#(MetadataRequest) meta_ff <- mkFIFOF;
 
-   PacketBuffer#(16) pktBuff <- mkPacketBuffer_16(msg);
+   PacketBuffer#(16, 8) pktBuff <- mkPacketBuffer_16(msg);
 
    // RingBuffer Read Client
    FIFOF#(ByteStream#(16)) readDataFifo <- mkFIFOF;
@@ -191,7 +191,7 @@ module mkStreamInChannel#(Integer id)(StreamInChannel);
    FIFOF#(Bit#(EtherLen)) pktLenFifo <- mkFIFOF;
    Reg#(Bool) readStarted <- mkReg(False);
 
-   PacketBuffer#(16) pktBuff <- mkPacketBuffer_16("streamIn channel");
+   PacketBuffer#(16, 8) pktBuff <- mkPacketBuffer_16("streamIn channel");
    Parser parser <- mkParser();
 
    PktReadClient#(16) readClient = (interface PktReadClient;
