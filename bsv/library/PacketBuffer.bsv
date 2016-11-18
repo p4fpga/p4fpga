@@ -52,11 +52,11 @@ import SynthBuilder::*;
 `include "SynthBuilder.defines"
 
 typedef struct {
-   Bit#(PktAddrWidth) addr;
+   Bit#(depth) addr;
    ByteStream#(n)     data;
-} ReqT#(numeric type n) deriving (Eq, Bits);
-instance FShow#(ReqT#(n));
-   function Fmt fshow (ReqT#(n) req);
+} ReqT#(numeric type n, numeric type depth) deriving (Eq, Bits);
+instance FShow#(ReqT#(n, depth));
+   function Fmt fshow (ReqT#(n, depth) req);
       return ($format(" addr=0x%x ", req.addr)
               + $format(" data=0x%x ", req.data.data)
               + $format(" user=0x%x ", req.data.user)
@@ -85,15 +85,15 @@ interface PktReadServer#(numeric type n);
    interface Put#(Bit#(EtherLen)) readReq;
 endinterface
 
-interface PacketBuffer#(numeric type n);
+interface PacketBuffer#(numeric type n, numeric type depth);
    interface PipeIn#(ByteStream#(n)) writeServer;
    interface PktReadServer#(n) readServer;
    method PktBuffDbgRec dbg;
    method Action set_verbosity (int verbosity);
 endinterface
 
-instance SetVerbosity#(PacketBuffer#(n));
-   function Action set_verbosity(PacketBuffer#(n) t, int verbosity);
+instance SetVerbosity#(PacketBuffer#(n, depth));
+   function Action set_verbosity(PacketBuffer#(n, depth) t, int verbosity);
       action
          t.set_verbosity(verbosity);
       endaction
@@ -115,34 +115,34 @@ instance Connectable#(PktReadClient#(n), PktReadServer#(n));
 endinstance
 
 typeclass ReadServer#(numeric type n);
-   function Get#(Bit#(EtherLen)) getReadLen(PacketBuffer#(n) buff);
-   function Put#(Bit#(EtherLen)) getReadReq(PacketBuffer#(n) buff);
-   function Get#(ByteStream#(n)) getReadData(PacketBuffer#(n) buff);
+   function Get#(Bit#(EtherLen)) getReadLen(PacketBuffer#(n, d) buff);
+   function Put#(Bit#(EtherLen)) getReadReq(PacketBuffer#(n, d) buff);
+   function Get#(ByteStream#(n)) getReadData(PacketBuffer#(n, d) buff);
 endtypeclass
 
 instance ReadServer#(n);
-   function Get#(Bit#(EtherLen)) getReadLen(PacketBuffer#(n) buff);
+   function Get#(Bit#(EtherLen)) getReadLen(PacketBuffer#(n, d) buff);
       return buff.readServer.readLen;
    endfunction
-   function Put#(Bit#(EtherLen)) getReadReq(PacketBuffer#(n) buff);
+   function Put#(Bit#(EtherLen)) getReadReq(PacketBuffer#(n, d) buff);
       return buff.readServer.readReq;
    endfunction
-   function Get#(ByteStream#(n)) getReadData(PacketBuffer#(n) buff);
+   function Get#(ByteStream#(n)) getReadData(PacketBuffer#(n, d) buff);
       return buff.readServer.readData;
    endfunction
 endinstance
 
 typeclass WriteServer#(numeric type n);
-   function Put#(ByteStream#(n)) getWriteData(PacketBuffer#(n) buff);
+   function Put#(ByteStream#(n)) getWriteData(PacketBuffer#(n, d) buff);
 endtypeclass
 
 instance WriteServer#(n);
-   function Put#(ByteStream#(n)) getWriteData(PacketBuffer#(n) buff);
+   function Put#(ByteStream#(n)) getWriteData(PacketBuffer#(n, d) buff);
       return toPut(buff.writeServer);
    endfunction
 endinstance
 
-module mkPacketBuffer#(String msg)(PacketBuffer#(n))
+module mkPacketBuffer#(String msg)(PacketBuffer#(n, depth))
    provisos (Add#(1, a__, TLog#(TAdd#(1, n)))
             ,Add#(b__, TLog#(TAdd#(1, n)), 16));
    `PRINT_DEBUG_MSG
@@ -158,7 +158,7 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
    Wire#(Bool)                  goodFrame   <- mkWire;
    Wire#(Bool)                  badFrame    <- mkWire;
 
-   Reg#(Bit#(PktAddrWidth))     wrCurrPtr   <- mkReg(0);
+   Reg#(Bit#(depth))     wrCurrPtr   <- mkReg(0);
    Reg#(Bit#(EtherLen))         packetLen   <- mkReg(0);
    Reg#(Bool)                   inPacket    <- mkReg(False);
 
@@ -172,14 +172,14 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
    BRAM_Configure bramConfig = defaultValue;
    //bramConfig.memorySize = 1024;
    bramConfig.latency = 2;
-   BRAM2Port#(Bit#(PktAddrWidth), ByteStream#(n)) memBuffer <- mkBRAM2Server(bramConfig);
+   BRAM2Port#(Bit#(depth), ByteStream#(n)) memBuffer <- mkBRAM2Server(bramConfig);
 
    FIFOF#(ByteStream#(n)) fifoWriteData <- mkFIFOF;
    FIFOF#(Bit#(EtherLen)) fifoEop <- mkFIFOF;
-   FIFO#(ReqT#(n)) incomingReqs     <- mkFIFO;
+   FIFO#(ReqT#(n, depth)) incomingReqs     <- mkFIFO;
 
    // Client
-   Reg#(Bit#(PktAddrWidth))     rdCurrPtr   <- mkReg(0);
+   Reg#(Bit#(depth))     rdCurrPtr   <- mkReg(0);
    Reg#(Bool)                   outPacket   <- mkReg(False);
 
    FIFOF#(Bit#(EtherLen))    fifoLen     <- mkSizedFIFOF(16);
@@ -203,7 +203,7 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
    endrule
 
    rule enqueue_first_beat(!fifoEop.notEmpty && !inPacket);
-      ReqT#(n) req <- toGet(incomingReqs).get;
+      ReqT#(n, depth) req <- toGet(incomingReqs).get;
       dbprint(3, $format("%s enqueue_first_beat ", msg, fshow(req)));
       memBuffer.portA.request.put(BRAMRequest{write:True, responseOnWrite:False,
          address:req.addr, datain:req.data});
@@ -211,14 +211,14 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
    endrule
 
    rule enqueue_next_beat(!fifoEop.notEmpty && inPacket);
-      ReqT#(n) req <- toGet(incomingReqs).get;
+      ReqT#(n, depth) req <- toGet(incomingReqs).get;
       dbprint(3, $format("%s enqueue_next_beat ", msg, fshow(req)));
       memBuffer.portA.request.put(BRAMRequest{write:True, responseOnWrite:False,
          address:req.addr, datain:req.data});
    endrule
 
    rule commit_packet(fifoEop.notEmpty && inPacket);
-      ReqT#(n) req <- toGet(incomingReqs).get;
+      ReqT#(n, depth) req <- toGet(incomingReqs).get;
       dbprint(3, $format("%s commit_packet ", msg, fshow(req)));
       memBuffer.portA.request.put(BRAMRequest{write:True, responseOnWrite:False,
          address:req.addr, datain:req.data});
@@ -283,8 +283,8 @@ module mkPacketBuffer#(String msg)(PacketBuffer#(n))
    endmethod
 endmodule
 
-`SynthBuildModule1(mkPacketBuffer, String, PacketBuffer#(8), mkPacketBuffer_8)
-`SynthBuildModule1(mkPacketBuffer, String, PacketBuffer#(16), mkPacketBuffer_16)
-`SynthBuildModule1(mkPacketBuffer, String, PacketBuffer#(64), mkPacketBuffer_64)
+`SynthBuildModule1(mkPacketBuffer, String, PacketBuffer#(8, 8), mkPacketBuffer_8)
+`SynthBuildModule1(mkPacketBuffer, String, PacketBuffer#(16, 8), mkPacketBuffer_16)
+`SynthBuildModule1(mkPacketBuffer, String, PacketBuffer#(64, 4), mkPacketBuffer_64)
 
 endpackage: PacketBuffer
