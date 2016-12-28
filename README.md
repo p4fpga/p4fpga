@@ -16,7 +16,7 @@ cd p4c
 
 Create a soft-link to p4fpga source code in p4c
 ```
-ln -s extensions/c++ <path-to-p4fpga>/c++
+ln -s extensions/c++ <path-to-p4fpga>/compiler
 ```
 
 Build p4c with p4fpga backend
