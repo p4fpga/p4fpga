@@ -1,4 +1,5 @@
 #include "foptions.h"
+#include "ir/ir.h"
 #include "midend.h"
 #include "midend/actionsInlining.h"
 #include "midend/inlining.h"
@@ -59,7 +60,6 @@ const IR::P4Program* MidEnd::run(const FPGAOptions& options, const IR::P4Program
         new P4::InlineActions(&refMap, &typeMap),
         new P4::LocalizeAllActions(&refMap),
         new P4::UniqueNames(&refMap),
-        new P4::UniqueParameters(&refMap),
         new P4::ClearTypeMap(&typeMap),
         new P4::SimplifyControlFlow(&refMap, &typeMap),
         new P4::RemoveTableParameters(&refMap, &typeMap),

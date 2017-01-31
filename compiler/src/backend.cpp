@@ -3,6 +3,7 @@
 #include <boost/filesystem.hpp>
 #include <fstream>
 
+#include "ir/ir.h"
 #include "lib/error.h"
 #include "lib/nullstream.h"
 #include "lib/path.h"

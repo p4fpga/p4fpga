@@ -1,34 +1,32 @@
+p4fpga_LDFLAGS = -lboost_system -lboost_filesystem
 
-bin_PROGRAMS += p4fpga
-
-p4fpga_LDFLAGS = -lboost_system -lboost_filesystem#-mt
-
-p4fpga_LDADD = libfrontend.a libp4ctoolkit.a 
-
-p4fpga_CPPFLAGS = -I$(srcdir)/extensions/c++/include
+p4fpga_CPPFLAGS = -I$(srcdir)/%reldir%/include
 
 p4fpga_SOURCES = \
-	extensions/c++/src/p4-fpga.cpp \
-	extensions/c++/src/analyzer.cpp \
-	extensions/c++/src/backend.cpp \
-	extensions/c++/src/string_utils.cpp \
-	extensions/c++/src/ftype.cpp \
-	extensions/c++/src/fparser.cpp \
-	extensions/c++/src/fstruct.cpp \
-	extensions/c++/src/funion.cpp \
-	extensions/c++/src/fdeparser.cpp \
-	extensions/c++/src/fcontrol.cpp \
-	extensions/c++/src/program.cpp \
-	extensions/c++/src/translator.cpp \
-	extensions/c++/src/ftest.cpp \
-	extensions/c++/src/midend.cpp \
-	extensions/c++/src/partition.cpp \
-	extensions/c++/src/profile.cpp \
-	extensions/c++/src/metadata-analysis.cpp \
-	extensions/c++/src/table.cpp \
-	extensions/c++/src/action.cpp
+	%reldir%/src/p4-fpga.cpp \
+	%reldir%/src/analyzer.cpp \
+	%reldir%/src/backend.cpp \
+	%reldir%/src/string_utils.cpp \
+	%reldir%/src/ftype.cpp \
+	%reldir%/src/fparser.cpp \
+	%reldir%/src/fstruct.cpp \
+	%reldir%/src/funion.cpp \
+	%reldir%/src/fdeparser.cpp \
+	%reldir%/src/fcontrol.cpp \
+	%reldir%/src/program.cpp \
+	%reldir%/src/translator.cpp \
+	%reldir%/src/ftest.cpp \
+	%reldir%/src/midend.cpp \
+	%reldir%/src/partition.cpp \
+	%reldir%/src/metadata-analysis.cpp \
+	%reldir%/src/table.cpp \
+	%reldir%/src/action.cpp
 
 cpplint_FILES += $(p4fpga_SOURCES)
 
-ir_DEF_FILES += $(srcdir)/extensions/c++/bluespec.def
-#ir_SOURCES += extensions/c++/libp4fpga/src/bluespec.cpp
+ir_DEF_FILES += \
+	$(srcdir)/%reldir%/bluespec.def
+
+bin_PROGRAMS += p4fpga
+
+p4fpga_LDADD = libfrontend.la libp4ctoolkit.a

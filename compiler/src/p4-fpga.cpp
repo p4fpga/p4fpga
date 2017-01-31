@@ -12,7 +12,7 @@
 #include "foptions.h"
 #include "backend.h"
 #include "partition.h"
-#include "profile.h"
+//#include "profile.h"
 #include "frontends/common/parseInput.h"
 #include "frontends/p4/frontend.h"
 #include "frontends/p4/evaluator/evaluator.h"
@@ -61,30 +61,30 @@ void partition(FPGAOptions& options, const IR::P4Program* program) {
         exit(1);
 
     // pass: collect table statistics
-    auto profgen = new FPGA::Profiler();
-    PassManager profile = {
-      new P4::ResourceEstimation(&midend.refMap, &midend.typeMap, profgen),
-    };
-    profile.setName("Profile");
-    profile.addDebugHook(hook);
-    pf = pf->apply(profile);
-    FPGA::generate_table_profile(options, profgen);
+    // auto profgen = new FPGA::Profiler();
+    // PassManager profile = {
+    //   new P4::ResourceEstimation(&midend.refMap, &midend.typeMap, profgen),
+    // };
+    // profile.setName("Profile");
+    // profile.addDebugHook(hook);
+    // pf = pf->apply(profile);
+    // FPGA::generate_table_profile(options, profgen);
 
     // pass: partition tables
-    int tbegin = 0;
-    int tend = 0;
-    for (auto np : options.partitions) {
-      tend = std::stoi(np.c_str(), nullptr, 10);
-      PassManager backend = {
-        new P4::Partition(&midend.refMap, &midend.typeMap, tbegin, tend),
-        new P4::SimplifyControlFlow(&midend.refMap, &midend.typeMap),
-      };
-      backend.setName("Partition");
-      backend.addDebugHook(hook);
-      auto p = pf->apply(backend);
-      FPGA::generate_partition(options, p, np);
-      tbegin = tend;
-    }
+    // int tbegin = 0;
+    // int tend = 0;
+    // for (auto np : options.partitions) {
+    //   tend = std::stoi(np.c_str(), nullptr, 10);
+    //   PassManager backend = {
+    //     new P4::Partition(&midend.refMap, &midend.typeMap, tbegin, tend),
+    //     new P4::SimplifyControlFlow(&midend.refMap, &midend.typeMap),
+    //   };
+    //   backend.setName("Partition");
+    //   backend.addDebugHook(hook);
+    //   auto p = pf->apply(backend);
+    //   FPGA::generate_partition(options, p, np);
+    //   tbegin = tend;
+    // }
 }
 
 int main(int argc, char *const argv[]) {
@@ -107,7 +107,5 @@ int main(int argc, char *const argv[]) {
 
     //partition(options, program);
 
-    if (options.verbosity > 0)
-        std::cerr << "Done." << std::endl;
     return ::errorCount() > 0;
 }
