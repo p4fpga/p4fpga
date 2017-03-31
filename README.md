@@ -8,15 +8,17 @@ git clone https://github.com/hanw/p4fpga.git
 git clone https://github.com/p4lang/p4c.git
 ```
 
+Create a soft-link to p4fpga source code in p4c
+```
+ln -s <path-to-p4fpga>/compiler extensions/p4fpga 
+```
+
 Run bootstrap.sh in p4c
 ```
 cd p4c
+git submodule init
+git submodule update
 ./bootstrap.sh
-```
-
-Create a soft-link to p4fpga source code in p4c
-```
-ln -s extensions/c++ <path-to-p4fpga>/c++
 ```
 
 Build p4c with p4fpga backend
