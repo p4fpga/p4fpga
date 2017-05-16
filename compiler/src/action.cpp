@@ -98,7 +98,7 @@ void ActionCodeGen::emitCpuRspRule(const IR::P4Action* action) {
   if (action->parameters->size() > 0) {
     auto params = action->parameters->to<IR::ParameterList>();
     if (params != nullptr) {
-      for (auto p : *params->parameters) {
+      for (auto p : params->parameters) {
         fields.push_back(p->name);
       }
     }
@@ -186,7 +186,7 @@ bool ActionCodeGen::isDropAction(const IR::P4Action* action) {
   if (action->body == nullptr) {
     return false;
   }
-  for (auto s : *action->body->components) {
+  for (auto s : action->body->components) {
     auto stmt = s->to<IR::MethodCallStatement>();
     if (stmt == nullptr) continue;
     auto expr = stmt->methodCall->to<IR::MethodCallExpression>();
@@ -207,7 +207,7 @@ bool ActionCodeGen::isNoAction(const IR::P4Action* action) {
   if (action->body == nullptr) {
     return true;
   }
-  if (action->body->components->size() == 0) {
+  if (action->body->components.size() == 0) {
     return true;
   }
   return is_nop;

@@ -14,8 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include <string>
-#include <algorithm>
 #include "analyzer.h"
 
 #include "ir/ir.h"
@@ -28,7 +26,7 @@ limitations under the License.
 namespace FPGA {
 
 cstring nameFromAnnotation(const IR::Annotations* annotations,
-                           cstring defaultValue) {
+        cstring defaultValue) {
     CHECK_NULL(annotations); CHECK_NULL(defaultValue);
     auto anno = annotations->getSingle(IR::Annotation::nameAnnotation);
     if (anno != nullptr) {
@@ -88,6 +86,41 @@ void CFG::Node::computeSuccessors() {
         e->getNode()->successors.emplace(e->clone(this));
 }
 
+bool CFG::dfs(Node* node, std::set<Node*> &visited,
+              std::set<const IR::P4Table*> &stack) const {
+    const IR::P4Table* table = nullptr;
+    if (node->is<TableNode>()) {
+        table = node->to<TableNode>()->table;
+        if (stack.find(table) != stack.end()) {
+            ::error("Program cannot be implemented since it requires a cycle containing %1%",
+                    table);
+            return false;
+        }
+    }
+    if (visited.find(node) != visited.end())
+        return true;
+    if (table != nullptr)
+        stack.emplace(table);
+    for (auto e : node->successors.edges) {
+        bool success = dfs(e->endpoint, visited, stack);
+        if (!success) return false;
+    }
+    if (table != nullptr)
+        stack.erase(table);
+    visited.emplace(node);
+    return true;
+}
+
+bool CFG::checkForCycles() const {
+    std::set<Node*> visited;
+    std::set<const IR::P4Table*> stack;
+    for (auto n : allNodes) {
+        bool success = dfs(n, visited, stack);
+        if (!success) return false;
+    }
+    return true;
+}
+
 namespace {
 // This visitor "converts" IR::Node* into EdgeSets
 // Since we cannot return EdgeSets, we place them in the 'after' map.
@@ -101,11 +134,9 @@ class CFGBuilder : public Inspector {
     void setAfter(const IR::Statement* statement, const CFG::EdgeSet* value) {
         LOG1("After " << statement << " " << value);
         CHECK_NULL(statement);
-        if (value == nullptr){
+        if (value == nullptr)
             // This can happen when an error is signaled
-            // one cause is assignmentStatement
             return;
-        }
         after.emplace(statement, value);
         current = value;
     }
@@ -113,20 +144,16 @@ class CFGBuilder : public Inspector {
     const CFG::EdgeSet* get(const IR::Statement* statement)
     { return ::get(after, statement); }
     bool preorder(const IR::Statement* statement) override {
-        // ::error("%1%: not supported in control block on this architecture", statement);
+        ::error("%1%: not supported in control block on this architecture", statement);
         return false;
     }
     bool preorder(const IR::ReturnStatement* statement) override {
-        if (current != nullptr) {
-          cfg->exitPoint->addPredecessors(current);
-        }
+        cfg->exitPoint->addPredecessors(current);
         setAfter(statement, new CFG::EdgeSet());  // empty successor set
         return false;
     }
     bool preorder(const IR::ExitStatement* statement) override {
-        if (current != nullptr) {
-          cfg->exitPoint->addPredecessors(current);
-        }
+        cfg->exitPoint->addPredecessors(current);
         setAfter(statement, new CFG::EdgeSet());  // empty successor set
         return false;
     }
@@ -146,9 +173,7 @@ class CFGBuilder : public Inspector {
         }
         auto tc = am->object->to<IR::P4Table>();
         auto node = cfg->makeNode(tc, statement->methodCall);
-        if (current != nullptr) {
-          node->addPredecessors(current);
-        }
+        node->addPredecessors(current);
         setAfter(statement, new CFG::EdgeSet(new CFG::Edge(node)));
         return false;
     }
@@ -165,9 +190,7 @@ class CFGBuilder : public Inspector {
             node = cfg->makeNode(statement);
         }
 
-        if (current != nullptr) {
-          node->addPredecessors(current);
-        }
+        node->addPredecessors(current);
         // If branch
         current = new CFG::EdgeSet(new CFG::Edge(node, true));
         visit(statement->ifTrue);
@@ -180,9 +203,7 @@ class CFGBuilder : public Inspector {
             current = new CFG::EdgeSet(new CFG::Edge(node, false));
             visit(statement->ifFalse);
             auto ifFalse = get(statement->ifFalse);
-            if (ifFalse != nullptr) {
-              result->mergeWith(ifFalse);
-            }
+            result->mergeWith(ifFalse);
         } else {
             // no else branch
             result->mergeWith(new CFG::EdgeSet(new CFG::Edge(node, false)));
@@ -191,11 +212,7 @@ class CFGBuilder : public Inspector {
         return false;
     }
     bool preorder(const IR::BlockStatement* statement) override {
-        for (auto s : *statement->components) {
-            // NOTE: ignore AssignmentStatement, insert it to 'after' map will
-            // break cfg.
-            if (s->is<IR::AssignmentStatement>())
-              continue;
+        for (auto s : statement->components) {
             auto stat = s->to<IR::Statement>();
             if (stat == nullptr) continue;
             visit(stat);
@@ -209,9 +226,7 @@ class CFGBuilder : public Inspector {
         BUG_CHECK(tc != nullptr, "%1%: unexpected switch statement expression",
                   statement->expression);
         auto node = cfg->makeNode(tc, statement->expression);
-        if (current != nullptr) {
-          node->addPredecessors(current);
-        }
+        node->addPredecessors(current);
         auto result = new CFG::EdgeSet(new CFG::Edge(node));  // In case no label matches
         auto labels = new CFG::EdgeSet();
         for (auto sw : statement->cases) {
@@ -229,9 +244,7 @@ class CFGBuilder : public Inspector {
                 visit(sw->statement);
                 labels = new CFG::EdgeSet();
             }  // else we accumulate edges
-            if (current != nullptr) {
-              result->mergeWith(current);
-            }
+            result->mergeWith(current);
         }
         setAfter(statement, result);
         return false;
@@ -252,8 +265,8 @@ class CFGBuilder : public Inspector {
 void CFG::build(const IR::P4Control* cc,
                 P4::ReferenceMap* refMap, P4::TypeMap* typeMap) {
     container = cc;
-    entryPoint = makeNode("entry");
-    exitPoint = makeNode("exit");
+    entryPoint = makeNode(cc->name + ".entry");
+    exitPoint = makeNode("");  // the only node with an empty name
 
     CFGBuilder builder(this, refMap, typeMap);
     auto startValue = new CFG::EdgeSet(new CFG::Edge(entryPoint));
@@ -266,36 +279,24 @@ void CFG::build(const IR::P4Control* cc,
     }
 }
 
-namespace {
-class DiscoverStructure : public Inspector {
-    ProgramParts*           structure;
-
- public:
-    explicit DiscoverStructure(ProgramParts* structure) : structure(structure) {}
-
-    void postorder(const IR::ParameterList* paramList) override {
-        bool inAction = findContext<IR::P4Action>() != nullptr;
-        unsigned index = 0;
-        for (auto p : *paramList->getEnumerator()) {
-            structure->index.emplace(p, index);
-            if (!inAction)
-                structure->nonActionParameters.emplace(p);
-            index++;
-        }
+void DiscoverStructure::postorder(const IR::ParameterList* paramList) {
+    bool inAction = findContext<IR::P4Action>() != nullptr;
+    unsigned index = 0;
+    for (auto p : *paramList->getEnumerator()) {
+        structure->index.emplace(p, index);
+        if (!inAction)
+            structure->nonActionParameters.emplace(p);
+        index++;
     }
-    void postorder(const IR::P4Action* action) override {
-        auto control = findContext<IR::P4Control>();
-        structure->actions.emplace(action, control);
-    }
-    void postorder(const IR::Declaration_Variable* decl) override {
-        structure->variables.push_back(decl);
-    }
-};
-}  // namespace
+}
+void DiscoverStructure::postorder(const IR::P4Action* action) {
+    LOG1("discovery action " << action);
+    auto control = findContext<IR::P4Control>();
+    structure->actions.emplace(action, control);
+}
 
-void ProgramParts::analyze(IR::ToplevelBlock* toplevel) {
-    DiscoverStructure disc(this);
-    toplevel->getProgram()->apply(disc);
+void DiscoverStructure::postorder(const IR::Declaration_Variable* decl) {
+    structure->variables.push_back(decl);
 }
 
 }  // namespace FPGA

@@ -15,11 +15,12 @@
   limitations under the License.
 */
 
-#include "fcontrol.h"
+#include "ir/ir.h"
+#include "control.h"
 #include "table.h"
 #include "action.h"
-#include "fstruct.h"
-#include "funion.h"
+#include "struct.h"
+#include "union.h"
 #include "string_utils.h"
 #include "vector_utils.h"
 
@@ -104,7 +105,7 @@ bool FPGAControl::build() {
       tables.emplace(name.c_str(), table);
 
       // populate map <Action, Table> with annotated name
-      for (auto a : *table->getActionList()->actionList) {
+      for (auto a : table->getActionList()->actionList) {
         auto path = a->getPath();
         auto decl = refMap->getDeclaration(path, true);
         if (decl->is<IR::P4Action>()) {
@@ -121,7 +122,7 @@ bool FPGAControl::build() {
         continue;
       }
 
-      for (auto key : *keys->keyElements) {
+      for (auto key : keys->keyElements) {
         auto element = key->to<IR::KeyElement>();
         if (element->expression->is<IR::Member>()) {
           auto m = element->expression->to<IR::Member>();
@@ -159,7 +160,7 @@ bool FPGAControl::build() {
   return true;
 }
 
-void FPGAControl::emitEntryRule(BSVProgram & bsv, const CFG::Node* node) {
+void FPGAControl::emitEntryRule(const CFG::Node* node) {
   builder->append_format("rule rl_entry if (entry_req_ff.notEmpty);");
   builder->incr_indent();
   builder->append_line("entry_req_ff.deq;");
@@ -180,10 +181,9 @@ void FPGAControl::emitEntryRule(BSVProgram & bsv, const CFG::Node* node) {
   builder->append_line("endrule");
 }
 
-void FPGAControl::emitTableRule(BSVProgram & bsv, const CFG::TableNode* node) {
+void FPGAControl::emitTableRule(const CFG::TableNode* node) {
   auto table = node->table->to<IR::P4Table>();
   auto name = nameFromAnnotation(table->annotations, table->name);
-  auto type = CamelCase(name);
   builder->append_format("rule rl_%s if (%s_rsp_ff.notEmpty);", name, name);
   builder->incr_indent();
   builder->append_format("%s_rsp_ff.deq;", name);
@@ -218,7 +218,7 @@ void FPGAControl::emitTableRule(BSVProgram & bsv, const CFG::TableNode* node) {
   builder->append_line("endrule");
 }
 
-void FPGAControl::emitCondRule(BSVProgram & bsv, const CFG::IfNode* node) {
+void FPGAControl::emitCondRule(const CFG::IfNode* node) {
   //auto sig = cstring("w_") + node->name;
   auto name = node->name;
   builder->append_format("rule rl_%s if (%s_req_ff.notEmpty);", node->name, node->name);
@@ -262,7 +262,7 @@ void FPGAControl::emitCondRule(BSVProgram & bsv, const CFG::IfNode* node) {
   builder->append_line("endrule");
 }
 
-void FPGAControl::emitDeclaration(BSVProgram & bsv) {
+void FPGAControl::emitDeclaration() {
   // basic block instances
   for (auto b : actions) {
     auto name = nameFromAnnotation(b.second->annotations, b.second->name);
@@ -283,13 +283,12 @@ void FPGAControl::emitDeclaration(BSVProgram & bsv) {
   }
 }
 
-void FPGAControl::emitFifo(BSVProgram & bsv) {
+void FPGAControl::emitFifo() {
   builder->append_line("FIFOF#(MetadataRequest) entry_req_ff <- mkFIFOF;");
   builder->append_line("FIFOF#(MetadataRequest) entry_rsp_ff <- mkFIFOF;");
   for (auto t : tables) {
     auto table = t.second->to<IR::P4Table>();
     auto name = nameFromAnnotation(table->annotations, table->name);
-    auto type = CamelCase(name);
     builder->append_line("FIFOF#(MetadataRequest) %s_req_ff <- mkFIFOF;", name);
     builder->append_line("FIFOF#(MetadataRequest) %s_rsp_ff <- mkFIFOF;", name);
   }
@@ -307,16 +306,15 @@ void FPGAControl::emitFifo(BSVProgram & bsv) {
   builder->append_line("FIFOF#(MetadataRequest) exit_rsp_ff <- mkFIFOF;");
 }
 
-void FPGAControl::emitConnection(BSVProgram & bsv) {
+void FPGAControl::emitConnection() {
   // table to fifo
   for (auto t : tables) {
     auto table = t.second->to<IR::P4Table>();
     auto name = nameFromAnnotation(table->annotations, table->name);
-    auto type = CamelCase(name);
     builder->append_line("mkConnection(toClient(%s_req_ff, %s_rsp_ff), %s.prev_control_state);", name, name, name);
 
     int idx = 0;
-    for (auto a: *table->getActionList()->actionList) {
+    for (auto a: table->getActionList()->actionList) {
       auto path = a->getPath();
       auto decl = refMap->getDeclaration(path, true);
       if (decl->is<IR::P4Action>()) {
@@ -372,7 +370,7 @@ void FPGAControl::emitActionTypes(BSVProgram & bsv) {
   }
 }
 
-void FPGAControl::emitAPI(BSVProgram & bsv, cstring cbname) {
+void FPGAControl::emitAPI(cstring cbname) {
   for (auto t : tables) {
     const IR::Key* key = t.second->getKey();
     if (key == nullptr) continue;
@@ -434,22 +432,22 @@ void FPGAControl::emit(BSVProgram & bsv, CppProgram & cpp) {
   builder->append_line("module mk%s (%s);", cbtype, cbtype);
   builder->incr_indent();
   builder->append_line("`PRINT_DEBUG_MSG");
-  emitFifo(bsv);
-  emitDeclaration(bsv);
-  emitConnection(bsv);
+  emitFifo();
+  emitDeclaration();
+  emitConnection();
 
   // emit control flow
   if (cfg != nullptr) {
     if (cfg->entryPoint != nullptr) {
-      emitEntryRule(bsv, cfg->entryPoint);
+      emitEntryRule(cfg->entryPoint);
     }
     for (auto node : cfg->allNodes) {
       if (node->is<CFG::TableNode>()) {
         auto t = node->to<CFG::TableNode>();
-        emitTableRule(bsv, t);
+        emitTableRule(t);
       } else if (node->is<CFG::IfNode>()) {
         auto n = node->to<CFG::IfNode>();
-        emitCondRule(bsv, n);
+        emitCondRule(n);
       }
     }
   }
@@ -472,13 +470,12 @@ void FPGAControl::emit(BSVProgram & bsv, CppProgram & cpp) {
   builder->decr_indent();
   builder->append_line("endmodule");
 
-  emitAPI(bsv, cbname);
+  emitAPI(cbname);
 }
 
 cstring FPGAControl::toP4Action (cstring inst) {
   auto k = actions.find(inst);
   if (k != actions.end()) {
-    auto params = k->second->parameters;
     cstring action_name = nameFromAnnotation(k->second->annotations, k->second->name);
     return action_name;
   } else {

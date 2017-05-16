@@ -21,7 +21,6 @@ limitations under the License.
 #include "frontends/p4/typeMap.h"
 #include "frontends/p4/evaluator/evaluator.h"
 #include "frontends/p4/fromv1.0/v1model.h"
-#include "translator.h"
 #include "bsvprogram.h"
 
 namespace FPGA {
@@ -35,8 +34,8 @@ class FPGADeparser;
 class FPGAObject {
  public:
   virtual ~FPGAObject() {}
-  virtual void emit(BSVProgram & bsv) {};
-  virtual void emit(BSVProgram & bsv, CppProgram & cpp) {};
+  virtual void emit(BSVProgram &) {};
+  virtual void emit(BSVProgram &, CppProgram &) {};
   template<typename T> bool is() const { return to<T>() != nullptr; }
   template<typename T> const T* to() const {
       return dynamic_cast<const T*>(this); }
@@ -60,7 +59,7 @@ class FPGAProgram : public FPGAObject {
   std::map<cstring, const IR::Member*> metadata;
 
   // write program as bluespec source code
-  void emit(BSVProgram & bsv, CppProgram & cpp); // override;
+  void emit(BSVProgram & bsv, CppProgram & cpp) override;
   bool build();  // return 'true' on success
 
   FPGAProgram(const IR::ToplevelBlock* toplevel,

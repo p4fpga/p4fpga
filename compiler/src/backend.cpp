@@ -10,18 +10,18 @@
 #include "frontends/p4/evaluator/evaluator.h"
 #include "frontends/p4/toP4/toP4.h"
 #include "program.h"
-#include "ftest.h"
-#include "ftype.h"
-#include "foptions.h"
+#include "type.h"
+#include "options.h"
 #include "bsvprogram.h"
 
 namespace FPGA {
 
-void run_fpga_backend(const FPGAOptions& options, const IR::ToplevelBlock* toplevel,
-                      P4::ReferenceMap* refMap, P4::TypeMap* typeMap) {
-    CHECK_NULL(toplevel);
-    CHECK_NULL(toplevel->getMain());
+// backend is also a pass manager
 
+
+void
+Backend::run(const FPGAOptions& options, const IR::ToplevelBlock* toplevel,
+             P4::ReferenceMap* refMap, P4::TypeMap* typeMap) {
     // If you ever need to create FPGAType from P4Type
     FPGATypeFactory::createFactory(typeMap);
 
@@ -85,36 +85,6 @@ void run_fpga_backend(const FPGAOptions& options, const IR::ToplevelBlock* tople
     std::ofstream(apiTypeDefPath.native()) << bsv.getConnectalTypeBuilder().toString();
 
     std::ofstream(simFile.native())      <<  cpp.getSimBuilder().toString();
-}
-
-void generate_metadata_profile(const IR::P4Program* program) {
-    // Graph graph;
-    // fpgaprog.generateGraph(graph);
-
-    // boost::filesystem::path graphFile("graph.dot");
-    // boost::filesystem::path graphPath = dir / graphFile;
-
-    // std::ofstream(graphPath.native()) << graph.getGraphBuilder().toString();
-}
-
-void generate_table_profile(const FPGAOptions& options, FPGA::Profiler* profgen) {
-    boost::filesystem::path dir(options.outputFile);
-    boost::filesystem::create_directory(dir);
-    boost::filesystem::path profileFile("table.prof");
-    boost::filesystem::path profilePath = dir / profileFile;
-    std::ofstream(profilePath.native()) << profgen->getTableProfiler().toString();
-}
-
-void generate_partition(const FPGAOptions& options, const IR::P4Program* program, cstring idx) {
-    Util::PathName pathname(options.file);
-    auto filename = pathname.getBasename() + idx + cstring(".p4");
-    boost::filesystem::path dir(options.outputFile);
-    boost::filesystem::create_directory(dir);
-    boost::filesystem::path p4File(filename);
-    boost::filesystem::path p4Path = dir / p4File;
-    auto stream = openFile(p4Path.c_str(), true);
-    P4::ToP4 toP4(stream, false, nullptr);
-    program->apply(toP4);
 }
 
 }  // namespace FPGA

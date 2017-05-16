@@ -19,7 +19,7 @@
 #define EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_TABLE_H_
 
 #include "ir/ir.h"
-#include "fcontrol.h"
+#include "control.h"
 #include "lib/ordered_map.h"
 #include "string_utils.h"
 
@@ -64,7 +64,7 @@ class TableParamExtractor : public Inspector {
     auto k = control->actions.find(methodcall->method->toString());
     if (k != control->actions.end()) {
       auto params = k->second->parameters;
-      for (auto p : *params->parameters) {
+      for (auto p : params->parameters) {
         auto type = p->type->to<IR::Type_Bits>();
         param_map[p->name.toString()] = type;
       }
@@ -86,7 +86,7 @@ class ActionParamPrinter : public Inspector {
     if (k != control->actions.end()) {
       auto params = k->second->parameters;
       param_vec.clear();
-      for (auto param : *params->parameters) {
+      for (auto param : params->parameters) {
         auto p = param->to<IR::Parameter>();
         if (p == nullptr) continue;
         cstring name = p->name.toString();
@@ -139,7 +139,6 @@ class TableCodeGen : public Inspector {
   CodeBuilder* type_builder;
   int key_width = 0;
   int action_size = 0;
-  int action_idx = 0;
   std::vector<std::pair<const IR::StructField*, int>> key_vec;
   std::vector<cstring> action_vec;
   cstring defaultActionName;

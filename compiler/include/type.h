@@ -44,7 +44,7 @@ class FPGATypeFactory {
 class FPGABoolType : public FPGAType, IHasWidth {
  public:
     FPGABoolType() : FPGAType(IR::Type_Boolean::get()) {}
-    void emit(BSVProgram & bsv) override
+    void emit(BSVProgram &) override
     { }
     void declare(BSVProgram & bsv,
                  cstring id, bool asPointer) override;

@@ -14,7 +14,7 @@
   limitations under the License.
 */
 
-#include "funion.h"
+#include "union.h"
 #include "ir/ir.h"
 #include "string_utils.h"
 
@@ -27,9 +27,9 @@ bool UnionCodeGen::preorder(const IR::MethodCallExpression* expr) {
   builder->incr_indent();
   auto k = control->actions.find(expr->method->toString());
   if (k != control->actions.end()) {
-    const IR::ParameterList* params = k->second->parameters;
-    if (params->parameters->size() != 0) {
-      for (auto p : *params->parameters) {
+    auto params = k->second->parameters;
+    if (params->parameters.size() != 0) {
+      for (auto p : params->parameters) {
         int size = p->type->width_bits();
         cstring name = p->name.toString();
         // NOTE: only deal with Bit#(128) ipv4_address

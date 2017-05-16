@@ -39,13 +39,12 @@ class StructCodeGen : public Inspector {
 
 class HeaderCodeGen : public Inspector {
  public:
-  HeaderCodeGen(const FPGAProgram* program, CodeBuilder* builder) :
-    program(program), builder(builder) {}
+  HeaderCodeGen(CodeBuilder* builder) :
+    builder(builder) {}
   bool preorder(const IR::StructField* fld) override;
   bool preorder(const IR::Type_Header* hdr) override;
   bool preorder(const IR::Type_Stack* stk) override;
  private:
-  const FPGAProgram* program;
   CodeBuilder* builder;
   std::vector<cstring> headers;
 };

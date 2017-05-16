@@ -15,10 +15,11 @@
   limitations under the License.
 */
 
+#include <math.h>
 #include <algorithm>
 #include <string>
 #include "table.h"
-#include "fcontrol.h"
+#include "control.h"
 #include "string_utils.h"
 
 namespace FPGA {
@@ -60,32 +61,15 @@ void TableCodeGen::emitActionEnum(const IR::P4Table* table) {
   cstring type = CamelCase(name);
   builder->append_line("typedef enum {");
   builder->incr_indent();
-  // find out name of default action
-  auto defaultAction = table->getDefaultAction();
-  //if (defaultAction->is<IR::MethodCallExpression>()){
-  //  auto e = defaultAction->to<IR::MethodCallExpression>();
-  //  defaultActionName = control->toP4Action(e->method->toString());
-  //  LOG1("table name " << name << e->method->toString());
-  //  CHECK_NULL(defaultActionName);
-  //}
-  // put default action in first position
+   // put default action in first position
   auto actionList = table->getActionList()->actionList;
-  for (auto action : *actionList) {
+  for (auto action : actionList) {
     auto elem = action->to<IR::ActionListElement>();
     if (elem->expression->is<IR::PathExpression>()) {
       // FIXME: handle action as path
       LOG1("Path " << elem->expression->to<IR::PathExpression>());
     } else if (elem->expression->is<IR::MethodCallExpression>()) {
       auto expr = elem->expression->to<IR::MethodCallExpression>();
-      //auto t = control->program->typeMap->getType(e->method, true);
-      //cstring n = control->toP4Action(expr->method->toString());
-      //CHECK_NULL(n);
-      //// put default action at position 0
-      //if (n == defaultActionName) {
-      //  action_vec.insert(action_vec.begin(), UpperCase(n));
-      //} else {
-      //  action_vec.push_back(UpperCase(n));
-      //}
       action_vec.push_back(UpperCase(expr->method->toString()));
     }
   }
@@ -110,14 +94,13 @@ void TableCodeGen::emitTableResponseType(const IR::P4Table* table) {
   //builder->append_line("%sActionT _action;", type);
   // if there is any params
   TableParamExtractor param_extractor(control);
-  for (auto action : *actionList) {
+  for (auto action : actionList) {
     action->apply(param_extractor);
   }
-  cstring tname = table->name.toString();
   type_builder->append_format("typedef struct {");
   type_builder->incr_indent();
-  int action_key_size = ceil(log2(actionList->size()));
-  LOG1("action list " << table->name << " " << actionList->size() << " " << action_key_size);
+  int action_key_size = ceil(log2(actionList.size()));
+  LOG1("action list " << table->name << " " << actionList.size() << " " << action_key_size);
   type_builder->append_format("Bit#(%d) _action;", action_key_size);
   for (auto f : param_extractor.param_map) {
     cstring pname = f.first;
@@ -126,7 +109,7 @@ void TableCodeGen::emitTableResponseType(const IR::P4Table* table) {
     type_builder->append_format("Bit#(%d) %s;", param->size, pname);
     action_size += param->size;
   }
-  action_size += ceil(log2(actionList->size()));
+  action_size += ceil(log2(actionList.size()));
   type_builder->decr_indent();
   type_builder->append_format("} %sRspT deriving (Bits, FShow);", type);
   //builder->decr_indent();
@@ -201,7 +184,7 @@ void TableCodeGen::emitFunctionExecute(const IR::P4Table* table) {
   cstring type = CamelCase(name);
   //const IR::IndexedVector<IR::ActionListElement>* actionList
   auto actionList = table->getActionList()->actionList;
-  int actionSize = (actionList != nullptr) ? actionList->size() : 0;
+  int actionSize = actionList.size();
   builder->append_line("instance Table_execute #(ConnectalTypes::%sRspT, %sParam, %d);", type, type, actionSize);
   builder->incr_indent();
   builder->append_line("function Action table_execute(ConnectalTypes::%sRspT resp, MetadataRequest metadata, Vector#(%d, FIFOF#(Tuple2#(MetadataRequest, %sParam))) fifos);", type, actionSize, type);
@@ -209,9 +192,9 @@ void TableCodeGen::emitFunctionExecute(const IR::P4Table* table) {
   builder->append_line("action");
   builder->append_line("case (unpack(resp._action)) matches");
   builder->incr_indent();
-  if (actionList != nullptr) {
+  if (actionList.size() != 0) {
     ActionParamPrinter printer(control, builder, name);
-    for (auto p : *actionList) {
+    for (auto p : actionList) {
       p->apply(printer);
     }
   }
@@ -235,7 +218,7 @@ void TableCodeGen::emitIntfAddEntry(const IR::P4Table* table) {
   if (key != nullptr) {
     builder->incr_indent();
     builder->append_format("let key = %sReqT{", type);
-    for (auto k : *key->keyElements) {
+    for (auto k : key->keyElements) {
       k->apply(key_extractor);
     }
     if ((key_extractor.key_width % 9) != 0) {
@@ -245,7 +228,6 @@ void TableCodeGen::emitIntfAddEntry(const IR::P4Table* table) {
       const IR::StructField* field = it->second;
       cstring member = it->first;
       if (field->type->is<IR::Type_Bits>()) {
-        int size = field->type->to<IR::Type_Bits>()->size;
         if (it != key_extractor.keymap.begin()) {
           builder->append_format(", ");
         }
@@ -258,7 +240,7 @@ void TableCodeGen::emitIntfAddEntry(const IR::P4Table* table) {
 
     auto actionList = table->getActionList()->actionList;
     TableParamExtractor param_extractor(control);
-    for (auto action : *actionList) {
+    for (auto action : actionList) {
       action->apply(param_extractor);
     }
     for (auto f : param_extractor.param_map) {
@@ -278,7 +260,7 @@ void TableCodeGen::emit(const IR::P4Table* table) {
   int id = table->declid % 32;
   //const IR::IndexedVector<IR::ActionListElement>* actionList
   auto actionList = table->getActionList()->actionList;
-  int actionSize = (actionList != nullptr) ? actionList->size() : 0;
+  int actionSize = actionList.size();
   CHECK_NULL(builder);
   builder->append_line("typedef Table#(%d, MetadataRequest, %sParam, ConnectalTypes::%sReqT, ConnectalTypes::%sRspT) %sTable;", actionSize, type, type, type, type);
   builder->append_line("typedef MatchTable#(1, %d, %d, SizeOf#(ConnectalTypes::%sReqT), SizeOf#(ConnectalTypes::%sRspT)) %sMatchTable;", id, 256, type, type, type);
@@ -318,13 +300,12 @@ void TableCodeGen::emitCpp(const IR::P4Table* table) {
 
 bool TableCodeGen::preorder(const IR::P4Table* table) {
   auto tbl = table->to<IR::P4Table>();
-  for (auto act : *tbl->getActionList()->actionList) {
+  for (auto act : tbl->getActionList()->actionList) {
     auto element = act->to<IR::ActionListElement>();
     if (element->expression->is<IR::PathExpression>()) {
       LOG1("Path " << element->expression->to<IR::PathExpression>());
     } else if (element->expression->is<IR::MethodCallExpression>()) {
       auto expression = element->expression->to<IR::MethodCallExpression>();
-      auto type = control->program->typeMap->getType(expression->method, true);
       auto action = expression->method->toString();
       //control->action_to_table[action] = tbl;
       LOG1("action " << action);
@@ -334,7 +315,7 @@ bool TableCodeGen::preorder(const IR::P4Table* table) {
   // visit keys
   auto keys = tbl->getKey();
   if (keys != nullptr) {
-    for (auto key : *keys->keyElements) {
+    for (auto key : keys->keyElements) {
       auto element = key->to<IR::KeyElement>();
       if (element->expression->is<IR::Member>()) {
         auto m = element->expression->to<IR::Member>();

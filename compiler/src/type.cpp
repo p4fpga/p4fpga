@@ -1,4 +1,4 @@
-#include "ftype.h"
+#include "type.h"
 #include "bsvprogram.h"
 
 namespace FPGA {
@@ -97,7 +97,7 @@ FPGAStructType::FPGAStructType(const IR::Type_StructLike* strct) :
     width = 0;
     implWidth = 0;
 
-    for (auto f : *strct->fields) {
+    for (auto f : strct->fields) {
         auto type = FPGATypeFactory::instance->create(f->type);
         auto wt = dynamic_cast<IHasWidth*>(type);
         if (wt == nullptr) {

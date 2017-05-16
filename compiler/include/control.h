@@ -56,21 +56,21 @@ class FPGAControl { // : public FPGAObject {
                          const IR::ControlBlock* block,
                          const P4::TypeMap* typeMap,
                          const P4::ReferenceMap* refMap)
-      : program(program), controlBlock(block), typeMap(typeMap), refMap(refMap) {}
+      : refMap(refMap), typeMap(typeMap), controlBlock(block), program(program) {}
 
     virtual ~FPGAControl() {}
     cstring toP4Action (cstring inst);
     void emit(BSVProgram & bsv, CppProgram & cpp);
-    void emitTableRule(BSVProgram & bsv, const CFG::TableNode* node);
-    void emitCondRule(BSVProgram & bsv, const CFG::IfNode* node);
-    void emitEntryRule(BSVProgram & bsv, const CFG::Node* node);
-    void emitDeclaration(BSVProgram & bsv);
-    void emitConnection(BSVProgram & bsv);
-    void emitFifo(BSVProgram & bsv);
+    void emitTableRule(const CFG::TableNode* node);
+    void emitCondRule(const CFG::IfNode* node);
+    void emitEntryRule(const CFG::Node* node);
+    void emitDeclaration();
+    void emitConnection();
+    void emitFifo();
     void emitTables();
     void emitActions(BSVProgram & bsv);
     void emitActionTypes(BSVProgram & bsv);
-    void emitAPI(BSVProgram & bsv, cstring cbtype);
+    void emitAPI(cstring cbtype);
     bool build();
 };
 

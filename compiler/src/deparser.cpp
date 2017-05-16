@@ -14,7 +14,8 @@
   limitations under the License.
 */
 
-#include "fdeparser.h"
+#include <math.h>
+#include "deparser.h"
 #include "ir/ir.h"
 #include "vector_utils.h"
 #include "string_utils.h"
@@ -24,11 +25,10 @@ namespace FPGA {
 class DeparserBuilder : public Inspector {
   public:
     DeparserBuilder(FPGADeparser* deparser, const FPGAProgram* program) :
-      deparser(deparser), program(program) {}
+      program(program), deparser(deparser) {}
     bool preorder(const IR::MethodCallStatement* stat) override
     { visit(stat->methodCall); return false; }
     bool preorder(const IR::MethodCallExpression* expression) override;
-    bool preorder(const IR::Member* member) override;
   private:
     const FPGAProgram* program;
     FPGADeparser* deparser;
@@ -36,10 +36,9 @@ class DeparserBuilder : public Inspector {
 
 bool DeparserBuilder::preorder(const IR::MethodCallExpression* expression) {
   // packet.emit
-  auto emit = expression->method;
-  for (auto h : MakeZipRange(*expression->typeArguments, *expression->arguments)) {
-    auto typeName = h.get<0>();
-    auto instName = h.get<1>();
+  auto it = expression->arguments->begin();
+  for (auto typeName : *expression->typeArguments) {
+    auto instName = *it;
     auto type = program->typeMap->getType(typeName, true);
 
     // get header width
@@ -57,7 +56,7 @@ bool DeparserBuilder::preorder(const IR::MethodCallExpression* expression) {
     // unroll header stack to individual headers and create deparse state for each one
     else if (type->is<IR::Type_Stack>()){
       auto stk = type->to<IR::Type_Stack>();
-      for (int i = 0; i < stk->getSize(); i++) {
+      for (unsigned i = 0; i < stk->getSize(); i++) {
         if (stk->elementType->is<IR::Type_StructLike>()) {
           auto t = stk->elementType->to<IR::Type_StructLike>();
           int hdr_width = stk->elementType->width_bits();
@@ -70,25 +69,17 @@ bool DeparserBuilder::preorder(const IR::MethodCallExpression* expression) {
         }
       }
     }
-  }
-  return false;
-}
-
-bool DeparserBuilder::preorder(const IR::Member* member) {
-  if (member->expr->is<IR::PathExpression>()) {
-    auto et = member->expr->to<IR::PathExpression>();
-    // LOG1(et->path->name);
+    it++;
   }
   return false;
 }
 
 class DeparserRuleVisitor : public Inspector {
   public:
-    DeparserRuleVisitor(const FPGADeparser* deparser, CodeBuilder* builder, int& num_rules) :
+    DeparserRuleVisitor(CodeBuilder* builder, int& num_rules) :
       builder(builder), num_rules(num_rules) {}
     bool preorder(const IR::BSV::DeparseState* state) override;
   private:
-    const FPGAProgram* program;
     CodeBuilder* builder;
     int& num_rules;
 };
@@ -107,11 +98,10 @@ bool DeparserRuleVisitor::preorder(const IR::BSV::DeparseState* state) {
 
 class DeparserStateVisitor : public Inspector {
   public:
-    DeparserStateVisitor(const FPGADeparser* deparser, CodeBuilder* builder) :
+    DeparserStateVisitor(CodeBuilder* builder) :
       builder(builder) {}
     bool preorder(const IR::BSV::DeparseState* state) override;
   private:
-    const FPGAProgram* program;
     CodeBuilder* builder;
 };
 
@@ -167,7 +157,7 @@ void FPGADeparser::emitRules() {
 //  builder->append_line(exclusive_annotation);
 
   int num_rules = 0;
-  DeparserRuleVisitor visitor(this, builder, num_rules);
+  DeparserRuleVisitor visitor(builder, num_rules);
   for (auto r : states) {
     r->apply(visitor);
   }
@@ -179,7 +169,7 @@ void FPGADeparser::emitStates() {
   builder->append_line("`ifdef DEPARSER_STATE");
 
   // pulsewire to initiate next state
-  DeparserStateVisitor visitor(this, builder);
+  DeparserStateVisitor visitor(builder);
   for (auto r : states) {
     r->apply(visitor);
   }
@@ -193,7 +183,7 @@ void FPGADeparser::emitStates() {
   builder->incr_indent();
   builder->append_format("Vector#(%d, Bool) headerValid;", lenp1);
   builder->append_line("headerValid[0] = False;");
-  for (int i = 0; i < states.size(); i++) {
+  for (unsigned i = 0; i < states.size(); i++) {
     cstring name = states.at(i)->indexed_name;
     builder->append_format("headerValid[%d] = checkForward(metadata.hdr.%s);", i+1, name);
   }
@@ -220,7 +210,7 @@ void FPGADeparser::emitStates() {
   builder->append_line("DeparserState nextState = unpack(nextHeader);");
   builder->append_line("case (nextState) matches");
   builder->incr_indent();
-  for (int i = 0; i < states.size(); i++) {
+  for (unsigned i = 0; i < states.size(); i++) {
     auto name = states.at(i)->name.name;
     builder->append_format("StateDeparse%s: w_%s.send();", CamelCase(name), name);
   }

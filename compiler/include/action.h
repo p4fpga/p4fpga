@@ -19,13 +19,13 @@
 #define EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_ACTION_H_
 
 #include "ir/ir.h"
-#include "fcontrol.h"
+#include "control.h"
 
 namespace FPGA {
 
 class ActionCodeGen : public Inspector {
  public:
-  ActionCodeGen(FPGAControl* control, BSVProgram& bsv, CodeBuilder* builder) : 
+  ActionCodeGen(FPGAControl* control, BSVProgram& bsv, CodeBuilder* builder) :
     control(control), bsv(bsv), builder(builder) {}
   bool preorder(const IR::AssignmentStatement* stmt) override;
   bool preorder(const IR::Expression* expression) override;

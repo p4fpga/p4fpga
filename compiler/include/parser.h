@@ -19,7 +19,7 @@
 
 #include "ir/ir.h"
 #include "program.h"
-#include "ftype.h"
+#include "type.h"
 #include "bsvprogram.h"
 
 namespace FPGA {
@@ -29,16 +29,16 @@ typedef std::map<const IR::ParserState*, IR::BSV::ParseStep*> ParseStepMap;
 class FPGAParser : public FPGAObject {
  protected:
   // TODO(rjs): I think these should be const
-  void emitEnums(BSVProgram & bsv);
+  void emitEnums();
   void emitStructs(BSVProgram & bsv);
   void emitFunctions(BSVProgram & bsv);
   void emitRules(BSVProgram & bsv);
   //void emitBufferRule(BSVProgram & bsv, const IR::BSV::ParseStep* state);
   void emitExtractionRule(BSVProgram & bsv, const IR::BSV::ParseStep* state);
   void emitTransitionRule(BSVProgram & bsv, const IR::BSV::ParseStep* state);
-  void emitAcceptRule(BSVProgram & bsv);
-  void emitAcceptedHeaders(BSVProgram & bsv, const IR::Type_Struct* headers);
-  void emitUserMetadata(BSVProgram & bsv, const IR::Type_Struct* metadata);
+  void emitAcceptRule();
+  void emitAcceptedHeaders(const IR::Type_Struct* headers);
+  void emitUserMetadata(const IR::Type_Struct* metadata);
   void emitStateElements(BSVProgram & bsv);
 
   std::vector<IR::BSV::Rule*>         rules;
@@ -47,12 +47,11 @@ class FPGAParser : public FPGAObject {
   FPGAProgram*            program;
   const P4::ReferenceMap*       refMap;
   const P4::TypeMap*            typeMap;
-  const IR::ParserBlock*        parserBlock;
   const IR::Parameter*          packet;
   const IR::Parameter*          headers;
+  const IR::ParserBlock*        parserBlock;
   const IR::Parameter*          userMetadata;
   const IR::Parameter*          stdMetadata;
-  FPGAType*                     headerType;
   CodeBuilder*                  builder;
 
   // map from IR::ParserState to IR::BSV::ParseStep

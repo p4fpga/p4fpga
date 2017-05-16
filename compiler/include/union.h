@@ -18,7 +18,7 @@
 #define P4FPGA_INCLUDE_FUNION_H_
 
 #include "ir/ir.h"
-#include "fcontrol.h"
+#include "control.h"
 #include "bsvprogram.h"
 #include "string_utils.h"
 

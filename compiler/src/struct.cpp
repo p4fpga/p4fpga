@@ -14,9 +14,9 @@
   limitations under the License.
 */
 
-#include "fstruct.h"
-#include "fparser.h"
-#include "fcontrol.h"
+#include "struct.h"
+#include "parser.h"
+#include "control.h"
 #include "ir/ir.h"
 #include "string_utils.h"
 
@@ -35,7 +35,7 @@ bool StructCodeGen::preorder(const IR::Type_Header* hdr) {
   builder->append_line("typedef struct {");
   builder->incr_indent();
   int header_width = 0;
-  for (auto f : *hdr->fields) {
+  for (auto f : hdr->fields) {
     if (f->type->is<IR::Type_Bits>()) {
       int size = f->type->to<IR::Type_Bits>()->size;
       cstring name = f->name.toString();
@@ -68,7 +68,7 @@ bool StructCodeGen::preorder(const IR::Type_Struct* hdr) {
   builder->append_line("typedef struct {");
   builder->incr_indent();
   int header_width = 0;
-  for (auto f : *hdr->fields) {
+  for (auto f : hdr->fields) {
     if (f->type->is<IR::Type_Bits>()) {
       int size = f->type->to<IR::Type_Bits>()->size;
       cstring name = f->name.toString();
@@ -100,7 +100,7 @@ bool HeaderCodeGen::preorder(const IR::StructField* field) {
   return false;
 }
 
-bool HeaderCodeGen::preorder(const IR::Type_Header* hdr) {
+bool HeaderCodeGen::preorder(const IR::Type_Header*) {
   return false;
 }
 

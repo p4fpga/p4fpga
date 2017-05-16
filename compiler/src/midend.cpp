@@ -1,4 +1,4 @@
-#include "foptions.h"
+#include "options.h"
 #include "ir/ir.h"
 #include "midend.h"
 #include "midend/actionsInlining.h"
@@ -53,7 +53,7 @@
 
 namespace FPGA {
 
-const IR::P4Program* MidEnd::run(const FPGAOptions& options, const IR::P4Program* program) {
+const IR::ToplevelBlock* MidEnd::run(const IR::P4Program* program, const FPGAOptions& options) {
     if (program == nullptr)
         return nullptr;
 
@@ -61,28 +61,12 @@ const IR::P4Program* MidEnd::run(const FPGAOptions& options, const IR::P4Program
     refMap.setIsV1(isv1);
     auto evaluator = new P4::EvaluatorPass(&refMap, &typeMap);
 
-    PassManager simplify = {
+    PassManager midEnd = {
         new P4::RemoveReturns(&refMap),
         new P4::MoveConstructors(&refMap),
         new P4::RemoveAllUnusedDeclarations(&refMap),
         new P4::ClearTypeMap(&typeMap),
         evaluator,
-    };
-
-    simplify.setName("Simplify");
-    simplify.addDebugHooks(hooks);
-    program = program->apply(simplify);
-    if (::errorCount() > 0)
-        return nullptr;
-    auto toplevel = evaluator->getToplevelBlock();
-    if (toplevel->getMain() == nullptr)
-        // nothing further to do
-        return nullptr;
-
-    P4::InlineWorkList toInline;
-    P4::ActionsInlineList actionsToInline;
-
-    PassManager midEnd = {
         new P4::Inline(&refMap, &typeMap, evaluator),
         new P4::InlineActions(&refMap, &typeMap),
         new P4::LocalizeAllActions(&refMap),
@@ -119,7 +103,8 @@ const IR::P4Program* MidEnd::run(const FPGAOptions& options, const IR::P4Program
         new P4::TypeChecking(&refMap, &typeMap),
         new P4::SimplifyControlFlow(&refMap, &typeMap),
         new P4::RemoveAllUnusedDeclarations(&refMap),
-        // evaluator,
+        evaluator,
+        new VisitFunctor([this, evaluator](){ toplevel = evaluator->getToplevelBlock(); }),
     };
     midEnd.setName("MidEnd");
     midEnd.addDebugHooks(hooks);
@@ -127,7 +112,7 @@ const IR::P4Program* MidEnd::run(const FPGAOptions& options, const IR::P4Program
     if (::errorCount() > 0)
         return nullptr;
 
-    return program;
+    return toplevel;
 }
 
 }  // namespace FPGA

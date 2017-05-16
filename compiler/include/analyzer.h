@@ -18,22 +18,22 @@ limitations under the License.
 #define _BACKENDS_FPGA_ANALYZER_H_
 
 #include "ir/ir.h"
-#include "lib/ordered_set.h"
 #include "frontends/p4/typeMap.h"
 #include "frontends/common/resolveReferences/referenceMap.h"
+#include "lib/ordered_set.h"
 
 namespace FPGA {
 
 cstring nameFromAnnotation(const IR::Annotations* annotations, cstring defaultValue);
 
-// This CFG is only good for BMV2, which only cares about some Nodes in the program
-class CFG : public IHasDbPrint {
+// This CFG is only good for FPGA, which only cares about some Nodes in the program
+class CFG final : public IHasDbPrint {
  public:
     class Edge;
 
-    class EdgeSet {
+    class EdgeSet final {
      public:
-       std::set<CFG::Edge*> edges;
+        ordered_set<CFG::Edge*> edges;
 
         EdgeSet() = default;
         explicit EdgeSet(CFG::Edge* edge) { edges.emplace(edge); }
@@ -49,7 +49,9 @@ class CFG : public IHasDbPrint {
     class Node {
      protected:
         friend class CFG;
+
         static unsigned crtId;
+        EdgeSet         predecessors;
         explicit Node(cstring name) : id(crtId++), name(name) {}
         Node() : id(crtId++), name("node_" + Util::toString(id)) {}
         virtual ~Node() {}
@@ -57,34 +59,36 @@ class CFG : public IHasDbPrint {
      public:
         const unsigned id;
         const cstring  name;
-        EdgeSet        predecessors;
         EdgeSet        successors;
 
         void dbprint(std::ostream& out) const;
-        void addPredecessors(const EdgeSet* set) { predecessors.mergeWith(set); }
+        void addPredecessors(const EdgeSet* set) { if (set != nullptr)
+                predecessors.mergeWith(set); }
         template<typename T> bool is() const { return to<T>() != nullptr; }
         template<typename T> T* to() { return dynamic_cast<T*>(this); }
         template<typename T> const T* to() const { return dynamic_cast<const T*>(this); }
         void computeSuccessors();
+        cstring toString() const { return name; }
     };
 
  public:
-    class TableNode : public Node {
+    class TableNode final : public Node {
      public:
         const IR::P4Table* table;
         const IR::Expression*      invocation;
-        explicit TableNode(const IR::P4Table* table, const IR::Expression* invocation) :
-                Node(nameFromAnnotation(table->annotations, table->name)),
-                table(table), invocation(invocation) {}
+        explicit TableNode(const IR::P4Table* table, const IR::Expression* invocation)
+        : Node(table->externalName()), table(table), invocation(invocation)
+        { CHECK_NULL(table); CHECK_NULL(invocation); }
     };
 
-    class IfNode : public Node {
+    class IfNode final : public Node {
      public:
         const IR::IfStatement* statement;
-        explicit IfNode(const IR::IfStatement* statement) : statement(statement) {}
+        explicit IfNode(const IR::IfStatement* statement) : statement(statement)
+        { CHECK_NULL(statement); }
     };
 
-    class DummyNode : public Node {
+    class DummyNode final : public Node {
      public:
         explicit DummyNode(cstring name) : Node(name) {}
     };
@@ -98,7 +102,7 @@ class CFG : public IHasDbPrint {
     };
 
  public:
-    class Edge {
+    class Edge final {
      protected:
         EdgeType type;
         Edge(Node* node, EdgeType type, cstring label) : type(type), endpoint(node), label(label) {}
@@ -159,6 +163,13 @@ class CFG : public IHasDbPrint {
     void dbprint(std::ostream& out) const;
     void computeSuccessors()
     { for (auto n : allNodes) n->computeSuccessors(); }
+    // Graphs that require cycles are not implementable on BMv2.
+    // These can arise if a table is invoked multiple times.
+    bool checkForCycles() const;
+
+ private:
+    bool dfs(Node* node, std::set<Node*> &visited,
+             std::set<const IR::P4Table*> &stack) const;
 };
 
 // Represents global information about a P4 v1.2 program
@@ -175,9 +186,22 @@ class ProgramParts {
     std::map<const IR::P4Action*, unsigned> ids;
     // All local variables
     std::vector<const IR::Declaration_Variable*> variables;
+    // All the parsers
+    std::vector<const IR::P4Parser *> parsers;
 
     ProgramParts() {}
-    void analyze(IR::ToplevelBlock* toplevel);
+    void analyze(const IR::ToplevelBlock* toplevel);
+};
+
+class DiscoverStructure : public Inspector {
+    ProgramParts*           structure;
+ public:
+    explicit DiscoverStructure(ProgramParts* structure) : structure(structure)
+    { setName("DiscoverStructure"); }
+    void postorder(const IR::ParameterList* paramList) override;
+    void postorder(const IR::P4Action* action) override;
+    void postorder(const IR::Declaration_Variable* decl) override;
+    void postorder(const IR::P4Parser *p) override { structure->parsers.push_back(p); }
 };
 
 }  // namespace FPGA
