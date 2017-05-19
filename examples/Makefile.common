@@ -85,8 +85,10 @@ bitgen: codegen
 	make build.nfsume
 
 clean:
-	rm -r generatedbsv
-	rm -r generatedcpp
+	rm -rf generatedbsv
+	rm -rf generatedcpp
+	rm -f matchtable_model.cpp
+	rm -f *_Evaluator.p4
 ###########################################
 # Default Rules
 ###########################################

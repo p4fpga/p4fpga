@@ -242,7 +242,7 @@ void FPGADeparser::emitStates() {
   builder->append_line("return metadata;");
   builder->decr_indent();
   builder->append_line("endfunction");
-  builder->append_line("let initState = StateDeparse%s;", CamelCase(states[0]->name.toString()));
+  builder->append_line("let initState = StateDeparseStart;");
   builder->append_line("`endif  // DEPARSER_STATE");
 
 }

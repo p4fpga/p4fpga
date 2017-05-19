@@ -89,8 +89,6 @@ FPGAStructType::FPGAStructType(const IR::Type_StructLike* strct) :
         kind = "struct";
     else if (strct->is<IR::Type_Header>())
         kind = "struct";
-    else if (strct->is<IR::Type_Union>())
-        kind = "union";
     else
         BUG("Unexpected struct type %1%", strct);
     name = strct->name.name;
