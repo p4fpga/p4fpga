@@ -30,8 +30,10 @@ cstring nameFromAnnotation(const IR::Annotations* annotations,
     CHECK_NULL(annotations); CHECK_NULL(defaultValue);
     auto anno = annotations->getSingle(IR::Annotation::nameAnnotation);
     if (anno != nullptr) {
+        // TODO(dhruvsinghal): Do proper NULL checks 
+        auto str = anno->expr.front()->to<IR::StringLiteral>();
+	std::string name(str->value);
         // NOTE: replace '.' with '_' to make bsc happy
-        std::string name(anno->toString());
         std::replace(name.begin(), name.end(), '.', '_');
         return name.c_str();
     }
