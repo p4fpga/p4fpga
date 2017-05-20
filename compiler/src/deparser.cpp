@@ -124,7 +124,11 @@ void FPGADeparser::emitEnums() {
   builder->append_line("`ifdef DEPARSER_STRUCT");
   builder->append_line("typedef enum {");
   builder->incr_indent();
-  builder->append_line("StateDeparseStart,");
+  if (states.size() != 0) {
+    builder->append_line("StateDeparseStart,");
+  } else {
+    builder->append_line("StateDeparseStart");
+  }
   for (auto r : states) {
     auto name = r->name.name;
     if (r != states.back()) {
