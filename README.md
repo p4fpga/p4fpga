@@ -4,7 +4,7 @@
 
 https://groups.google.com/forum/#!forum/p4fpga-dev
 
-Send support requests to p4fpga-dev@googlegroups.com
+As a member of P4FPGA-dev, you can send support requests to p4fpga-dev@googlegroups.com
 
 # Build P4FPGA from Source
 
