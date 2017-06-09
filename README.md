@@ -1,5 +1,11 @@
 [![Build Status](https://travis-ci.com/hanw/p4fpga.svg?token=QcAxzpNcQodXfewmHgNA&branch=master)](https://travis-ci.com/hanw/p4fpga)
 
+# Join P4FPGA email list:
+
+https://groups.google.com/forum/#!forum/p4fpga-dev
+
+Send support requests to p4fpga-dev@googlegroups.com
+
 # Build P4FPGA from Source
 
 You will need p4fpga and p4c repository
