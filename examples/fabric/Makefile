@@ -1,6 +1,0 @@
-P4FILE=p4src/fabric.p4
-CONNECTALFLAGS += -D PARSER=fabric
-CONNECTALFLAGS += -D DEPARSER=fabric
-CONNECTALFLAGS += -D MATCHTABLE=fabric
-CONNECTALFLAGS += -D TYPEDEF=fabric
-include ../Makefile.common
