@@ -6,7 +6,6 @@ set (P4FPGA_BACKEND_SRCS
     cpp/deparser.cpp
     cpp/midend.cpp
     cpp/parser.cpp
-    cpp/profile.cpp
     cpp/program.cpp
     cpp/string_utils.cpp
     cpp/struct.cpp
@@ -28,7 +27,6 @@ set (P4FPGA_BACKEND_HDRS
     cpp/midend.h
     cpp/options.h
     cpp/parser.h
-    cpp/profile.h
     cpp/program.h
     cpp/string_utils.h
     cpp/struct.h
@@ -55,6 +53,9 @@ set (P4C_P4FPGA_SRCS
 add_library(p4fpga_backend ${P4FPGA_SOURCES})
 add_dependencies(p4fpga_backend genIR)
 
+find_package(Boost REQUIRED COMPONENTS system filesystem)
+include_directories(${Boost_INCLUDE_DIRS})
+
 add_executable(p4c-p4fpga ${P4C_P4FPGA_SRCS})
 target_link_libraries (p4c-p4fpga p4fpga_backend ${P4C_LIBRARIES} ${P4C_LIB_DEPS})
-
+target_link_libraries (p4c-p4fpga ${Boost_SYSTEM_LIBRARY} ${Boost_FILE_SYSTEM_LIBRARY})
