@@ -23,6 +23,9 @@
 
 namespace FPGA {
 
+cstring make_valid_ident(cstring name) {
+  return name.startsWith(".") ? name.substr(1) : name;
+}
 
 class SelectStmtCodeGen : public Inspector {
  public:
@@ -70,7 +73,7 @@ bool SelectStmtCodeGen::preorder(const IR::ListExpression* expr) {
 }
 
 void SelectStmtCodeGen::emitFunctionProlog() {
-  cstring name = state->name.toString();
+  cstring name = make_valid_ident(state->name.toString());
   if (params.size() != 0) {
     builder->append_format("function Action compute_next_state_%s(%s);", name, join(params, ","));
   } else {
@@ -92,7 +95,7 @@ void SelectStmtCodeGen::emitFunctionEpilog() {
 }
 
 bool SelectStmtCodeGen::preorder(const IR::SelectCase* cas) {
-  cstring name = state->name.toString();
+  cstring name = make_valid_ident(state->name.toString());
   if (cas->keyset->is<IR::Constant>()) {
     builder->append_format("%d: begin", cas->keyset->toString());
     builder->incr_indent();
@@ -131,7 +134,7 @@ bool SelectStmtCodeGen::preorder(const IR::SelectExpression* expr) {
 
 bool SelectStmtCodeGen::preorder(const IR::PathExpression* path) {
   builder->append_line("`ifdef PARSER_FUNCTION");
-  builder->append_line("function Action compute_next_state_%s();", state->toString());
+  builder->append_line("function Action compute_next_state_%s();", make_valid_ident(state->name.toString()));
   builder->incr_indent();
   builder->append_line("action");
   builder->append_line("w_%s_%s.send();", state->toString(), path->toString());
@@ -160,7 +163,7 @@ class ExtractStmtCodeGen : public Inspector {
 };
 
 bool ExtractStmtCodeGen::preorder (const IR::SelectCase* cas) {
-  cstring this_state = state->name.toString();
+  cstring this_state = make_valid_ident(state->name.toString());
   if (cas->keyset->is<IR::Constant>()) {
     cstring next_state = cas->state->toString();
     if (visited.find(this_state + next_state) != visited.end()) {
@@ -204,7 +207,7 @@ bool ExtractStmtCodeGen::preorder (const IR::PathExpression*) {
 }
 
 bool ExtractStmtCodeGen::preorder (const IR::MethodCallExpression* expr) {
-  cstring this_state = state->name.toString();
+  cstring this_state = make_valid_ident(state->name.toString());
   for (auto h: MakeZipRange(*expr->typeArguments, *expr->arguments)) {
     builder->append_line("`COLLECT_RULE(parse_fsm, joinRules(vec(genLoadRule(State%s, valueOf(%sSz)))));", CamelCase(this_state), CamelCase(this_state));
     num_rules++;
@@ -369,7 +372,7 @@ bool ExtractFuncCodeGen::preorder (const IR::Constant* constant) {
 }
 
 bool ExtractFuncCodeGen::preorder (const IR::MethodCallExpression* expr) {
-  cstring this_state = state->name.toString();
+  cstring this_state = make_valid_ident(state->name.toString());
   visit(state->selectExpression);
   for (auto h: MakeZipRange(*expr->typeArguments, *expr->arguments)) {
     auto typeName = h.get<0>();
@@ -413,7 +416,7 @@ class PulseWireCodeGen : public Inspector {
 };
 
 bool PulseWireCodeGen::preorder(const IR::SelectCase* cas) {
-  cstring this_state = state->name.toString();
+  cstring this_state = make_valid_ident(state->name.toString());
   cstring next_state = cas->state->toString();
   if (visited.find(next_state) != visited.end()) {
     return false;
@@ -429,7 +432,7 @@ bool PulseWireCodeGen::preorder(const IR::SelectCase* cas) {
 }
 
 bool PulseWireCodeGen::preorder(const IR::PathExpression* expr) {
-  cstring this_state = state->name.toString();
+  cstring this_state = make_valid_ident(state->name.toString());
   cstring next_state = expr->toString();
   if (visited.find(next_state) != visited.end()) {
     return false;
@@ -510,7 +513,7 @@ class InitStateCodeGen : public Inspector {
 };
 
 bool InitStateCodeGen::preorder(const IR::ParserState* state) {
-  if (state->name.toString() == "start") {
+  if (make_valid_ident(state->name.toString()) == "start") {
     // NOTE: assume start state is actually called 'start'
     if (state->components.size() == 0) {
       if (state->selectExpression->is<IR::PathExpression>()) {
@@ -518,11 +521,11 @@ bool InitStateCodeGen::preorder(const IR::ParserState* state) {
         auto inst = refMap->getDeclaration(expr->path, true);
         if (inst->is<IR::ParserState>()) {
           auto pstate = inst->to<IR::ParserState>();
-          builder->append_line("let initState = State%s;", CamelCase(pstate->name.toString()));
+          builder->append_line("let initState = State%s;", CamelCase(make_valid_ident(state->name.toString())));
         }
       }
     } else {
-      builder->append_line("let initState = State%s;", CamelCase(state->name.toString()));
+      builder->append_line("let initState = State%s;", CamelCase(make_valid_ident(state->name.toString())));
     }
   }
   return false;
@@ -543,7 +546,7 @@ void FPGAParser::emitEnums() {
   builder->incr_indent();
   std::vector<cstring> state_vec;
   for (auto state: parserBlock->container->states) {
-    state_vec.push_back(state->name.toString());
+    state_vec.push_back(make_valid_ident(state->name.toString()));
   }
   for (auto s : state_vec) {
     if (s == state_vec.back())
@@ -698,7 +701,7 @@ void FPGAParser::emit(BSVProgram & bsv) {
   builder->append_line("case (state) matches");
   builder->incr_indent();
   for (auto state: parserBlock->container->states) {
-    cstring this_state = state->name.toString();
+    cstring this_state = make_valid_ident(state->name.toString());
     builder->append_line("State%s : begin", CamelCase(this_state));
     builder->incr_indent();
     ExtractFuncCodeGen extractCodeGen(state, typeMap, builder);
