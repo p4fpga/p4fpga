@@ -57,5 +57,4 @@ find_package(Boost REQUIRED COMPONENTS system filesystem)
 include_directories(${Boost_INCLUDE_DIRS})
 
 add_executable(p4c-p4fpga ${P4C_P4FPGA_SRCS})
-target_link_libraries (p4c-p4fpga p4fpga_backend ${P4C_LIBRARIES} ${P4C_LIB_DEPS})
-target_link_libraries (p4c-p4fpga ${Boost_SYSTEM_LIBRARY} ${Boost_FILE_SYSTEM_LIBRARY})
+target_link_libraries (p4c-p4fpga p4fpga_backend ${P4C_LIBRARIES} ${P4C_LIB_DEPS} ${Boost_SYSTEM_LIBRARY} ${Boost_FILESYSTEM_LIBRARY})
