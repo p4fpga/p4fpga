@@ -99,13 +99,13 @@ bool SelectStmtCodeGen::preorder(const IR::SelectCase* cas) {
   if (cas->keyset->is<IR::Constant>()) {
     builder->append_format("%d: begin", cas->keyset->toString());
     builder->incr_indent();
-    builder->append_line("w_%s_%s.send();", name, cas->state->toString());
+    builder->append_line("w_%s_%s.send();", name, make_valid_ident(cas->state->toString()));
     builder->decr_indent();
     builder->append_line("end");
   } else if (cas->keyset->is<IR::DefaultExpression>()) {
     builder->append_line("default: begin");
     builder->incr_indent();
-    builder->append_line("w_%s_%s.send();", name, cas->state->toString());
+    builder->append_line("w_%s_%s.send();", name, make_valid_ident(cas->state->toString()));
     builder->decr_indent();
     builder->append_line("end");
   }
@@ -137,7 +137,7 @@ bool SelectStmtCodeGen::preorder(const IR::PathExpression* path) {
   builder->append_line("function Action compute_next_state_%s();", make_valid_ident(state->name.toString()));
   builder->incr_indent();
   builder->append_line("action");
-  builder->append_line("w_%s_%s.send();", state->toString(), path->toString());
+  builder->append_line("w_%s_%s.send();", make_valid_ident(state->toString()), path->toString());
   builder->append_line("endaction");
   builder->decr_indent();
   builder->append_line("endfunction");
@@ -165,7 +165,7 @@ class ExtractStmtCodeGen : public Inspector {
 bool ExtractStmtCodeGen::preorder (const IR::SelectCase* cas) {
   cstring this_state = make_valid_ident(state->name.toString());
   if (cas->keyset->is<IR::Constant>()) {
-    cstring next_state = cas->state->toString();
+    cstring next_state = make_valid_ident(cas->state->toString());
     if (visited.find(this_state + next_state) != visited.end()) {
       return false;
     }
@@ -177,7 +177,7 @@ bool ExtractStmtCodeGen::preorder (const IR::SelectCase* cas) {
     visited.insert(this_state + next_state);
     num_rules++;
   } else if (cas->keyset->is<IR::DefaultExpression>()) {
-    cstring next_state = cas->state->toString();
+    cstring next_state = make_valid_ident(cas->state->toString());
 
     if (visited.find(this_state + next_state) != visited.end()) {
       return false;
@@ -238,7 +238,7 @@ bool ExtractLenCodeGen::preorder (const IR::MethodCallExpression* expr) {
       auto header_type = typeMap->getType(typeName, true);
       CHECK_NULL(header_type);
       int header_width = header_type->width_bits();
-      builder->append_line("typedef %d %sSz;", header_width, CamelCase(state->toString()));
+      builder->append_line("typedef %d %sSz;", header_width, CamelCase(make_valid_ident(state->toString())));
     }
   } else if (expr->method->toString() == "packet.lookahead") {
     ::warning("look ahead not handled");
@@ -417,7 +417,7 @@ class PulseWireCodeGen : public Inspector {
 
 bool PulseWireCodeGen::preorder(const IR::SelectCase* cas) {
   cstring this_state = make_valid_ident(state->name.toString());
-  cstring next_state = cas->state->toString();
+  cstring next_state = make_valid_ident(cas->state->toString());
   if (visited.find(next_state) != visited.end()) {
     return false;
   }
