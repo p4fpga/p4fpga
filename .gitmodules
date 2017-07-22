@@ -1,3 +1,6 @@
 [submodule "p4c"]
 	path = p4c
 	url = git@github.com:p4lang/p4c.git
+[submodule "connectal"]
+	path = connectal
+	url = git@github.com:cambridgehackers/connectal.git
