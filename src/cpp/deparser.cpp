@@ -231,18 +231,20 @@ void FPGADeparser::emitStates() {
   builder->append_line("function MetadataT update_metadata(DeparserState state);");
   builder->incr_indent();
   builder->append_line("let metadata = rg_metadata;");
-  builder->append_line("case (state) matches");
-  builder->incr_indent();
-  for (auto s : states) {
-    cstring name = s->name.toString();
-    cstring indexed_name = s->indexed_name;
-    builder->append_line("StateDeparse%s :", CamelCase(name));
+  if (states.size() > 0) {
+    builder->append_line("case (state) matches");
     builder->incr_indent();
-    builder->append_format("metadata.hdr.%s = updateState(metadata.hdr.%s, tagged StructDefines::NotPresent);", indexed_name, indexed_name);
+    for (auto s : states) {
+      cstring name = s->name.toString();
+      cstring indexed_name = s->indexed_name;
+      builder->append_line("StateDeparse%s :", CamelCase(name));
+      builder->incr_indent();
+      builder->append_format("metadata.hdr.%s = updateState(metadata.hdr.%s, tagged StructDefines::NotPresent);", indexed_name, indexed_name);
+      builder->decr_indent();
+    }
     builder->decr_indent();
+    builder->append_line("endcase");
   }
-  builder->decr_indent();
-  builder->append_line("endcase");
   builder->append_line("return metadata;");
   builder->decr_indent();
   builder->append_line("endfunction");
