@@ -190,16 +190,16 @@ void TableCodeGen::emitFunctionExecute(const IR::P4Table* table) {
   builder->append_line("function Action table_execute(ConnectalTypes::%sRspT resp, MetadataRequest metadata, Vector#(%d, FIFOF#(Tuple2#(MetadataRequest, %sParam))) fifos);", type, actionSize, type);
   builder->incr_indent();
   builder->append_line("action");
-  builder->append_line("case (unpack(resp._action)) matches");
-  builder->incr_indent();
   if (actionList.size() != 0) {
+    builder->append_line("case (unpack(resp._action)) matches");
+    builder->incr_indent();
     ActionParamPrinter printer(control, builder, name);
     for (auto p : actionList) {
       p->apply(printer);
     }
+    builder->decr_indent();
+    builder->append_line("endcase");
   }
-  builder->decr_indent();
-  builder->append_line("endcase");
   builder->append_line("endaction");
   builder->decr_indent();
   builder->append_line("endfunction");

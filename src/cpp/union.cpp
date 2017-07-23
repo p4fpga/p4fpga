@@ -21,12 +21,22 @@
 namespace FPGA {
 
 bool UnionCodeGen::preorder(const IR::MethodCallExpression* expr) {
-  cstring union_name = control->toP4Action(expr->method->toString());
+  const IR::Path* path = expr->method->to<IR::PathExpression>()->path;
+  cstring union_name(path->name);
   cstring union_type = CamelCase(union_name);
+
   builder->append_line("struct {");
   builder->incr_indent();
-  auto k = control->actions.find(expr->method->toString());
-  if (k != control->actions.end()) {
+
+  std::pair<const cstring, const IR::P4Action*> *k = nullptr;
+  for (auto p : control->actions) {
+    if (p.second->name == path->name) {
+      k = &p;
+      break;
+    }
+  }
+
+  if (k != nullptr) {
     auto params = k->second->parameters;
     if (params->parameters.size() != 0) {
       for (auto p : params->parameters) {
