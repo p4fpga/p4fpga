@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.com/hanw/p4fpga.svg?token=QcAxzpNcQodXfewmHgNA&branch=master)](https://travis-ci.com/hanw/p4fpga)
+[![Build Status](https://travis-ci.org/p4fpga/p4fpga.svg?branch=master)](https://travis-ci.org/p4fpga/p4fpga)
 
 # Join P4FPGA email list:
 
@@ -6,10 +6,16 @@ https://groups.google.com/forum/#!forum/p4fpga-dev
 
 As a member of P4FPGA-dev, you can send support requests to p4fpga-dev@googlegroups.com
 
+# Bootstrap environment
+
+```
+bash bootstrap_env.sh
+```
+
 # Build P4FPGA from Source
 ```
 git submodule update --init --recursive
-./bootstrap.sh
+bash bootstrap.sh
 cd build
 make -j8
 ```
