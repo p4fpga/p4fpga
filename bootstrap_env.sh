@@ -12,6 +12,7 @@ function version_LT() {
 }
 
 SUDO=sudo
+LDCONFIG=ldconfig
 
 install_linux_packages() {
     ubuntu_release=$(lsb_release -r | cut -f 2)
