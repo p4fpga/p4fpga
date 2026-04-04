@@ -7,7 +7,6 @@
 
   http://www.apache.org/licenses/LICENSE-2.0
 
-
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -26,148 +25,123 @@
 
 namespace FPGA {
 
-// Utility function to convert a uint32_t instruction to hex string
 static std::string instr_to_hex(uint32_t instr) {
     std::stringstream ss;
     ss << "32'h" << std::hex << std::setfill('0') << std::setw(8) << instr;
     return ss.str();
 }
 
-// Build the field path for a Member expression chain
-// e.g., hdr.ipv4.ttl -> "hdr.ipv4.ttl"
+// --- VLIW Scheduler ---
+// Packs tagged instructions into VLIW words by phase order:
+//   SETUP words -> READ words -> COMPUTE words -> WRITE words -> CONTROL words
+void RiscVActionGenerator::scheduleVLIW() {
+    vliwProgram.clear();
+
+    // Collect instructions by phase
+    std::vector<uint32_t> phases[5];
+    for (auto& ti : taggedInstrs) {
+        phases[static_cast<int>(ti.phase)].push_back(ti.encoding);
+    }
+
+    // Pack each phase into VLIW words (8 slots each)
+    InstrPhase order[] = {InstrPhase::SETUP, InstrPhase::READ,
+                          InstrPhase::COMPUTE, InstrPhase::WRITE,
+                          InstrPhase::CONTROL};
+    for (auto phase : order) {
+        auto& instrs = phases[static_cast<int>(phase)];
+        for (size_t i = 0; i < instrs.size(); i += VLIW_SLOTS) {
+            VLIWWord word;
+            word.fill(RV_NOP);
+            for (int j = 0; j < VLIW_SLOTS && (i + j) < instrs.size(); j++) {
+                word[j] = instrs[i + j];
+            }
+            vliwProgram.push_back(word);
+        }
+    }
+
+    // Add terminator word (all zeros)
+    VLIWWord terminator;
+    terminator.fill(0);
+    vliwProgram.push_back(terminator);
+}
+
+// --- Field offset map ---
+
 cstring RiscVActionGenerator::buildFieldPath(const IR::Member* member) {
     if (auto innerMember = member->expr->to<IR::Member>()) {
         return buildFieldPath(innerMember) + "." + member->member.toString();
     }
-    // Base case: the outermost expression (e.g., "meta" parameter)
     return member->expr->toString() + "." + member->member.toString();
 }
 
-// Recursively compute bit offsets for all fields in a struct.
-// Bluespec pack() is MSB-first, fields in declaration order from MSB.
-// For our purposes, we compute offsets from LSB (bit 0).
 void RiscVActionGenerator::computeStructOffsets(
     const IR::Type_StructLike* type, cstring prefix, uint32_t baseOffset) {
-
-    // Calculate total width of this struct
     int totalWidth = type->width_bits();
-
-    // Walk fields in declaration order. In Bluespec pack(), the first
-    // field occupies the MSBs. We compute the bit offset from LSB.
     int currentBitFromMSB = 0;
     for (auto field : type->fields) {
         auto fieldType = control->program->typeMap->getType(field, true);
         cstring fieldPath = prefix + "." + field->name.toString();
         int fieldWidth = fieldType->width_bits();
-
-        // Bit offset from LSB = totalWidth - currentBitFromMSB - fieldWidth
         uint32_t bitOffset = baseOffset + (totalWidth - currentBitFromMSB - fieldWidth);
 
         if (fieldType->is<IR::Type_StructLike>()) {
-            computeStructOffsets(fieldType->to<IR::Type_StructLike>(),
-                                fieldPath, bitOffset);
+            computeStructOffsets(fieldType->to<IR::Type_StructLike>(), fieldPath, bitOffset);
         } else {
-            fieldOffsets[fieldPath] = FieldInfo{bitOffset,
-                                                 static_cast<uint32_t>(fieldWidth),
-                                                 fieldPath};
+            fieldOffsets[fieldPath] = FieldInfo{bitOffset, static_cast<uint32_t>(fieldWidth), fieldPath};
         }
-
         currentBitFromMSB += fieldWidth;
     }
 }
 
 void RiscVActionGenerator::buildFieldOffsetMap() {
     if (fieldMapBuilt) return;
-
-    // Walk the MetadataT structure to compute offsets
-    // MetadataT is defined as: struct { Headers hdr; Metadata meta; StandardMetadataT standard_metadata; }
-    // We need to find it from the program's type declarations
     for (auto decl : *control->program->program->getDeclarations()) {
         if (auto typeStruct = decl->to<IR::Type_Struct>()) {
-            cstring name = typeStruct->name.toString();
-            // Compute offsets for all known struct types
-            computeStructOffsets(typeStruct, name, 0);
+            computeStructOffsets(typeStruct, typeStruct->name.toString(), 0);
         }
     }
-
     fieldMapBuilt = true;
 }
 
+// --- Register allocation ---
+
 uint8_t RiscVActionGenerator::getRegister(const IR::Expression* expr) {
     auto it = exprToReg.find(expr);
-    if (it != exprToReg.end()) {
-        return it->second;
-    }
-
+    if (it != exprToReg.end()) return it->second;
     uint8_t reg = allocateRegister();
     exprToReg[expr] = reg;
     return reg;
 }
 
-// Load a constant bit offset into a register
 uint8_t RiscVActionGenerator::loadBitOffset(uint32_t bitOffset) {
     uint8_t reg = allocateRegister();
-    if (bitOffset >= -2048U && bitOffset <= 2047) {
-        instructions.push_back(RiscVInstr::addi(reg, 0, static_cast<int16_t>(bitOffset)));
+    if (bitOffset <= 2047) {
+        emit(RiscVInstr::addi(reg, 0, static_cast<int16_t>(bitOffset)), InstrPhase::SETUP);
     } else {
-        // Large offset: use LUI + ADDI
         uint32_t upper = (bitOffset + 0x800) >> 12;
         int16_t lower = bitOffset & 0xFFF;
         if (lower & 0x800) lower -= 0x1000;
-        instructions.push_back(RiscVInstr::lui(reg, upper << 12));
+        emit(RiscVInstr::lui(reg, upper << 12), InstrPhase::SETUP);
         if (lower != 0)
-            instructions.push_back(RiscVInstr::addi(reg, reg, lower));
+            emit(RiscVInstr::addi(reg, reg, lower), InstrPhase::SETUP);
     }
     return reg;
 }
 
+// --- Field access ---
+
 void RiscVActionGenerator::generateFieldRead(const IR::Member* member) {
     buildFieldOffsetMap();
-
     cstring fieldPath = buildFieldPath(member);
     uint8_t destReg = getRegister(member);
 
-    auto it = fieldOffsets.find(fieldPath);
-    if (it != fieldOffsets.end()) {
-        // Load bit offset, then META_ACCESS read
-        uint8_t offsetReg = loadBitOffset(it->second.bitOffset);
-        instructions.push_back(RiscVInstr::metaRead(destReg, offsetReg));
-    } else {
-        // Field not found in offset map - try partial match
-        // This handles cases where the path prefix differs
-        bool found = false;
-        for (auto& entry : fieldOffsets) {
-            if (entry.first.endsWith(fieldPath) ||
-                fieldPath.endsWith(entry.first)) {
-                uint8_t offsetReg = loadBitOffset(entry.second.bitOffset);
-                instructions.push_back(RiscVInstr::metaRead(destReg, offsetReg));
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            // Generate a read at offset 0 as fallback
-            P4::warning(ErrorType::WARN_UNINITIALIZED,"RISC-V codegen: unknown field %s, using offset 0", fieldPath);
-            uint8_t offsetReg = loadBitOffset(0);
-            instructions.push_back(RiscVInstr::metaRead(destReg, offsetReg));
-        }
-    }
-}
-
-void RiscVActionGenerator::generateFieldWrite(const IR::Member* member, uint8_t valueReg) {
-    buildFieldOffsetMap();
-
-    cstring fieldPath = buildFieldPath(member);
-
-    auto it = fieldOffsets.find(fieldPath);
     uint32_t bitOffset = 0;
+    auto it = fieldOffsets.find(fieldPath);
     if (it != fieldOffsets.end()) {
         bitOffset = it->second.bitOffset;
     } else {
-        // Try partial match
         for (auto& entry : fieldOffsets) {
-            if (entry.first.endsWith(fieldPath) ||
-                fieldPath.endsWith(entry.first)) {
+            if (entry.first.endsWith(fieldPath) || fieldPath.endsWith(entry.first)) {
                 bitOffset = entry.second.bitOffset;
                 break;
             }
@@ -175,42 +149,57 @@ void RiscVActionGenerator::generateFieldWrite(const IR::Member* member, uint8_t 
     }
 
     uint8_t offsetReg = loadBitOffset(bitOffset);
-    instructions.push_back(RiscVInstr::metaWrite(offsetReg, valueReg));
+    emit(RiscVInstr::metaRead(destReg, offsetReg), InstrPhase::READ);
 }
+
+void RiscVActionGenerator::generateFieldWrite(const IR::Member* member, uint8_t valueReg) {
+    buildFieldOffsetMap();
+    cstring fieldPath = buildFieldPath(member);
+
+    uint32_t bitOffset = 0;
+    auto it = fieldOffsets.find(fieldPath);
+    if (it != fieldOffsets.end()) {
+        bitOffset = it->second.bitOffset;
+    } else {
+        for (auto& entry : fieldOffsets) {
+            if (entry.first.endsWith(fieldPath) || fieldPath.endsWith(entry.first)) {
+                bitOffset = entry.second.bitOffset;
+                break;
+            }
+        }
+    }
+
+    uint8_t offsetReg = loadBitOffset(bitOffset);
+    emit(RiscVInstr::metaWrite(offsetReg, valueReg), InstrPhase::WRITE);
+}
+
+// --- Statement visitors ---
 
 bool RiscVActionGenerator::preorder(const IR::AssignmentStatement* stmt) {
     if (stmt->left->is<IR::Member>()) {
         auto member = stmt->left->to<IR::Member>();
 
-        // Evaluate the right-hand side
         if (stmt->right->is<IR::Constant>()) {
-            auto constant = stmt->right->to<IR::Constant>();
             uint8_t valReg = allocateRegister();
-            generateConstant(constant, valReg);
+            generateConstant(stmt->right->to<IR::Constant>(), valReg);
             generateFieldWrite(member, valReg);
         } else if (stmt->right->is<IR::Operation_Binary>()) {
             auto binary = stmt->right->to<IR::Operation_Binary>();
             generateBinaryOperation(binary);
-            uint8_t srcReg = getRegister(binary);
-            generateFieldWrite(member, srcReg);
+            generateFieldWrite(member, getRegister(binary));
         } else if (stmt->right->is<IR::Member>()) {
             auto rightMember = stmt->right->to<IR::Member>();
             generateFieldRead(rightMember);
-            uint8_t srcReg = getRegister(rightMember);
-            generateFieldWrite(member, srcReg);
+            generateFieldWrite(member, getRegister(rightMember));
         } else if (stmt->right->is<IR::MethodCallExpression>()) {
             visit(stmt->right);
-            uint8_t srcReg = getRegister(stmt->right);
-            generateFieldWrite(member, srcReg);
+            generateFieldWrite(member, getRegister(stmt->right));
         } else {
             visit(stmt->right);
-            uint8_t srcReg = getRegister(stmt->right);
-            generateFieldWrite(member, srcReg);
+            generateFieldWrite(member, getRegister(stmt->right));
         }
     } else {
-        // Non-member left side (local variable)
         uint8_t destReg = getRegister(stmt->left);
-
         if (stmt->right->is<IR::Constant>()) {
             generateConstant(stmt->right->to<IR::Constant>(), destReg);
         } else if (stmt->right->is<IR::Operation_Binary>()) {
@@ -218,50 +207,33 @@ bool RiscVActionGenerator::preorder(const IR::AssignmentStatement* stmt) {
             generateBinaryOperation(binary);
             uint8_t srcReg = getRegister(binary);
             if (srcReg != destReg)
-                instructions.push_back(RiscVInstr::addi(destReg, srcReg, 0));
+                emit(RiscVInstr::addi(destReg, srcReg, 0), InstrPhase::COMPUTE);
         } else {
             visit(stmt->right);
             uint8_t srcReg = getRegister(stmt->right);
             if (srcReg != destReg)
-                instructions.push_back(RiscVInstr::addi(destReg, srcReg, 0));
+                emit(RiscVInstr::addi(destReg, srcReg, 0), InstrPhase::COMPUTE);
         }
     }
-
     return false;
 }
 
 bool RiscVActionGenerator::preorder(const IR::IfStatement* stmt) {
-    // Evaluate condition into a register
+    // For VLIW, branches go in CONTROL phase
     visit(stmt->condition);
     uint8_t condReg = getRegister(stmt->condition);
 
-    // BEQ condReg, x0, else_label (branch over true body if condition is false)
-    size_t branchIdx = instructions.size();
-    instructions.push_back(0);  // placeholder for branch
+    // Emit as scalar branch sequence (occupies slot 0 of control words)
+    // BEQ condReg, x0, skip_true_body
+    // This is simplified: complex if/else in VLIW would need multiple passes
+    // For now, we linearize: condition in compute phase, then branch
+    emit(RiscVInstr::beq(condReg, 0, 4), InstrPhase::CONTROL);  // skip 2 VLIW words
 
-    // Emit true body
     visit(stmt->ifTrue);
 
     if (stmt->ifFalse) {
-        // Jump over else body
-        size_t jumpIdx = instructions.size();
-        instructions.push_back(0);  // placeholder for jump
-
-        // Patch the conditional branch to jump here (else body start)
-        // Offset in instruction count * 2 (to match our PC encoding)
-        int16_t elseOffset = static_cast<int16_t>((instructions.size() - branchIdx) * 2);
-        instructions[branchIdx] = RiscVInstr::beq(condReg, 0, elseOffset);
-
-        // Emit else body
+        emit(RiscVInstr::jal(0, 4), InstrPhase::CONTROL);  // skip else
         visit(stmt->ifFalse);
-
-        // Patch the unconditional jump to skip past else
-        int32_t endOffset = static_cast<int32_t>((instructions.size() - jumpIdx) * 2);
-        instructions[jumpIdx] = RiscVInstr::jal(0, endOffset);
-    } else {
-        // No else: just patch the branch
-        int16_t skipOffset = static_cast<int16_t>((instructions.size() - branchIdx) * 2);
-        instructions[branchIdx] = RiscVInstr::beq(condReg, 0, skipOffset);
     }
 
     return false;
@@ -269,8 +241,7 @@ bool RiscVActionGenerator::preorder(const IR::IfStatement* stmt) {
 
 bool RiscVActionGenerator::preorder(const IR::Expression* expression) {
     if (expression->is<IR::Member>()) {
-        auto member = expression->to<IR::Member>();
-        generateFieldRead(member);
+        generateFieldRead(expression->to<IR::Member>());
     }
     return false;
 }
@@ -279,27 +250,23 @@ bool RiscVActionGenerator::preorder(const IR::MethodCallExpression* expression) 
     auto mi = P4::MethodInstance::resolve(expression,
                                          control->program->refMap,
                                          control->program->typeMap);
-
     if (auto externMethod = mi->to<P4::ExternMethod>()) {
         generateExternMethod(externMethod);
         return false;
     }
-
     if (auto externFunction = mi->to<P4::ExternFunction>()) {
         generateExternFunction(externFunction);
         return false;
     }
-
     if (auto action = mi->to<P4::ActionCall>()) {
-        // Nested action calls: visit the action body inline
-        if (action->action && action->action->body) {
+        if (action->action && action->action->body)
             visit(action->action->body);
-        }
         return false;
     }
-
     return false;
 }
+
+// --- Code generation helpers ---
 
 void RiscVActionGenerator::generateBinaryOperation(const IR::Operation_Binary* binary) {
     visit(binary->left);
@@ -310,117 +277,81 @@ void RiscVActionGenerator::generateBinaryOperation(const IR::Operation_Binary* b
     uint8_t destReg = getRegister(binary);
 
     if (binary->is<IR::Add>()) {
-        instructions.push_back(RiscVInstr::add(destReg, leftReg, rightReg));
+        emit(RiscVInstr::add(destReg, leftReg, rightReg), InstrPhase::COMPUTE);
     } else if (binary->is<IR::Sub>()) {
-        instructions.push_back(RiscVInstr::sub(destReg, leftReg, rightReg));
+        emit(RiscVInstr::sub(destReg, leftReg, rightReg), InstrPhase::COMPUTE);
     } else if (binary->is<IR::Shl>()) {
-        instructions.push_back(RiscVInstr::encodeRType(
-            RiscVInstr::OP, destReg, RiscVInstr::SLL, leftReg, rightReg, 0));
+        emit(RiscVInstr::encodeRType(RiscVInstr::OP, destReg, RiscVInstr::SLL, leftReg, rightReg, 0), InstrPhase::COMPUTE);
     } else if (binary->is<IR::Shr>()) {
-        instructions.push_back(RiscVInstr::encodeRType(
-            RiscVInstr::OP, destReg, RiscVInstr::SRL_SRA, leftReg, rightReg, 0));
+        emit(RiscVInstr::encodeRType(RiscVInstr::OP, destReg, RiscVInstr::SRL_SRA, leftReg, rightReg, 0), InstrPhase::COMPUTE);
     } else if (binary->is<IR::BAnd>()) {
-        instructions.push_back(RiscVInstr::encodeRType(
-            RiscVInstr::OP, destReg, RiscVInstr::AND, leftReg, rightReg, 0));
+        emit(RiscVInstr::encodeRType(RiscVInstr::OP, destReg, RiscVInstr::AND, leftReg, rightReg, 0), InstrPhase::COMPUTE);
     } else if (binary->is<IR::BOr>()) {
-        instructions.push_back(RiscVInstr::encodeRType(
-            RiscVInstr::OP, destReg, RiscVInstr::OR, leftReg, rightReg, 0));
+        emit(RiscVInstr::encodeRType(RiscVInstr::OP, destReg, RiscVInstr::OR, leftReg, rightReg, 0), InstrPhase::COMPUTE);
     } else if (binary->is<IR::BXor>()) {
-        instructions.push_back(RiscVInstr::encodeRType(
-            RiscVInstr::OP, destReg, RiscVInstr::XOR, leftReg, rightReg, 0));
+        emit(RiscVInstr::encodeRType(RiscVInstr::OP, destReg, RiscVInstr::XOR, leftReg, rightReg, 0), InstrPhase::COMPUTE);
     } else if (binary->is<IR::LAnd>()) {
-        // Logical AND: both operands nonzero
-        // SLTU t1, x0, left (t1 = left != 0)
-        // SLTU t2, x0, right (t2 = right != 0)
-        // AND dest, t1, t2
         uint8_t t1 = allocateRegister();
         uint8_t t2 = allocateRegister();
-        instructions.push_back(RiscVInstr::encodeRType(
-            RiscVInstr::OP, t1, RiscVInstr::SLTU, 0, leftReg, 0));
-        instructions.push_back(RiscVInstr::encodeRType(
-            RiscVInstr::OP, t2, RiscVInstr::SLTU, 0, rightReg, 0));
-        instructions.push_back(RiscVInstr::encodeRType(
-            RiscVInstr::OP, destReg, RiscVInstr::AND, t1, t2, 0));
+        emit(RiscVInstr::encodeRType(RiscVInstr::OP, t1, RiscVInstr::SLTU, 0, leftReg, 0), InstrPhase::COMPUTE);
+        emit(RiscVInstr::encodeRType(RiscVInstr::OP, t2, RiscVInstr::SLTU, 0, rightReg, 0), InstrPhase::COMPUTE);
+        emit(RiscVInstr::encodeRType(RiscVInstr::OP, destReg, RiscVInstr::AND, t1, t2, 0), InstrPhase::COMPUTE);
     } else if (binary->is<IR::LOr>()) {
-        // Logical OR: either operand nonzero
-        instructions.push_back(RiscVInstr::encodeRType(
-            RiscVInstr::OP, destReg, RiscVInstr::OR, leftReg, rightReg, 0));
-        instructions.push_back(RiscVInstr::encodeRType(
-            RiscVInstr::OP, destReg, RiscVInstr::SLTU, 0, destReg, 0));
+        emit(RiscVInstr::encodeRType(RiscVInstr::OP, destReg, RiscVInstr::OR, leftReg, rightReg, 0), InstrPhase::COMPUTE);
+        emit(RiscVInstr::encodeRType(RiscVInstr::OP, destReg, RiscVInstr::SLTU, 0, destReg, 0), InstrPhase::COMPUTE);
     } else if (binary->is<IR::Equ>()) {
-        // Equal: XOR then SLTIU 1 (result is 1 if XOR==0)
-        uint8_t tempReg = allocateRegister();
-        instructions.push_back(RiscVInstr::encodeRType(
-            RiscVInstr::OP, tempReg, RiscVInstr::XOR, leftReg, rightReg, 0));
-        instructions.push_back(RiscVInstr::encodeIType(
-            RiscVInstr::OP_IMM, destReg, RiscVInstr::SLTU, tempReg, 1));
+        uint8_t t = allocateRegister();
+        emit(RiscVInstr::encodeRType(RiscVInstr::OP, t, RiscVInstr::XOR, leftReg, rightReg, 0), InstrPhase::COMPUTE);
+        emit(RiscVInstr::encodeIType(RiscVInstr::OP_IMM, destReg, RiscVInstr::SLTU, t, 1), InstrPhase::COMPUTE);
     } else if (binary->is<IR::Neq>()) {
-        // Not equal: XOR then SLTU(x0, temp) (result is 1 if XOR!=0)
-        uint8_t tempReg = allocateRegister();
-        instructions.push_back(RiscVInstr::encodeRType(
-            RiscVInstr::OP, tempReg, RiscVInstr::XOR, leftReg, rightReg, 0));
-        instructions.push_back(RiscVInstr::encodeRType(
-            RiscVInstr::OP, destReg, RiscVInstr::SLTU, 0, tempReg, 0));
+        uint8_t t = allocateRegister();
+        emit(RiscVInstr::encodeRType(RiscVInstr::OP, t, RiscVInstr::XOR, leftReg, rightReg, 0), InstrPhase::COMPUTE);
+        emit(RiscVInstr::encodeRType(RiscVInstr::OP, destReg, RiscVInstr::SLTU, 0, t, 0), InstrPhase::COMPUTE);
     } else if (binary->is<IR::Lss>()) {
-        // Less than (signed)
-        instructions.push_back(RiscVInstr::encodeRType(
-            RiscVInstr::OP, destReg, RiscVInstr::SLT, leftReg, rightReg, 0));
+        emit(RiscVInstr::encodeRType(RiscVInstr::OP, destReg, RiscVInstr::SLT, leftReg, rightReg, 0), InstrPhase::COMPUTE);
     } else if (binary->is<IR::Grt>()) {
-        // Greater than: SLT with swapped operands
-        instructions.push_back(RiscVInstr::encodeRType(
-            RiscVInstr::OP, destReg, RiscVInstr::SLT, rightReg, leftReg, 0));
+        emit(RiscVInstr::encodeRType(RiscVInstr::OP, destReg, RiscVInstr::SLT, rightReg, leftReg, 0), InstrPhase::COMPUTE);
     } else if (binary->is<IR::Leq>()) {
-        // Less or equal: !(b < a)
-        uint8_t tempReg = allocateRegister();
-        instructions.push_back(RiscVInstr::encodeRType(
-            RiscVInstr::OP, tempReg, RiscVInstr::SLT, rightReg, leftReg, 0));
-        // NOT: XORI with 1
-        instructions.push_back(RiscVInstr::xori(destReg, tempReg, 1));
+        uint8_t t = allocateRegister();
+        emit(RiscVInstr::encodeRType(RiscVInstr::OP, t, RiscVInstr::SLT, rightReg, leftReg, 0), InstrPhase::COMPUTE);
+        emit(RiscVInstr::xori(destReg, t, 1), InstrPhase::COMPUTE);
     } else if (binary->is<IR::Geq>()) {
-        // Greater or equal: !(a < b)
-        uint8_t tempReg = allocateRegister();
-        instructions.push_back(RiscVInstr::encodeRType(
-            RiscVInstr::OP, tempReg, RiscVInstr::SLT, leftReg, rightReg, 0));
-        instructions.push_back(RiscVInstr::xori(destReg, tempReg, 1));
+        uint8_t t = allocateRegister();
+        emit(RiscVInstr::encodeRType(RiscVInstr::OP, t, RiscVInstr::SLT, leftReg, rightReg, 0), InstrPhase::COMPUTE);
+        emit(RiscVInstr::xori(destReg, t, 1), InstrPhase::COMPUTE);
     } else {
-        // Fallback: treat as ADD
-        instructions.push_back(RiscVInstr::add(destReg, leftReg, rightReg));
+        emit(RiscVInstr::add(destReg, leftReg, rightReg), InstrPhase::COMPUTE);
     }
 }
 
 void RiscVActionGenerator::generateUnaryOperation(const IR::Operation_Unary* unary) {
     visit(unary->expr);
-
     uint8_t srcReg = getRegister(unary->expr);
     uint8_t destReg = getRegister(unary);
 
     if (unary->is<IR::Neg>()) {
-        instructions.push_back(RiscVInstr::sub(destReg, 0, srcReg));
+        emit(RiscVInstr::sub(destReg, 0, srcReg), InstrPhase::COMPUTE);
     } else if (unary->is<IR::Cmpl>()) {
-        instructions.push_back(RiscVInstr::xori(destReg, srcReg, -1));
+        emit(RiscVInstr::xori(destReg, srcReg, -1), InstrPhase::COMPUTE);
     } else if (unary->is<IR::LNot>()) {
-        // Logical NOT: SLTIU srcReg, 1
-        instructions.push_back(RiscVInstr::encodeIType(
-            RiscVInstr::OP_IMM, destReg, RiscVInstr::SLTU, srcReg, 1));
+        emit(RiscVInstr::encodeIType(RiscVInstr::OP_IMM, destReg, RiscVInstr::SLTU, srcReg, 1), InstrPhase::COMPUTE);
     } else {
         if (srcReg != destReg)
-            instructions.push_back(RiscVInstr::addi(destReg, srcReg, 0));
+            emit(RiscVInstr::addi(destReg, srcReg, 0), InstrPhase::COMPUTE);
     }
 }
 
 void RiscVActionGenerator::generateConstant(const IR::Constant* constant, uint8_t destReg) {
     int64_t value = constant->asInt();
-
     if (value >= -2048 && value <= 2047) {
-        instructions.push_back(RiscVInstr::addi(destReg, 0, static_cast<int16_t>(value)));
+        emit(RiscVInstr::addi(destReg, 0, static_cast<int16_t>(value)), InstrPhase::SETUP);
     } else {
-        // LUI + ADDI for larger values
         uint32_t upper = (static_cast<uint32_t>(value) + 0x800) >> 12;
         int16_t lower = value & 0xFFF;
         if (lower & 0x800) lower -= 0x1000;
-        instructions.push_back(RiscVInstr::lui(destReg, upper << 12));
+        emit(RiscVInstr::lui(destReg, upper << 12), InstrPhase::SETUP);
         if (lower != 0)
-            instructions.push_back(RiscVInstr::addi(destReg, destReg, lower));
+            emit(RiscVInstr::addi(destReg, destReg, lower), InstrPhase::SETUP);
     }
 }
 
@@ -429,16 +360,13 @@ void RiscVActionGenerator::generateExternMethod(const P4::ExternMethod* externMe
     uint8_t destReg = getRegister(externMethod->expr);
 
     if (methodName == "read") {
-        // Register/counter read: use META_ACCESS to read from extern storage area
-        // The actual extern ID and index would come from the method arguments
-        uint8_t offsetReg = loadBitOffset(0);  // placeholder offset
-        instructions.push_back(RiscVInstr::metaRead(destReg, offsetReg));
+        uint8_t offsetReg = loadBitOffset(0);
+        emit(RiscVInstr::metaRead(destReg, offsetReg), InstrPhase::READ);
     } else if (methodName == "write") {
-        // Register/counter write
-        uint8_t offsetReg = loadBitOffset(0);  // placeholder offset
+        uint8_t offsetReg = loadBitOffset(0);
         uint8_t valueReg = allocateRegister();
-        instructions.push_back(RiscVInstr::addi(valueReg, 0, 0));  // placeholder value
-        instructions.push_back(RiscVInstr::metaWrite(offsetReg, valueReg));
+        emit(RiscVInstr::addi(valueReg, 0, 0), InstrPhase::SETUP);
+        emit(RiscVInstr::metaWrite(offsetReg, valueReg), InstrPhase::WRITE);
     }
 }
 
@@ -446,46 +374,38 @@ void RiscVActionGenerator::generateExternFunction(const P4::ExternFunction* exte
     cstring functionName = externFunction->method->name.toString();
 
     if (functionName == "mark_to_drop") {
-        // Set drop flag in standard_metadata
-        // Look up the egress_spec field offset and set to DROP_PORT (511)
         buildFieldOffsetMap();
-
-        // Find standard_metadata.egress_spec and set to 511 (drop)
         uint8_t dropValReg = allocateRegister();
-        instructions.push_back(RiscVInstr::addi(dropValReg, 0, 511));
+        emit(RiscVInstr::addi(dropValReg, 0, 511), InstrPhase::SETUP);
 
-        // Try to find the egress_spec field
         for (auto& entry : fieldOffsets) {
             if (entry.first.find("egress_spec") != nullptr) {
                 uint8_t offsetReg = loadBitOffset(entry.second.bitOffset);
-                instructions.push_back(RiscVInstr::metaWrite(offsetReg, dropValReg));
+                emit(RiscVInstr::metaWrite(offsetReg, dropValReg), InstrPhase::WRITE);
                 return;
             }
         }
-
-        // Fallback: write to offset 0
         uint8_t offsetReg = loadBitOffset(0);
-        instructions.push_back(RiscVInstr::metaWrite(offsetReg, dropValReg));
+        emit(RiscVInstr::metaWrite(offsetReg, dropValReg), InstrPhase::WRITE);
     }
 }
 
+// --- Top-level generation ---
+
 void RiscVActionGenerator::generateRiscVAction(const IR::P4Action* action) {
-    instructions.clear();
+    taggedInstrs.clear();
+    vliwProgram.clear();
     resetRegisters();
     buildFieldOffsetMap();
 
-    // Process the action body
     if (action->body) {
         if (auto block = action->body->to<IR::BlockStatement>()) {
-            for (auto s : block->components) {
+            for (auto s : block->components)
                 visit(s);
-            }
         }
     }
 
-    // Terminator instruction (all zeros)
-    instructions.push_back(0);
-
+    scheduleVLIW();
     emitRiscVActionEngine(action);
 }
 
@@ -495,30 +415,43 @@ void RiscVActionGenerator::emitRiscVActionEngine(const IR::P4Action* action) {
 
     const IR::P4Table* table = control->action_to_table[name];
     if (table == nullptr) {
-        P4::error(ErrorType::ERR_UNEXPECTED,"unable to find table from action %1%", name);
+        P4::error(ErrorType::ERR_UNEXPECTED, "unable to find table from action %1%", name);
         return;
     }
 
     cstring table_name = nameFromAnnotation(table, table->name);
     cstring table_type = CamelCase(table_name);
-
     CodeBuilder* builder = &bsv.getControlBuilder();
 
-    // Generate program vector
-    builder->append_line("// RISC-V program for action %s (%d instructions)", name,
-                         static_cast<int>(instructions.size()));
-    builder->append_line("Vector#(256, Bit#(32)) %s_program = replicate(0);", name);
+    // Emit VLIW program
+    builder->append_line("// VLIW program for action %s (%d words, %d scalar ops)",
+                         name, static_cast<int>(vliwProgram.size()),
+                         static_cast<int>(taggedInstrs.size()));
 
-    // Only emit non-zero instructions
-    for (size_t i = 0; i < instructions.size(); i++) {
-        if (instructions[i] != 0) {
-            builder->append_line("%s_program[%d] = %s;", name,
-                                static_cast<int>(i), instr_to_hex(instructions[i]).c_str());
+    builder->append_line("Vector#(64, Vector#(8, Bit#(32))) %s_program = replicate(replicate(0));", name);
+
+    for (size_t w = 0; w < vliwProgram.size() && w < 64; w++) {
+        bool allNopOrZero = true;
+        for (int s = 0; s < VLIW_SLOTS; s++) {
+            if (vliwProgram[w][s] != 0 && vliwProgram[w][s] != RV_NOP)
+                allNopOrZero = false;
+        }
+        if (allNopOrZero) continue;  // skip all-NOP words (terminator is all-zero)
+
+        for (int s = 0; s < VLIW_SLOTS; s++) {
+            if (vliwProgram[w][s] != 0 && vliwProgram[w][s] != RV_NOP) {
+                builder->append_line("%s_program[%d][%d] = %s;", name,
+                                    static_cast<int>(w), s,
+                                    instr_to_hex(vliwProgram[w][s]).c_str());
+            } else if (vliwProgram[w][s] == RV_NOP) {
+                builder->append_line("%s_program[%d][%d] = %s; // NOP", name,
+                                    static_cast<int>(w), s,
+                                    instr_to_hex(RV_NOP).c_str());
+            }
         }
     }
     builder->newline();
 
-    // Create the RISC-V action engine instance
     builder->append_line("typedef Engine#(1, MetadataRequest, %sParam) %sAction;", table_type, type);
     builder->append_line("module mk%sAction(Server#(Tuple2#(MetadataRequest, %sParam), MetadataRequest));",
                          type, table_type);

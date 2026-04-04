@@ -18,6 +18,7 @@
 #ifndef EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_RISCV_ACTION_GENERATOR_H_
 #define EXTENSIONS_CPP_LIBP4FPGA_INCLUDE_RISCV_ACTION_GENERATOR_H_
 
+#include <array>
 #include <vector>
 #include <map>
 #include <string>
@@ -233,12 +234,35 @@ public:
     }
 };
 
+// Number of parallel slots in a VLIW word
+static const int VLIW_SLOTS = 8;
+// NOP encoding: addi x0, x0, 0
+static const uint32_t RV_NOP = 0x00000013;
+
+// A VLIW word: 8 parallel instructions
+typedef std::array<uint32_t, VLIW_SLOTS> VLIWWord;
+
+// Instruction phase classification for VLIW scheduling
+enum class InstrPhase {
+    SETUP,    // offset loads (ADDI, LUI) needed before reads
+    READ,     // META_ACCESS reads, LOAD
+    COMPUTE,  // ALU operations, comparisons
+    WRITE,    // META_ACCESS writes, STORE
+    CONTROL   // branches, jumps
+};
+
+// A tagged instruction for scheduling
+struct TaggedInstr {
+    uint32_t encoding;
+    InstrPhase phase;
+};
+
 /**
- * RISC-V action program generator
+ * VLIW RISC-V action program generator
  *
- * Translates P4 action bodies into RISC-V instruction sequences.
- * Metadata fields are accessed via META_ACCESS custom instructions
- * using bit offsets computed from the P4 type layout.
+ * Translates P4 action bodies into VLIW instruction words.
+ * Operations are classified by phase (setup/read/compute/write)
+ * and packed 8-wide into VLIW words.
  */
 class RiscVActionGenerator : public Inspector {
 public:
@@ -251,51 +275,50 @@ public:
     bool preorder(const IR::MethodCallExpression* expression) override;
     void postorder(const IR::P4Action* action) override;
 
-    // Generate RISC-V assembly for an action
     void generateRiscVAction(const IR::P4Action* action);
-
-    // Build the field offset map from the program's type information
     void buildFieldOffsetMap();
 
 private:
     FPGAControl* control;
     BSVProgram& bsv;
-    std::vector<uint32_t> instructions;
+
+    // Flat instruction list (scalar), classified by phase
+    std::vector<TaggedInstr> taggedInstrs;
+
+    // VLIW program after scheduling
+    std::vector<VLIWWord> vliwProgram;
+
     std::map<const IR::Expression*, uint8_t> exprToReg;
     uint8_t currentReg;
 
-    // Field offset map: field path -> bit offset and width
     std::map<cstring, FieldInfo> fieldOffsets;
     bool fieldMapBuilt = false;
 
-    // Get a register for an expression, allocating a new one if needed
     uint8_t getRegister(const IR::Expression* expr);
 
-    // Get next available register
     uint8_t allocateRegister() {
-        if (currentReg >= 31) {
-            currentReg = 1;  // wrap around (basic strategy)
-        }
+        if (currentReg >= 31) currentReg = 1;
         return currentReg++;
     }
 
-    // Reset register allocation for new action
     void resetRegisters() {
         exprToReg.clear();
         currentReg = 1;
     }
 
-    // Build the path string for a Member expression (e.g., "hdr.ipv4.ttl")
-    cstring buildFieldPath(const IR::Member* member);
+    // Emit a tagged instruction to the flat list
+    void emit(uint32_t instr, InstrPhase phase) {
+        taggedInstrs.push_back(TaggedInstr{instr, phase});
+    }
 
-    // Recursively compute field offsets for a struct type
+    // Pack tagged instructions into VLIW words by phase
+    void scheduleVLIW();
+
+    cstring buildFieldPath(const IR::Member* member);
     void computeStructOffsets(const IR::Type_StructLike* type,
                               cstring prefix, uint32_t baseOffset);
-
-    // Emit instructions to load a bit offset into a register
     uint8_t loadBitOffset(uint32_t bitOffset);
 
-    // Generate code for different expression types
     void generateBinaryOperation(const IR::Operation_Binary* binary);
     void generateUnaryOperation(const IR::Operation_Unary* unary);
     void generateConstant(const IR::Constant* constant, uint8_t destReg);
@@ -304,7 +327,6 @@ private:
     void generateExternMethod(const P4::ExternMethod* externMethod);
     void generateExternFunction(const P4::ExternFunction* externFunction);
 
-    // Generate Bluespec code to instantiate the RISC-V action engine
     void emitRiscVActionEngine(const IR::P4Action* action);
 };
 
