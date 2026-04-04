@@ -1,10 +1,3 @@
-[![Build Status](https://travis-ci.org/p4fpga/p4fpga.svg?branch=master)](https://travis-ci.org/p4fpga/p4fpga)
-
-# Join P4FPGA email list:
-
-https://groups.google.com/forum/#!forum/p4fpga-dev
-
-As a member of P4FPGA-dev, you can send support requests to p4fpga-dev@googlegroups.com
 
 # Bootstrap environment
 
