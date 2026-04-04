@@ -23,6 +23,8 @@
 
 namespace FPGA {
 
+using namespace P4;
+
 /// Return `source` as a_string_in_snake_case.
 /// https://en.wikipedia.org/wiki/Snake_case
 cstring SnakeCase(const cstring& source);

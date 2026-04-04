@@ -54,8 +54,8 @@ bool DeparserBuilder::preorder(const IR::MethodCallExpression* expression) {
       }
     }
     // unroll header stack to individual headers and create deparse state for each one
-    else if (type->is<IR::Type_Stack>()){
-      auto stk = type->to<IR::Type_Stack>();
+    else if (type->is<IR::Type_Array>()){
+      auto stk = type->to<IR::Type_Array>();
       for (unsigned i = 0; i < stk->getSize(); i++) {
         if (stk->elementType->is<IR::Type_StructLike>()) {
           auto t = stk->elementType->to<IR::Type_StructLike>();

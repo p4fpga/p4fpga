@@ -1,13 +1,13 @@
 #include "options.h"
 #include "ir/ir.h"
 #include "midend.h"
-#include "midend/actionsInlining.h"
-#include "midend/inlining.h"
-#include "midend/removeReturns.h"
-#include "midend/moveConstructors.h"
+#include "frontends/p4/actionsInlining.h"
+#include "frontends/p4/inlining.h"
+#include "frontends/p4/removeReturns.h"
+#include "frontends/p4/moveConstructors.h"
 #include "midend/actionSynthesis.h"
-#include "midend/localizeActions.h"
-#include "midend/removeParameters.h"
+#include "frontends/p4/localizeActions.h"
+#include "frontends/p4/removeParameters.h"
 #include "midend/local_copyprop.h"
 #include "midend/simplifyKey.h"
 #include "midend/simplifySelectCases.h"
@@ -29,18 +29,13 @@
 #include "frontends/common/constantFolding.h"
 #include "frontends/p4/strengthReduction.h"
 #include "frontends/p4/uniqueNames.h"
-#include "midend/actionsInlining.h"
 #include "midend/actionSynthesis.h"
 #include "midend/convertEnums.h"
 #include "midend/copyStructures.h"
 #include "midend/eliminateTuples.h"
 #include "midend/local_copyprop.h"
-#include "midend/localizeActions.h"
-#include "midend/moveConstructors.h"
 #include "midend/nestedStructs.h"
 #include "midend/removeLeftSlices.h"
-#include "midend/removeParameters.h"
-#include "midend/removeReturns.h"
 #include "midend/simplifyKey.h"
 #include "midend/simplifySelectCases.h"
 #include "midend/simplifySelectList.h"
@@ -62,53 +57,53 @@ const IR::ToplevelBlock* MidEnd::run(const IR::P4Program* program, const FPGAOpt
     auto evaluator = new P4::EvaluatorPass(&refMap, &typeMap);
 
     PassManager midEnd = {
-        new P4::RemoveReturns(&refMap),
-        new P4::MoveConstructors(&refMap),
-        new P4::RemoveAllUnusedDeclarations(&refMap),
+        new P4::RemoveReturns(),
+        new P4::MoveConstructors(),
+        new P4::RemoveAllUnusedDeclarations(RemoveUnusedPolicy()),
         new P4::ClearTypeMap(&typeMap),
         evaluator,
-        new P4::Inline(&refMap, &typeMap, evaluator),
-        new P4::InlineActions(&refMap, &typeMap),
-        new P4::LocalizeAllActions(&refMap),
-        new P4::UniqueNames(&refMap),
-        new P4::UniqueParameters(&refMap, &typeMap),
-        new P4::SimplifyControlFlow(&refMap, &typeMap),
-        new P4::RemoveActionParameters(&refMap, &typeMap),
-        new P4::SimplifyKey(&refMap, &typeMap, new P4::NonMaskLeftValue(&typeMap)),
-        new P4::ConstantFolding(&refMap, &typeMap),
-        new P4::StrengthReduction(),
-        new P4::SimplifySelectCases(&refMap, &typeMap, true),  // require constant keysets
-        new P4::ExpandLookahead(&refMap, &typeMap),
-        new P4::SimplifyParsers(&refMap),
-        new P4::StrengthReduction(),
-        new P4::EliminateTuples(&refMap, &typeMap),
-        new P4::CopyStructures(&refMap, &typeMap),
-        new P4::NestedStructs(&refMap, &typeMap),
-        new P4::SimplifySelectList(&refMap, &typeMap),
-        new P4::Predication(&refMap),
-        new P4::ConstantFolding(&refMap, &typeMap),
-        new P4::LocalCopyPropagation(&refMap, &typeMap),
-        new P4::ConstantFolding(&refMap, &typeMap),
+        new P4::Inline(&typeMap, RemoveUnusedPolicy(), false, evaluator),
+        new P4::InlineActions(&typeMap, RemoveUnusedPolicy()),
+        new P4::LocalizeAllActions(RemoveUnusedPolicy()),
+        new P4::UniqueNames(),
+        new P4::UniqueParameters(&typeMap),
+        new P4::SimplifyControlFlow(&typeMap, true),
+        new P4::RemoveActionParameters(&typeMap),
+        new P4::SimplifyKey(&typeMap, new P4::OrPolicy(new P4::IsValid(&typeMap), new P4::IsMask())),
+        new P4::ConstantFolding(&typeMap),
+        new P4::StrengthReduction(&typeMap),
+        new P4::SimplifySelectCases(&typeMap, true),  // require constant keysets
+        new P4::ExpandLookahead(&typeMap),
+        new P4::SimplifyParsers(),
+        new P4::StrengthReduction(&typeMap),
+        new P4::EliminateTuples(&typeMap),
+        new P4::CopyStructures(&typeMap),
+        new P4::NestedStructs(&typeMap),
+        new P4::SimplifySelectList(&typeMap),
+        new P4::Predication(),
+        new P4::ConstantFolding(&typeMap),
+        new P4::LocalCopyPropagation(&typeMap),
+        new P4::ConstantFolding(&typeMap),
         new P4::MoveDeclarations(),  // more may have been introduced
-        new P4::SimplifyControlFlow(&refMap, &typeMap),
+        new P4::SimplifyControlFlow(&typeMap, true),
         new P4::CompileTimeOperations(),
-        new P4::TableHit(&refMap, &typeMap),
+        new P4::TableHit(&typeMap),
         new P4::MoveActionsToTables(&refMap, &typeMap),
         new P4::TypeChecking(&refMap, &typeMap),
-        new P4::SimplifyControlFlow(&refMap, &typeMap),
-        new P4::RemoveLeftSlices(&refMap, &typeMap),
+        new P4::SimplifyControlFlow(&typeMap, true),
+        new P4::RemoveLeftSlices(&typeMap),
         new P4::TypeChecking(&refMap, &typeMap),
-        new P4::ConstantFolding(&refMap, &typeMap, false),
+        new P4::ConstantFolding(&typeMap, false),
         new P4::TypeChecking(&refMap, &typeMap),
-        new P4::SimplifyControlFlow(&refMap, &typeMap),
-        new P4::RemoveAllUnusedDeclarations(&refMap),
+        new P4::SimplifyControlFlow(&typeMap, true),
+        new P4::RemoveAllUnusedDeclarations(RemoveUnusedPolicy()),
         evaluator,
         new VisitFunctor([this, evaluator](){ toplevel = evaluator->getToplevelBlock(); }),
     };
     midEnd.setName("MidEnd");
     midEnd.addDebugHooks(hooks);
     program = program->apply(midEnd);
-    if (::errorCount() > 0)
+    if (errorCount() > 0)
         return nullptr;
 
     return toplevel;

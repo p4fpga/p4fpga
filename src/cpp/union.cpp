@@ -61,7 +61,7 @@ bool UnionCodeGen::preorder(const IR::MethodCallExpression* expr) {
 
 bool UnionCodeGen::preorder(const IR::P4Table* table) {
   CHECK_NULL(table);
-  cstring name = nameFromAnnotation(table->annotations, table->name);
+  cstring name = nameFromAnnotation(table, table->name);
   cstring type = CamelCase(name);
 
   CHECK_NULL(builder);

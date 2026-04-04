@@ -71,7 +71,7 @@ bool ActionCodeGen::preorder(const IR::MethodCallExpression* expression) {
   auto actioncall = mi->to<P4::ActionCall>();
   if (actioncall != nullptr) {
     LOG1("action call");
-    builder->append_line(expression->toString());
+    builder->append_line(expression->toString().c_str());
     return false;
   }
 
@@ -92,7 +92,7 @@ void ActionCodeGen::emitCpuRspRule(const IR::P4Action* action) {
   auto name = action->name;
   auto type = CamelCase(name);
   auto table = control->action_to_table[name];
-  auto table_name = nameFromAnnotation(table->annotations, table->name);
+  auto table_name = nameFromAnnotation(table, table->name);
   auto table_type = CamelCase(table_name);
   std::vector<cstring> fields;
   if (action->parameters->size() > 0) {
@@ -114,52 +114,52 @@ void ActionCodeGen::emitCpuRspRule(const IR::P4Action* action) {
 }
 
 void ActionCodeGen::emitActionBegin(const IR::P4Action* action) {
-  cstring name = nameFromAnnotation(action->annotations, action->name);
+  cstring name = nameFromAnnotation(action, action->name);
   cstring orig_name = action->name.toString();
   cstring type = CamelCase(name);
   LOG1("action name " << name << " " << orig_name);
   const IR::P4Table* table = control->action_to_table[name];
   if (table == nullptr) {
-    ::error("unable to find table from action %s", name);
+    error("unable to find table from action %s", name);
   }
-  table_name = nameFromAnnotation(table->annotations, table->name);
+  table_name = nameFromAnnotation(table, table->name);
   table_type = CamelCase(table_name);
 }
 
 void ActionCodeGen::emitDropAction(const IR::P4Action* action) {
-  cstring name = nameFromAnnotation(action->annotations, action->name);
+  cstring name = nameFromAnnotation(action, action->name);
   cstring type = CamelCase(name);
   const IR::P4Table* table = control->action_to_table[name];
   if (table == nullptr) {
-    ::error("unable to find table from action %s", name);
+    error("unable to find table from action %s", name);
   }
-  cstring table_name = nameFromAnnotation(table->annotations, table->name);
+  cstring table_name = nameFromAnnotation(table, table->name);
   cstring table_type = CamelCase(table_name);
 
   builder->append_line("typedef Engine#(1, MetadataRequest, %sParam) %sAction;", table_type, type);
 }
 
 void ActionCodeGen::emitNoAction(const IR::P4Action* action) {
-  cstring name = nameFromAnnotation(action->annotations, action->name);
+  cstring name = nameFromAnnotation(action, action->name);
   cstring type = CamelCase(name);
   const IR::P4Table* table = control->action_to_table[name];
   if (table == nullptr) {
-    ::error("unable to find table from action %s", name);
+    error("unable to find table from action %s", name);
   }
-  cstring table_name = nameFromAnnotation(table->annotations, table->name);
+  cstring table_name = nameFromAnnotation(table, table->name);
   cstring table_type = CamelCase(table_name);
 
   builder->append_line("typedef Engine#(1, MetadataRequest, %sParam) %sAction;", table_type, type);
 }
 
 void ActionCodeGen::emitModifyAction(const IR::P4Action* action) {
-  cstring name = nameFromAnnotation(action->annotations, action->name);
+  cstring name = nameFromAnnotation(action, action->name);
   cstring type = CamelCase(name);
   const IR::P4Table* table = control->action_to_table[name];
   if (table == nullptr) {
-    ::error("unable to find table from action %s", name);
+    error("unable to find table from action %s", name);
   }
-  cstring table_name = nameFromAnnotation(table->annotations, table->name);
+  cstring table_name = nameFromAnnotation(table, table->name);
   cstring table_type = CamelCase(table_name);
   builder->append_line("typedef Engine#(1, MetadataRequest, %sParam) %sAction;", table_type, type);
   builder->append_line("instance Action_execute #(%sParam);", table_type);

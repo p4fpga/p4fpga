@@ -92,7 +92,7 @@ bool HeaderCodeGen::preorder(const IR::StructField* field) {
   if (field->type->is<IR::Type_Header>()) {
     visit(field->type);;
     builder->append_line("Maybe#(Header#(%s)) %s;", header_type, header_name);
-  } else if (field->type->is<IR::Type_Stack>()) {
+  } else if (field->type->is<IR::Type_Array>()) {
     visit(field->type);
     builder->appendFormat(" %s;", header_name);
     builder->newline();
@@ -104,7 +104,7 @@ bool HeaderCodeGen::preorder(const IR::Type_Header*) {
   return false;
 }
 
-bool HeaderCodeGen::preorder(const IR::Type_Stack* stk) {
+bool HeaderCodeGen::preorder(const IR::Type_Array* stk) {
   builder->emitIndent();
   LOG1("xxxx" << stk->elementType->getP4Type());
   builder->appendFormat("Vector#(%d, Maybe#(Header#(%s)))", stk->getSize(), CamelCase(stk->elementType->getP4Type()->toString()));

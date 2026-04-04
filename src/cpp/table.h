@@ -92,7 +92,7 @@ class ActionParamPrinter : public Inspector {
         cstring name = p->name.toString();
         param_vec.push_back(name);
       }
-      cstring action_name = nameFromAnnotation(k->second->annotations, k->second->name);
+      cstring action_name = nameFromAnnotation(k->second, k->second->name);
       cstring action_type = CamelCase(action_name);
       builder->append_format("%s: begin", UpperCase(action_type));
       builder->incr_indent();

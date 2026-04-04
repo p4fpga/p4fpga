@@ -25,7 +25,7 @@
 namespace FPGA {
 
 void TableCodeGen::emitTableRequestType(const IR::P4Table* table) {
-  cstring name = nameFromAnnotation(table->annotations, table->name);
+  cstring name = nameFromAnnotation(table, table->name);
   cstring type = CamelCase(name);
   type_builder->append_line("import DefaultValue::*;");
   type_builder->append_line("typedef struct{");
@@ -57,7 +57,7 @@ void TableCodeGen::emitTableRequestType(const IR::P4Table* table) {
 }
 
 void TableCodeGen::emitActionEnum(const IR::P4Table* table) {
-  cstring name = nameFromAnnotation(table->annotations, table->name);
+  cstring name = nameFromAnnotation(table, table->name);
   cstring type = CamelCase(name);
   builder->append_line("typedef enum {");
   builder->incr_indent();
@@ -86,7 +86,7 @@ void TableCodeGen::emitActionEnum(const IR::P4Table* table) {
 }
 
 void TableCodeGen::emitTableResponseType(const IR::P4Table* table) {
-  cstring name = nameFromAnnotation(table->annotations, table->name);
+  cstring name = nameFromAnnotation(table, table->name);
   cstring type = CamelCase(name);
   auto actionList = table->getActionList()->actionList;
   //builder->append_line("typedef struct {");
@@ -127,7 +127,7 @@ void TableCodeGen::emitTypedefs(const IR::P4Table* table) {
 }
 
 void TableCodeGen::emitSimulation(const IR::P4Table* table) {
-  auto name = nameFromAnnotation(table->annotations, table->name);
+  auto name = nameFromAnnotation(table, table->name);
   auto id = table->declid % 32;
   auto remainder = key_width % 9;
   if (remainder != 0) {
@@ -137,7 +137,7 @@ void TableCodeGen::emitSimulation(const IR::P4Table* table) {
 }
 
 cstring TableCodeGen::gatherTableKeys() {
-  cstring fields = "";
+  cstring fields = ""_cs;
   int field_width = 0;
   for (auto k : key_vec) {
     auto f = k.first;
@@ -157,7 +157,7 @@ cstring TableCodeGen::gatherTableKeys() {
 }
 
 void TableCodeGen::emitFunctionLookup(const IR::P4Table* table) {
-  cstring name = nameFromAnnotation(table->annotations, table->name);
+  cstring name = nameFromAnnotation(table, table->name);
   cstring type = CamelCase(name);
   builder->append_line("instance Table_request #(ConnectalTypes::%sReqT);", type);
   builder->incr_indent();
@@ -180,7 +180,7 @@ void TableCodeGen::emitFunctionLookup(const IR::P4Table* table) {
 }
 
 void TableCodeGen::emitFunctionExecute(const IR::P4Table* table) {
-  cstring name = nameFromAnnotation(table->annotations, table->name);
+  cstring name = nameFromAnnotation(table, table->name);
   cstring type = CamelCase(name);
   //const IR::IndexedVector<IR::ActionListElement>* actionList
   auto actionList = table->getActionList()->actionList;
@@ -208,7 +208,7 @@ void TableCodeGen::emitFunctionExecute(const IR::P4Table* table) {
 }
 
 void TableCodeGen::emitIntfAddEntry(const IR::P4Table* table) {
-  auto name = nameFromAnnotation(table->annotations, table->name);
+  auto name = nameFromAnnotation(table, table->name);
   auto type = CamelCase(name);
   builder->append_format("method Action add_entry(ConnectalTypes::%sReqT k, ConnectalTypes::%sRspT v);", type, type);
   builder->newline();
@@ -255,7 +255,7 @@ void TableCodeGen::emitIntfAddEntry(const IR::P4Table* table) {
 }
 
 void TableCodeGen::emit(const IR::P4Table* table) {
-  cstring name = nameFromAnnotation(table->annotations, table->name);
+  cstring name = nameFromAnnotation(table, table->name);
   cstring type = CamelCase(name);
   int id = table->declid % 32;
   //const IR::IndexedVector<IR::ActionListElement>* actionList
@@ -270,7 +270,7 @@ void TableCodeGen::emit(const IR::P4Table* table) {
 }
 
 void TableCodeGen::emitCpp(const IR::P4Table* table) {
-  auto name = nameFromAnnotation(table->annotations, table->name);
+  auto name = nameFromAnnotation(table, table->name);
   auto type = CamelCase(name);
   cpp_builder->append_line("typedef uint64_t %sReqT;", type);
   cpp_builder->append_line("typedef uint64_t %sRspT;", type);

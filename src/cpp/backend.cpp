@@ -6,7 +6,6 @@
 #include "ir/ir.h"
 #include "lib/error.h"
 #include "lib/nullstream.h"
-#include "lib/path.h"
 #include "frontends/p4/evaluator/evaluator.h"
 #include "frontends/p4/toP4/toP4.h"
 #include "program.h"
@@ -31,48 +30,48 @@ Backend::run(const FPGAOptions& options, const IR::ToplevelBlock* toplevel,
     // create Program.bsv
     FPGAProgram fpgaprog(toplevel, refMap, typeMap);
     if (!fpgaprog.build())
-      { ::error("FPGAprog build failed"); return; }
+      { error("FPGAprog build failed"); return; }
 
     if (options.outputFile.isNullOrEmpty())
-      { ::error("Must specify output directory"); return; }
+      { error("Must specify output directory"); return; }
 
-    boost::filesystem::path dir(options.outputFile);
-    boost::filesystem::create_directory(dir);
+    std::filesystem::path dir(options.outputFile.string());
+    std::filesystem::create_directory(dir);
 
     // TODO(rjs): start here to change to program
     BSVProgram bsv;
     CppProgram cpp;
     fpgaprog.emit(bsv, cpp);
 
-    boost::filesystem::path parserFile("ParserGenerated.bsv");
-    boost::filesystem::path parserPath = dir / parserFile;
+    std::filesystem::path parserFile("ParserGenerated.bsv");
+    std::filesystem::path parserPath = dir / parserFile;
 
-    boost::filesystem::path structFile("StructGenerated.bsv");
-    boost::filesystem::path structPath = dir / structFile;
+    std::filesystem::path structFile("StructGenerated.bsv");
+    std::filesystem::path structPath = dir / structFile;
 
-    boost::filesystem::path deparserFile("DeparserGenerated.bsv");
-    boost::filesystem::path deparserPath = dir / deparserFile;
+    std::filesystem::path deparserFile("DeparserGenerated.bsv");
+    std::filesystem::path deparserPath = dir / deparserFile;
 
-    boost::filesystem::path controlFile("ControlGenerated.bsv");
-    boost::filesystem::path controlPath = dir / controlFile;
+    std::filesystem::path controlFile("ControlGenerated.bsv");
+    std::filesystem::path controlPath = dir / controlFile;
 
-    boost::filesystem::path unionFile("UnionGenerated.bsv");
-    boost::filesystem::path unionPath = dir / unionFile;
+    std::filesystem::path unionFile("UnionGenerated.bsv");
+    std::filesystem::path unionPath = dir / unionFile;
 
-    boost::filesystem::path apiDefFile("APIDefGenerated.bsv");
-    boost::filesystem::path apiDefPath = dir / apiDefFile;
+    std::filesystem::path apiDefFile("APIDefGenerated.bsv");
+    std::filesystem::path apiDefPath = dir / apiDefFile;
 
-    boost::filesystem::path apiDeclFile("APIDeclGenerated.bsv");
-    boost::filesystem::path apiDeclPath = dir / apiDeclFile;
+    std::filesystem::path apiDeclFile("APIDeclGenerated.bsv");
+    std::filesystem::path apiDeclPath = dir / apiDeclFile;
 
-    boost::filesystem::path progDeclFile("ProgDeclGenerated.bsv");
-    boost::filesystem::path progDeclPath = dir / progDeclFile;
+    std::filesystem::path progDeclFile("ProgDeclGenerated.bsv");
+    std::filesystem::path progDeclPath = dir / progDeclFile;
 
-    boost::filesystem::path apiTypeDefFile("ConnectalTypes.bsv");
-    boost::filesystem::path apiTypeDefPath = dir / apiTypeDefFile;
+    std::filesystem::path apiTypeDefFile("ConnectalTypes.bsv");
+    std::filesystem::path apiTypeDefPath = dir / apiTypeDefFile;
 
-    boost::filesystem::path simFile("matchtable_model.cpp");
-    boost::filesystem::path simPath = dir / simFile;
+    std::filesystem::path simFile("matchtable_model.cpp");
+    std::filesystem::path simPath = dir / simFile;
 
     std::ofstream(parserPath.native())   <<  bsv.getParserBuilder().toString();
     std::ofstream(deparserPath.native()) <<  bsv.getDeparserBuilder().toString();

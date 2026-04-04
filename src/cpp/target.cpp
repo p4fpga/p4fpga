@@ -22,8 +22,8 @@ namespace {
 
 class Target {
  protected:
-    cstring name;
-    explicit Target(cstring name) : name(name) {}
+    P4::cstring name;
+    explicit Target(P4::cstring name) : name(name) {}
     Target() = delete;
     virtual ~Target() {}
  public:

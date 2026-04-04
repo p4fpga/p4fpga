@@ -24,7 +24,9 @@ limitations under the License.
 
 namespace FPGA {
 
-cstring nameFromAnnotation(const IR::Annotations* annotations, cstring defaultValue);
+using namespace P4;
+
+cstring nameFromAnnotation(const IR::IAnnotated* annotated, cstring defaultValue);
 
 // This CFG is only good for FPGA, which only cares about some Nodes in the program
 class CFG final : public IHasDbPrint {

@@ -9,6 +9,8 @@
 
 namespace FPGA {
 
+using namespace P4;
+
 class Backend {
     std::vector<DebugHook> hooks;
  public:

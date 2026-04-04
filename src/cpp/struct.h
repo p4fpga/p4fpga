@@ -43,7 +43,7 @@ class HeaderCodeGen : public Inspector {
     builder(builder) {}
   bool preorder(const IR::StructField* fld) override;
   bool preorder(const IR::Type_Header* hdr) override;
-  bool preorder(const IR::Type_Stack* stk) override;
+  bool preorder(const IR::Type_Array* stk) override;
  private:
   CodeBuilder* builder;
   std::vector<cstring> headers;

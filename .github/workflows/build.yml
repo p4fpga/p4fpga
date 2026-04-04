@@ -1,0 +1,25 @@
+name: Build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+      run: bash bootstrap_env.sh
+
+    - name: Bootstrap
+      run: bash bootstrap.sh
+
+    - name: Build
+      run: cd build && make -j$(nproc) p4c-p4fpga

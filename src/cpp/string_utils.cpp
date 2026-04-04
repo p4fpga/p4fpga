@@ -18,6 +18,8 @@
 
 namespace FPGA {
 
+using namespace P4;
+
 static const char kSpaceChars[] = { '_', ' ', '.' };
 
 static inline bool IsSpace(char c) {
@@ -37,7 +39,7 @@ cstring SnakeCase(const cstring& source) {
 
   bool prev_is_digit = false;
   for (size_t i = 0; i < source.size(); ++i) {
-    const char c = source[i];
+    const char c = source.get(i);
 
     // When transitioning to or from a string of digits, we want to insert '_'.
     const bool is_digit = isdigit(c) != 0;
@@ -77,7 +79,7 @@ cstring CamelCase(const cstring& source) {
 
   bool capitalize_next = true;
   for (size_t i = 0; i < source.size(); ++i) {
-    const char c = source[i];
+    const char c = source.get(i);
 
     // Skip spaces, but flag the next letter as start of new word.
     if (IsSpace(c)) {
@@ -104,7 +106,7 @@ cstring camelCase(const cstring& source) {
 
   bool capitalize_next = true;
   for (size_t i = 0; i < source.size(); ++i) {
-    const char c = source[i];
+    const char c = source.get(i);
 
     // Skip spaces, but flag the next letter as start of new word.
     if (IsSpace(c)) {
@@ -131,7 +133,7 @@ cstring UpperCase(const cstring& source) {
 
   bool capitalize_next = true;
   for (size_t i = 0; i < source.size(); ++i) {
-    const char c = source[i];
+    const char c = source.get(i);
 
     // Skip spaces, but flag the next letter as start of new word.
     if (IsSpace(c)) {
@@ -155,7 +157,7 @@ cstring RemoveDot(const cstring & source) {
   std::string newstr;
   newstr.reserve(source.size());
   for (size_t i = 0; i < source.size(); ++i) {
-    const char c = source[i];
+    const char c = source.get(i);
 
     // Skip spaces, but flag the next letter as start of new word.
     if (IsSpace(c)) {

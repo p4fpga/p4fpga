@@ -26,7 +26,7 @@ FPGAType* FPGATypeFactory::create(const IR::Type* type) {
         result = new FPGATypeName(type->to<IR::Type_Name>(), result);
     } else {
         // TODO: need to support header stack
-        ::error("Type %1% unsupported by FPGA", type);
+        error("Type %1% unsupported by FPGA", type);
     }
 
     return result;
@@ -86,9 +86,9 @@ FPGAScalarType::declare(BSVProgram & bsv, cstring id, bool asPointer) {
 FPGAStructType::FPGAStructType(const IR::Type_StructLike* strct) :
         FPGAType(strct) {
     if (strct->is<IR::Type_Struct>())
-        kind = "struct";
+        kind = "struct"_cs;
     else if (strct->is<IR::Type_Header>())
-        kind = "struct";
+        kind = "struct"_cs;
     else
         BUG("Unexpected struct type %1%", strct);
     name = strct->name.name;
@@ -99,7 +99,7 @@ FPGAStructType::FPGAStructType(const IR::Type_StructLike* strct) :
         auto type = FPGATypeFactory::instance->create(f->type);
         auto wt = dynamic_cast<IHasWidth*>(type);
         if (wt == nullptr) {
-            ::error("FPGA: Unsupported type in struct %s", f->type);
+            error("FPGA: Unsupported type in struct %s", f->type);
         } else {
             width += wt->widthInBits();
             implWidth += wt->implementationWidthInBits();
@@ -140,7 +140,7 @@ void FPGAStructType::emit(BSVProgram & bsv) {
     if (type->is<IR::Type_Header>()) {
         bsv.getParserBuilder().emitIndent();
         auto type = FPGATypeFactory::instance->create(IR::Type_Boolean::get());
-        type->declare(bsv, "ebpf_valid", false);
+        type->declare(bsv, "ebpf_valid"_cs, false);
         bsv.getParserBuilder().endOfStatement(true);
     }
 
@@ -157,7 +157,7 @@ void FPGATypeName::declare(BSVProgram & bsv, cstring id, bool asPointer) {
 unsigned FPGATypeName::widthInBits() {
     auto wt = dynamic_cast<IHasWidth*>(canonical);
     if (wt == nullptr) {
-        ::error("Type %1% does not have a fixed witdh", type);
+        error("Type %1% does not have a fixed witdh", type);
         return 0;
     }
     return wt->widthInBits();
@@ -166,7 +166,7 @@ unsigned FPGATypeName::widthInBits() {
 unsigned FPGATypeName::implementationWidthInBits() {
     auto wt = dynamic_cast<IHasWidth*>(canonical);
     if (wt == nullptr) {
-        ::error("Type %1% does not have a fixed witdh", type);
+        error("Type %1% does not have a fixed witdh", type);
         return 0;
     }
     return wt->implementationWidthInBits();

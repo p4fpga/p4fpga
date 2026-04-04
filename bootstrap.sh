@@ -10,5 +10,5 @@ if [ ! -e p4fpga ]; then ln -sf ../../src p4fpga; fi
 popd
 
 mkdir -p build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=DEBUG $*
+cmake .. -DCMAKE_BUILD_TYPE=DEBUG -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++ $*
 

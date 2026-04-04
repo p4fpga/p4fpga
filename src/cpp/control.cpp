@@ -28,7 +28,7 @@ namespace FPGA {
 
 class ExpressionConverter : public Inspector {
  public:
-  cstring bsv = "";
+  cstring bsv = ""_cs;
   explicit ExpressionConverter () {}
   bool preorder(const IR::MethodCallExpression* expr){
     auto m = expr->method->to<IR::Member>();
@@ -84,7 +84,7 @@ bool FPGAControl::build() {
     if (s->is<IR::P4Action>()) {
       auto action = s->to<IR::P4Action>();
       // Do not use annotated name, as P4Table will use original name
-      cstring name = nameFromAnnotation(action->annotations, action->name);
+      cstring name = nameFromAnnotation(action, action->name);
       // auto name = action->name;
       actions.emplace(name, action);
       LOG1("add to action map " << name);
@@ -100,7 +100,7 @@ bool FPGAControl::build() {
     if (b->is<IR::TableBlock>()) {
       auto tblblk = b->to<IR::TableBlock>();
       auto table = tblblk->container;
-      auto name = nameFromAnnotation(table->annotations, table->name);
+      auto name = nameFromAnnotation(table, table->name);
       LOG1("add table " << name);
       tables.emplace(name.c_str(), table);
 
@@ -110,7 +110,7 @@ bool FPGAControl::build() {
         auto decl = refMap->getDeclaration(path, true);
         if (decl->is<IR::P4Action>()) {
           auto action = decl->to<IR::P4Action>();
-          cstring name = nameFromAnnotation(action->annotations, action->name);
+          cstring name = nameFromAnnotation(action, action->name);
           action_to_table[name] = table;
         }
       }
@@ -148,7 +148,7 @@ bool FPGAControl::build() {
       auto ctrblk = b->to<IR::ExternBlock>();
       LOG1("extern " << ctrblk);
     } else {
-      ::error("Unexpected block %s nested within control", b->toString());
+      error("Unexpected block %s nested within control", b->toString());
     }
   }
 
@@ -183,7 +183,7 @@ void FPGAControl::emitEntryRule(const CFG::Node* node) {
 
 void FPGAControl::emitTableRule(const CFG::TableNode* node) {
   auto table = node->table->to<IR::P4Table>();
-  auto name = nameFromAnnotation(table->annotations, table->name);
+  auto name = nameFromAnnotation(table, table->name);
   builder->append_format("rule rl_%s if (%s_rsp_ff.notEmpty);", name, name);
   builder->incr_indent();
   builder->append_format("%s_rsp_ff.deq;", name);
@@ -245,7 +245,7 @@ void FPGAControl::emitCondRule(const CFG::IfNode* node) {
   if (ifTrue != "") {
     builder->append_format("if (%s) begin", visitor.bsv);
     builder->incr_indent();
-    builder->append_format(ifTrue);
+    builder->append_format(ifTrue.c_str());
     builder->append_format("dbprint(3, $format(\"%s true\", fshow(meta)));", node->name);
     builder->decr_indent();
     builder->append_line("end");
@@ -253,7 +253,7 @@ void FPGAControl::emitCondRule(const CFG::IfNode* node) {
   if (ifFalse != "") {
     builder->append_line("else begin");
     builder->incr_indent();
-    builder->append_format(ifFalse);
+    builder->append_format(ifFalse.c_str());
     builder->append_format("dbprint(3, $format(\"%s false\", fshow(meta)));", node->name);
     builder->decr_indent();
     builder->append_line("end");
@@ -265,7 +265,7 @@ void FPGAControl::emitCondRule(const CFG::IfNode* node) {
 void FPGAControl::emitDeclaration() {
   // basic block instances
   for (auto b : actions) {
-    auto name = nameFromAnnotation(b.second->annotations, b.second->name);
+    auto name = nameFromAnnotation(b.second, b.second->name);
     auto type = CamelCase(name);
     // ensure NoAction is translated to noAction
     builder->append_format("Control::%sAction %s_action <- mkEngine(toList(vec(step_1)));", type, camelCase(name));
@@ -274,7 +274,7 @@ void FPGAControl::emitDeclaration() {
     auto table = t.second->to<IR::P4Table>();
     if (table == nullptr)
       continue;
-    auto name = nameFromAnnotation(table->annotations, table->name);
+    auto name = nameFromAnnotation(table, table->name);
     auto type = CamelCase(name);
     builder->append_line("%sMatchTable %s_table <- mkMatchTable_%s(\"%s\");", type, name, type, name);
     builder->append_line("Control::%sTable %s <- mkTable(table_request, table_execute, %s_table);", type, name, name);
@@ -288,7 +288,7 @@ void FPGAControl::emitFifo() {
   builder->append_line("FIFOF#(MetadataRequest) entry_rsp_ff <- mkFIFOF;");
   for (auto t : tables) {
     auto table = t.second->to<IR::P4Table>();
-    auto name = nameFromAnnotation(table->annotations, table->name);
+    auto name = nameFromAnnotation(table, table->name);
     builder->append_line("FIFOF#(MetadataRequest) %s_req_ff <- mkFIFOF;", name);
     builder->append_line("FIFOF#(MetadataRequest) %s_rsp_ff <- mkFIFOF;", name);
   }
@@ -310,7 +310,7 @@ void FPGAControl::emitConnection() {
   // table to fifo
   for (auto t : tables) {
     auto table = t.second->to<IR::P4Table>();
-    auto name = nameFromAnnotation(table->annotations, table->name);
+    auto name = nameFromAnnotation(table, table->name);
     builder->append_line("mkConnection(toClient(%s_req_ff, %s_rsp_ff), %s.prev_control_state);", name, name, name);
 
     int idx = 0;
@@ -319,7 +319,7 @@ void FPGAControl::emitConnection() {
       auto decl = refMap->getDeclaration(path, true);
       if (decl->is<IR::P4Action>()) {
         auto action = decl->to<IR::P4Action>();
-        auto action_name = nameFromAnnotation(action->annotations, action->name);
+        auto action_name = nameFromAnnotation(action, action->name);
         builder->append_format("mkConnection(%s.next_control_state[%d], %s_action.prev_control_state);", name, idx, camelCase(action_name));
         idx ++ ;
       }
@@ -376,7 +376,7 @@ void FPGAControl::emitAPI(cstring cbname) {
     if (key == nullptr) continue;
 
     const IR::P4Table* tbl = t.second;
-    cstring name = nameFromAnnotation(tbl->annotations, tbl->name);
+    cstring name = nameFromAnnotation(tbl, tbl->name);
     cstring type = CamelCase(name);
     api_def->appendFormat("method Action %s_add_entry(", name);
     api_def->appendFormat("%sReqT key, ", type);
@@ -388,7 +388,7 @@ void FPGAControl::emitAPI(cstring cbname) {
     if (key == nullptr) continue;
 
     const IR::P4Table* tbl = t.second;
-    cstring name = nameFromAnnotation(tbl->annotations, tbl->name);
+    cstring name = nameFromAnnotation(tbl, tbl->name);
     prog_decl->appendFormat("method %s_add_entry", name);
     prog_decl->appendFormat("=%s", cbname);
     prog_decl->appendFormat(".%s_add_entry;", name);
@@ -476,7 +476,7 @@ void FPGAControl::emit(BSVProgram & bsv, CppProgram & cpp) {
 cstring FPGAControl::toP4Action (cstring inst) {
   auto k = actions.find(inst);
   if (k != actions.end()) {
-    cstring action_name = nameFromAnnotation(k->second->annotations, k->second->name);
+    cstring action_name = nameFromAnnotation(k->second, k->second->name);
     return action_name;
   } else {
     return nullptr;

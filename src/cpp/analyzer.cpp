@@ -17,7 +17,7 @@ limitations under the License.
 #include "analyzer.h"
 
 #include "ir/ir.h"
-#include "frontends/p4/fromv1.0/v1model.h"
+#include "frontends/p4-14/fromv1.0/v1model.h"
 #include "frontends/p4/typeMap.h"
 #include "frontends/common/resolveReferences/referenceMap.h"
 #include "frontends/p4/methodInstance.h"
@@ -25,17 +25,17 @@ limitations under the License.
 
 namespace FPGA {
 
-cstring nameFromAnnotation(const IR::Annotations* annotations,
+cstring nameFromAnnotation(const IR::IAnnotated* annotated,
         cstring defaultValue) {
-    CHECK_NULL(annotations); CHECK_NULL(defaultValue);
-    auto anno = annotations->getSingle(IR::Annotation::nameAnnotation);
+    CHECK_NULL(annotated); CHECK_NULL(defaultValue);
+    auto anno = annotated->getAnnotation(IR::Annotation::nameAnnotation);
     if (anno != nullptr) {
         // TODO(dhruvsinghal): Do proper NULL checks 
-        auto str = anno->expr.front()->to<IR::StringLiteral>();
-	std::string name(str->value);
+        auto str = anno->getExpr().front()->to<IR::StringLiteral>();
+        std::string name(str->value);
         // NOTE: replace '.' with '_' to make bsc happy
         std::replace(name.begin(), name.end(), '.', '_');
-        return name.c_str();
+        return cstring(name);
     }
     return defaultValue;
 }
@@ -64,8 +64,10 @@ void CFG::Edge::dbprint(std::ostream& out) const {
     }
 }
 
-void CFG::Node::dbprint(std::ostream& out) const
-{ out << name << " =>" << successors; }
+void CFG::Node::dbprint(std::ostream& out) const {
+    out << name << " =>";
+    successors.dbprint(out);
+}
 
 void CFG::dbprint(std::ostream& out, CFG::Node* node, std::set<CFG::Node*> &done) const {
     if (done.find(node) != done.end())
@@ -94,8 +96,8 @@ bool CFG::dfs(Node* node, std::set<Node*> &visited,
     if (node->is<TableNode>()) {
         table = node->to<TableNode>()->table;
         if (stack.find(table) != stack.end()) {
-            ::error("Program cannot be implemented since it requires a cycle containing %1%",
-                    table);
+            error("Program cannot be implemented since it requires a cycle containing %1%",
+                  table);
             return false;
         }
     }
@@ -144,9 +146,9 @@ class CFGBuilder : public Inspector {
     }
 
     const CFG::EdgeSet* get(const IR::Statement* statement)
-    { return ::get(after, statement); }
+    { return P4::get(after, statement); }
     bool preorder(const IR::Statement* statement) override {
-        ::error("%1%: not supported in control block on this architecture", statement);
+        error("%1%: not supported in control block on this architecture", statement);
         return false;
     }
     bool preorder(const IR::ReturnStatement* statement) override {
@@ -170,7 +172,7 @@ class CFGBuilder : public Inspector {
             return false;
         auto am = instance->to<P4::ApplyMethod>();
         if (!am->object->is<IR::P4Table>()) {
-            ::error("%1%: apply method must be on a table", statement);
+            error("%1%: apply method must be on a table", statement);
             return false;
         }
         auto tc = am->object->to<IR::P4Table>();
@@ -234,7 +236,7 @@ class CFGBuilder : public Inspector {
         for (auto sw : statement->cases) {
             cstring label;
             if (sw->label->is<IR::DefaultExpression>()) {
-                label = "default";
+                label = "default"_cs;
             } else {
                 auto pe = sw->label->to<IR::PathExpression>();
                 CHECK_NULL(pe);
@@ -268,7 +270,7 @@ void CFG::build(const IR::P4Control* cc,
                 P4::ReferenceMap* refMap, P4::TypeMap* typeMap) {
     container = cc;
     entryPoint = makeNode(cc->name + ".entry");
-    exitPoint = makeNode("");  // the only node with an empty name
+    exitPoint = makeNode(""_cs);  // the only node with an empty name
 
     CFGBuilder builder(this, refMap, typeMap);
     auto startValue = new CFG::EdgeSet(new CFG::Edge(entryPoint));

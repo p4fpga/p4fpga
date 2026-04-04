@@ -9,7 +9,7 @@
 
 namespace FPGA {
 
-class CodeBuilder : public Util::SourceCodeBuilder {
+class CodeBuilder : public P4::Util::SourceCodeBuilder {
  public:
     explicit CodeBuilder() {}
 

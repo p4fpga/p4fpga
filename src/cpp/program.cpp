@@ -115,12 +115,12 @@ void FPGAProgram::emitMetadata(CodeBuilder* builder) {
   builder->incr_indent();
   // implicit metadata in table.
   for (auto p : ingress->metadata_to_table) {
-    auto name = nameFromAnnotation(p.first->annotations, p.first->name);
+    auto name = nameFromAnnotation(p.first, p.first->name);
     auto size = p.first->type->to<IR::Type_Bits>()->size;
     builder->append_line("Maybe#(Bit#(%d)) %s;", size, name);
   }
   for (auto p : egress->metadata_to_table) {
-    auto name = nameFromAnnotation(p.first->annotations, p.first->name);
+    auto name = nameFromAnnotation(p.first, p.first->name);
     auto size = p.first->type->to<IR::Type_Bits>()->size;
     builder->append_line("Maybe#(Bit#(%d)) %s;", size, name);
   }

@@ -16,21 +16,23 @@
 #include "frontends/p4/evaluator/evaluator.h"
 #include "frontends/p4/simplify.h"
 
+using namespace P4;
+
 int main(int argc, char *const argv[]) {
     setup_gc_logging();
     setup_signals();
-
-    FPGAOptions options;
+    AutoCompileContext autoTCContext(new FPGAContext);
+    auto &options = FPGAContext::get().options();
 
     if (options.process(argc, argv) != nullptr)
         options.setInputFile();
-    if (::errorCount() > 0)
+    if (errorCount() > 0)
         return 1;
 
     auto hook = options.getDebugHook();
 
     auto program = P4::parseP4File(options);
-    if (program == nullptr || ::errorCount() > 0)
+    if (program == nullptr || errorCount() > 0)
         return 1;
     try {
         P4::FrontEnd frontend;
@@ -40,7 +42,7 @@ int main(int argc, char *const argv[]) {
         std::cerr << bug.what() << std::endl;
         return 1;
     }
-    if (program == nullptr || ::errorCount() > 0)
+    if (program == nullptr || errorCount() > 0)
         return 1;
 
 
@@ -49,13 +51,13 @@ int main(int argc, char *const argv[]) {
     midend.addDebugHook(hook);
     try {
         toplevel = midend.run(program, options);
-        if (::errorCount() > 0)
+        if (errorCount() > 0)
             exit(1);
     } catch (const Util::P4CExceptionBase &bug) {
         std::cerr << bug.what() << std::endl;
         return 1;
     }
-    if (program == nullptr || ::errorCount() > 0)
+    if (program == nullptr || errorCount() > 0)
         return 1;
 
     FPGA::Backend backend(&midend.refMap, &midend.typeMap);
@@ -65,9 +67,9 @@ int main(int argc, char *const argv[]) {
         std::cerr << bug.what() << std::endl;
         return 1;
     }
-    if (program == nullptr || ::errorCount() > 0)
+    if (program == nullptr || errorCount() > 0)
         return 1;
 
 
-    return ::errorCount() > 0;
+    return errorCount() > 0;
 }
